@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Foundation
 {
     /// <summary>
-    /// ObjectPool - ?????
+    /// ObjectPool - 对象池
     /// </summary>
+    [Sample]
     public sealed class ObjectPool : SampleBase
     {
         public override string Title => "Object Pool";

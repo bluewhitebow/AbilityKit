@@ -14,6 +14,16 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <!-- Copy Config files to output -->
+  <ItemGroup>
+    <None Update="Configs\PipelineConfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Configs\TagsConfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- Reference AbilityKit packages -->
   <ItemGroup>
     <ProjectReference Include="..\AbilityKit.Core\AbilityKit.Core.csproj" />

@@ -5,8 +5,9 @@ using AbilityKit.Samples.Common.Math;
 namespace AbilityKit.Samples.Samples.Modifiers
 {
     /// <summary>
-    /// AttributeModifiers - ?????
+    /// AttributeModifiers - 属性修改器
     /// </summary>
+    [Sample]
     public sealed class AttributeModifiers : SampleBase
     {
         public override string Title => "Attribute Modifiers";

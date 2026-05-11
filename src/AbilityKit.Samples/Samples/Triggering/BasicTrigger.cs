@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Triggering
 {
     /// <summary>
-    /// BasicTrigger - ?????
+    /// BasicTrigger - 基础触发器
     /// </summary>
+    [Sample]
     public sealed class BasicTrigger : SampleBase
     {
         public override string Title => "Basic Trigger";

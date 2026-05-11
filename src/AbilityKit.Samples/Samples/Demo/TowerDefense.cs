@@ -5,8 +5,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Demo
 {
     /// <summary>
-    /// TowerDefense - ??????
+    /// TowerDefense - 塔防游戏
     /// </summary>
+    [Sample]
     public sealed class TowerDefense : SampleBase
     {
         public override string Title => "Tower Defense";

@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Flow
 {
     /// <summary>
-    /// SequenceAndRace - Sequence ? Race ????
+    /// SequenceAndRace - Sequence 与 Race 示例
     /// </summary>
+    [Sample]
     public sealed class SequenceAndRace : SampleBase
     {
         public override string Title => "Sequence and Race";

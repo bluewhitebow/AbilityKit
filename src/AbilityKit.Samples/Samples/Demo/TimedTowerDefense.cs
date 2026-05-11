@@ -36,8 +36,9 @@ namespace AbilityKit.Samples.Samples.Demo
     }
 
     /// <summary>
-    /// TimedTowerDefense - ??????????
+    /// TimedTowerDefense - 回合制塔防
     /// </summary>
+    [Sample]
     public sealed class TimedTowerDefense : SampleBase
     {
         public override string Title => "Timed Tower Defense";

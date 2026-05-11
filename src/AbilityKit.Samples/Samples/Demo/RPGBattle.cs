@@ -5,8 +5,9 @@ using AbilityKit.Samples.Common.Math;
 namespace AbilityKit.Samples.Samples.Demo
 {
     /// <summary>
-    /// RPGBattle - RPG???????
+    /// RPGBattle - RPG战斗系统
     /// </summary>
+    [Sample]
     public sealed class RPGBattle : SampleBase
     {
         public override string Title => "RPG Battle";

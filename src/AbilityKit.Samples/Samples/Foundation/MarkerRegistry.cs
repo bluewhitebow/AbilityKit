@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Foundation
 {
     /// <summary>
-    /// MarkerRegistry - Marker ????
+    /// MarkerRegistry - Marker 注册模式
     /// </summary>
+    [Sample]
     public sealed class MarkerRegistry : SampleBase
     {
         public override string Title => "Marker Registry";

@@ -5,8 +5,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Foundation
 {
     /// <summary>
-    /// HelloWorld - ??????
+    /// HelloWorld - 第一个示例
     /// </summary>
+    [Sample]
     public sealed class HelloWorld : SampleBase
     {
         public override string Title => "Hello World";

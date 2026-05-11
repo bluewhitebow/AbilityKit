@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Modifiers
 {
     /// <summary>
-    /// ModifierBasics - ?????
+    /// ModifierBasics - 修改器基础
     /// </summary>
+    [Sample]
     public sealed class ModifierBasics : SampleBase
     {
         public override string Title => "Modifier Basics";

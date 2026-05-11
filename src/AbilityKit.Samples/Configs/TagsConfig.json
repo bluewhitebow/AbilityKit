@@ -1,0 +1,89 @@
+{
+  "tagGroups": [
+    {
+      "id": 1,
+      "name": "伤害类型",
+      "description": "技能造成的伤害类型标签",
+      "tags": [
+        "Damage.Physical",
+        "Damage.Magical",
+        "Damage.True"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Buff/Debuff",
+      "description": "增益和减益效果标签",
+      "tags": [
+        "Buff.AttackSpeed",
+        "Buff.MoveSpeed",
+        "Buff.Armor",
+        "Buff.MagicResist",
+        "Buff.Heal",
+        "Buff.Invincible",
+        "Debuff.Stun",
+        "Debuff.Silence",
+        "Debuff.Slow",
+        "Debuff.Poison",
+        "Debuff.Burning"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "单位类型",
+      "description": "角色单位类型标签",
+      "tags": [
+        "Unit.Hero",
+        "Unit.Minion",
+        "Unit.Tower",
+        "Unit.Monster",
+        "Unit.Summon"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "队伍",
+      "description": "队伍归属标签",
+      "tags": [
+        "Team.Ally",
+        "Team.Enemy",
+        "Team.Neutral"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "状态",
+      "description": "角色状态标签",
+      "tags": [
+        "Status.Dead",
+        "Status.Alive",
+        "Status.Invisible",
+        "Status.Invulnerable",
+        "Status.Disarmed",
+        "Status.Muted"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "资源消耗",
+      "description": "技能消耗资源类型标签",
+      "tags": [
+        "Cost.Mana",
+        "Cost.Energy",
+        "Cost.Rage",
+        "Cost.Health"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "技能类型",
+      "description": "技能分类标签",
+      "tags": [
+        "Skill.Ultimate",
+        "Skill.Active",
+        "Skill.Passive",
+        "Skill.AutoAttack"
+      ]
+    }
+  ]
+}

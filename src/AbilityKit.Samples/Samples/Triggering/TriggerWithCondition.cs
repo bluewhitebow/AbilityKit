@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Triggering
 {
     /// <summary>
-    /// TriggerWithCondition - ???????
+    /// TriggerWithCondition - 带条件的触发器
     /// </summary>
+    [Sample]
     public sealed class TriggerWithCondition : SampleBase
     {
         public override string Title => "Trigger with Condition";

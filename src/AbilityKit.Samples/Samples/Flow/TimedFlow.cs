@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Flow
 {
     /// <summary>
-    /// TimedFlow - ????????
+    /// TimedFlow - 带时间的流程
     /// </summary>
+    [Sample]
     public sealed class TimedFlow : SampleBase
     {
         public override string Title => "Timed Flow";

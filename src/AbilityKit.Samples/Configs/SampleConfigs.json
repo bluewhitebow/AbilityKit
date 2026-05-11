@@ -1,0 +1,451 @@
+{
+  "stateMachine": {
+    "combatFSM": {
+      "name": "Combat State Machine",
+      "initialState": "Idle",
+      "states": [
+        {
+          "name": "Idle",
+          "onEnter": "PlayIdleAnimation",
+          "onLogic": "CheckForEnemies",
+          "onExit": "StopIdleAnimation",
+          "transitions": ["Chase"],
+          "properties": {
+            "patrolRadius": 10.0,
+            "detectionRange": 15.0
+          }
+        },
+        {
+          "name": "Chase",
+          "onEnter": "PlayRunAnimation",
+          "onLogic": "MoveToTarget",
+          "onExit": "StopMoving",
+          "transitions": ["Attack", "Idle"],
+          "properties": {
+            "moveSpeed": 5.0,
+            "chaseDistance": 2.0
+          }
+        },
+        {
+          "name": "Attack",
+          "onEnter": "PlayAttackAnimation",
+          "onLogic": "CheckAttackRange",
+          "onExit": "ResetAttackCooldown",
+          "transitions": ["Chase", "Idle"],
+          "properties": {
+            "attackRange": 1.5,
+            "attackDamage": 50.0,
+            "attackCooldown": 1.5
+          }
+        },
+        {
+          "name": "Dead",
+          "onEnter": "PlayDeathAnimation",
+          "onLogic": "FadeOut",
+          "onExit": "",
+          "transitions": [],
+          "properties": {
+            "fadeDuration": 2.0
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "from": "Idle",
+          "to": "Chase",
+          "condition": "EnemyDetected",
+          "priority": 1
+        },
+        {
+          "from": "Chase",
+          "to": "Attack",
+          "condition": "InAttackRange",
+          "priority": 1
+        },
+        {
+          "from": "Chase",
+          "to": "Idle",
+          "condition": "TargetLost",
+          "priority": 0
+        },
+        {
+          "from": "Attack",
+          "to": "Chase",
+          "condition": "TargetAlive",
+          "priority": 1
+        },
+        {
+          "from": "Attack",
+          "to": "Idle",
+          "condition": "TargetDead",
+          "priority": 2
+        }
+      ]
+    }
+  },
+  "abilities": {
+    "fireball": {
+      "id": "fireball",
+      "name": "火球术",
+      "cooldown": 5.0,
+      "manaCost": 30.0,
+      "phases": [
+        {
+          "name": "PreCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "properties": {
+            "requireTarget": true,
+            "minRange": 5.0,
+            "maxRange": 30.0
+          }
+        },
+        {
+          "name": "CheckCost",
+          "type": "Instant",
+          "duration": 0.0,
+          "properties": {
+            "requiredMana": 30.0
+          }
+        },
+        {
+          "name": "CastTime",
+          "type": "Duration",
+          "duration": 1.5,
+          "properties": {
+            "castAnimation": "CastFireball",
+            "canMove": false
+          }
+        },
+        {
+          "name": "ApplyEffect",
+          "type": "Instant",
+          "duration": 0.0,
+          "properties": {
+            "damage": 100.0,
+            "effectRadius": 5.0,
+            "effectType": "Fire"
+          }
+        },
+        {
+          "name": "Cooldown",
+          "type": "Duration",
+          "duration": 5.0,
+          "properties": {}
+        }
+      ],
+      "conditions": ["HasEnoughMana", "TargetInRange", "NotOnCooldown"]
+    },
+    "teleport": {
+      "id": "teleport",
+      "name": "闪烁",
+      "cooldown": 3.0,
+      "manaCost": 15.0,
+      "phases": [
+        {
+          "name": "PreCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "properties": {
+            "requireTarget": false,
+            "maxDistance": 15.0
+          }
+        },
+        {
+          "name": "CastTime",
+          "type": "Duration",
+          "duration": 0.3,
+          "properties": {
+            "castAnimation": "BlinkCast"
+          }
+        },
+        {
+          "name": "ApplyEffect",
+          "type": "Instant",
+          "duration": 0.0,
+          "properties": {
+            "teleportDistance": 15.0,
+            "leaveEffect": true,
+            "arriveEffect": true
+          }
+        }
+      ],
+      "conditions": ["HasEnoughMana", "NotOnCooldown"]
+    }
+  },
+  "behaviorTree": {
+    "patrolAI": {
+      "name": "巡逻 AI",
+      "blackboard": {
+        "patrolPoints": ["point1", "point2", "point3"],
+        "currentPatrolIndex": 0,
+        "detectionRadius": 10.0,
+        "alertDuration": 5.0
+      },
+      "root": {
+        "type": "Selector",
+        "name": "Root",
+        "children": [
+          {
+            "type": "Sequence",
+            "name": "Combat Sequence",
+            "children": [
+              {
+                "type": "Condition",
+                "name": "Enemy Detected",
+                "properties": {
+                  "condition": "HasTargetInRange"
+                }
+              },
+              {
+                "type": "Action",
+                "name": "Face Target",
+                "properties": {
+                  "action": "LookAt"
+                }
+              },
+              {
+                "type": "Selector",
+                "name": "Combat Actions",
+                "children": [
+                  {
+                    "type": "Condition",
+                    "name": "In Attack Range",
+                    "properties": {
+                      "condition": "IsInAttackRange"
+                    }
+                  },
+                  {
+                    "type": "Action",
+                    "name": "Move To Target",
+                    "properties": {
+                      "action": "MoveTo",
+                      "distance": 2.0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "Sequence",
+            "name": "Patrol Sequence",
+            "children": [
+              {
+                "type": "Condition",
+                "name": "No Enemy",
+                "properties": {
+                  "condition": "NoTarget"
+                }
+              },
+              {
+                "type": "Action",
+                "name": "Patrol",
+                "properties": {
+                  "action": "MoveToPatrolPoint",
+                  "speed": 2.0
+                }
+              },
+              {
+                "type": "Action",
+                "name": "Wait",
+                "properties": {
+                  "action": "WaitAtPoint",
+                  "duration": 3.0
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "battle": {
+    "rpgDemo": {
+      "name": "RPG 战斗",
+      "allies": [
+        {
+          "id": "hero",
+          "name": "勇者",
+          "health": 500.0,
+          "attack": 80.0,
+          "defense": 20.0,
+          "speed": 5.0,
+          "attributes": {
+            "strength": 15.0,
+            "agility": 10.0,
+            "intelligence": 8.0,
+            "luck": 5.0
+          },
+          "tags": ["Hero", "Player"]
+        }
+      ],
+      "enemies": [
+        {
+          "id": "demon_lord",
+          "name": "魔王",
+          "health": 800.0,
+          "attack": 60.0,
+          "defense": 30.0,
+          "speed": 3.0,
+          "attributes": {
+            "strength": 12.0,
+            "agility": 5.0,
+            "intelligence": 15.0,
+            "luck": 3.0
+          },
+          "tags": ["Boss", "Demon", "Enemy"]
+        }
+      ],
+      "properties": {
+        "turnTimeLimit": 30.0,
+        "enableCritical": true,
+        "criticalChance": 0.15,
+        "criticalMultiplier": 1.5
+      }
+    },
+    "towerDefense": {
+      "name": "塔防战斗",
+      "allies": [
+        {
+          "id": "fire_tower",
+          "name": "火焰塔",
+          "health": 100.0,
+          "attack": 50.0,
+          "defense": 10.0,
+          "speed": 0.0,
+          "attributes": {
+            "range": 10.0,
+            "fireRate": 1.0,
+            "splashRadius": 2.0
+          },
+          "tags": ["Tower", "Damage"]
+        },
+        {
+          "id": "ice_tower",
+          "name": "寒冰塔",
+          "health": 80.0,
+          "attack": 30.0,
+          "defense": 8.0,
+          "speed": 0.0,
+          "attributes": {
+            "range": 8.0,
+            "fireRate": 0.8,
+            "slowEffect": 0.5
+          },
+          "tags": ["Tower", "Control"]
+        }
+      ],
+      "enemies": [
+        {
+          "id": "goblin",
+          "name": "哥布林",
+          "health": 100.0,
+          "attack": 10.0,
+          "defense": 2.0,
+          "speed": 2.0,
+          "attributes": {
+            "goldReward": 10.0
+          },
+          "tags": ["Minion", "Fast"]
+        },
+        {
+          "id": "ogre",
+          "name": "食人魔",
+          "health": 300.0,
+          "attack": 25.0,
+          "defense": 10.0,
+          "speed": 1.0,
+          "attributes": {
+            "goldReward": 50.0
+          },
+          "tags": ["Elite", "Tank"]
+        }
+      ],
+      "properties": {
+        "waveInterval": 10.0,
+        "spawnRadius": 50.0,
+        "maxEnemies": 20
+      }
+    }
+  },
+  "pipeline": {
+    "skillPipeline": {
+      "name": "技能施放管线",
+      "phases": [
+        {
+          "name": "RequirementCheck",
+          "type": "Sequence",
+          "duration": 0.0,
+          "children": [
+            {
+              "name": "TargetValid",
+              "type": "Condition",
+              "duration": 0.0,
+              "properties": {
+                "check": "targetExists"
+              }
+            },
+            {
+              "name": "RangeCheck",
+              "type": "Condition",
+              "duration": 0.0,
+              "properties": {
+                "check": "inRange",
+                "minRange": 0.0,
+                "maxRange": 30.0
+              }
+            },
+            {
+              "name": "ResourceCheck",
+              "type": "Condition",
+              "duration": 0.0,
+              "properties": {
+                "check": "hasEnoughResource",
+                "cost": 20.0
+              }
+            }
+          ]
+        },
+        {
+          "name": "Execution",
+          "type": "Sequence",
+          "duration": 0.0,
+          "children": [
+            {
+              "name": "ConsumeResource",
+              "type": "Instant",
+              "duration": 0.0,
+              "properties": {}
+            },
+            {
+              "name": "CastTime",
+              "type": "Duration",
+              "duration": 1.5,
+              "properties": {
+                "canMove": false,
+                "canRotate": true
+              }
+            },
+            {
+              "name": "ApplyEffect",
+              "type": "Instant",
+              "duration": 0.0,
+              "properties": {
+                "effectType": "Damage",
+                "damage": 100.0,
+                "radius": 5.0
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cooldown",
+          "type": "Duration",
+          "duration": 5.0,
+          "properties": {}
+        }
+      ]
+    }
+  }
+}

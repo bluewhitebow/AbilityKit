@@ -1,0 +1,140 @@
+{
+  "pipelineConfigs": [
+    {
+      "id": 1,
+      "name": "技能释放管线",
+      "description": "演示技能释放的完整流程",
+      "phases": [
+        {
+          "name": "PreCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "预检查：目标是否有效、距离是否满足、冷却是否完成"
+        },
+        {
+          "name": "Validation",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "验证：检查资源是否足够、是否被沉默"
+        },
+        {
+          "name": "Casting",
+          "type": "Timed",
+          "duration": 1.5,
+          "description": "引导：播放施法动画，玩家可以取消"
+        },
+        {
+          "name": "Execute",
+          "type": "Timed",
+          "duration": 0.2,
+          "description": "执行：造成伤害、触发效果"
+        },
+        {
+          "name": "Recovery",
+          "type": "Timed",
+          "duration": 0.5,
+          "description": "收尾：动画复原、进入冷却"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "伤害计算管线",
+      "description": "演示伤害计算的完整流程",
+      "phases": [
+        {
+          "name": "BaseDamage",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "计算基础伤害"
+        },
+        {
+          "name": "ArmorReduction",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "护甲减伤"
+        },
+        {
+          "name": "CriticalCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "暴击判定"
+        },
+        {
+          "name": "DamageTypeMod",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "伤害类型修正"
+        },
+        {
+          "name": "FinalDamage",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "最终伤害应用"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Buff 刷新管线",
+      "description": "演示 Buff 叠加和刷新逻辑",
+      "phases": [
+        {
+          "name": "FindExisting",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "查找现有同名 Buff"
+        },
+        {
+          "name": "StackCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "检查叠加层数"
+        },
+        {
+          "name": "DurationRefresh",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "刷新持续时间"
+        },
+        {
+          "name": "StackIncrement",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "增加叠加层数"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "移动指令管线",
+      "description": "演示角色移动的完整流程",
+      "phases": [
+        {
+          "name": "InputCheck",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "输入检查：是否可移动"
+        },
+        {
+          "name": "PathFinding",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "路径规划"
+        },
+        {
+          "name": "Movement",
+          "type": "Timed",
+          "duration": 0.0,
+          "description": "移动中（持续到到达目标或取消）"
+        },
+        {
+          "name": "Arrival",
+          "type": "Instant",
+          "duration": 0.0,
+          "description": "到达目标点"
+        }
+      ]
+    }
+  ]
+}

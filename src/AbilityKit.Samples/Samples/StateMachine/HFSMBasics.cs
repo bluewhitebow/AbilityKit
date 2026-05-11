@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.StateMachine
 {
     /// <summary>
-    /// HFSMBasics - HFSM ??
+    /// HFSMBasics - HFSM 基础
     /// </summary>
+    [Sample]
     public sealed class HFSMBasics : SampleBase
     {
         public override string Title => "HFSM Basics";

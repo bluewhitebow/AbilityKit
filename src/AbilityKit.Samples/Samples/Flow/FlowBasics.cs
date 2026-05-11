@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Flow
 {
     /// <summary>
-    /// FlowBasics - Flow ??
+    /// FlowBasics - Flow 基础
     /// </summary>
+    [Sample]
     public sealed class FlowBasics : SampleBase
     {
         public override string Title => "Flow Basics";

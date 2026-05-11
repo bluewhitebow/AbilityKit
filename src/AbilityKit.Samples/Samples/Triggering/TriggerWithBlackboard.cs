@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Triggering
 {
     /// <summary>
-    /// TriggerWithBlackboard - ???????
+    /// TriggerWithBlackboard - 带黑板的触发器
     /// </summary>
+    [Sample]
     public sealed class TriggerWithBlackboard : SampleBase
     {
         public override string Title => "Trigger with Blackboard";

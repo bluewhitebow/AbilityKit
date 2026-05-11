@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AbilityKit.Samples.Infrastructure;
 using AbilityKit.Samples.Samples.Foundation;
 using AbilityKit.Samples.Samples.Triggering;
@@ -8,6 +9,7 @@ using AbilityKit.Samples.Samples.Flow;
 using AbilityKit.Samples.Samples.Pipeline;
 using AbilityKit.Samples.Samples.StateMachine;
 using AbilityKit.Samples.Samples.Demo;
+using AbilityKit.Samples.Samples.Config;
 using SamplesNs_Tags = AbilityKit.Samples.Samples.Tags;
 
 namespace AbilityKit.Samples
@@ -20,8 +22,8 @@ namespace AbilityKit.Samples
 
             var runner = new SampleRunner();
 
-            // 注册所有示例
-            RegisterSamples(runner);
+            // 自动注册所有带 [Sample] 标记的示例
+            RegisterSamplesWithAttribute(runner);
 
             // 打印表头
             runner.PrintHeader();
@@ -59,44 +61,31 @@ namespace AbilityKit.Samples
             Console.WriteLine("\n再见!");
         }
 
-        static void RegisterSamples(SampleRunner runner)
+        /// <summary>
+        /// 使用 Attribute 自动注册所有示例
+        /// </summary>
+        static void RegisterSamplesWithAttribute(SampleRunner runner)
         {
-            // Foundation
-            runner.Register<HelloWorld>();
-            runner.Register<EventSystem>();
-            runner.Register<ObjectPool>();
-            runner.Register<MarkerRegistry>();
+            // 初始化 SampleRegistry（扫描所有带 [Sample] 标记的类型）
+            SampleRegistry.Instance.Initialize();
 
-            // Triggering
-            runner.Register<BasicTrigger>();
-            runner.Register<TriggerWithCondition>();
-            runner.Register<TriggerWithBlackboard>();
-
-            // Tags
-            runner.Register<SamplesNs_Tags.GameplayTags>();
-            runner.Register<TagRequirements>();
-            runner.Register<TagStack>();
-
-            // Modifiers
-            runner.Register<ModifierBasics>();
-            runner.Register<AttributeModifiers>();
-
-            // Flow
-            runner.Register<FlowBasics>();
-            runner.Register<SequenceAndRace>();
-            runner.Register<TimedFlow>();
-
-            // Pipeline
-            runner.Register<PipelineBasics>();
-
-            // StateMachine
-            runner.Register<HFSMBasics>();
-            runner.Register<HFSMWithActions>();
-
-            // Demo
-            runner.Register<TowerDefense>();
-            runner.Register<RPGBattle>();
-            runner.Register<TimedTowerDefense>();
+            // 遍历所有注册的示例类型，创建实例并注册
+            foreach (var sampleType in SampleRegistry.Instance.GetAllSampleTypes())
+            {
+                try
+                {
+                    var instance = SampleRegistry.Instance.CreateInstance(sampleType);
+                    if (instance != null)
+                    {
+                        runner.Register(instance);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WARN] 注册示例 {sampleType.Name} 失败: {ex.Message}");
+                }
+            }
         }
+
     }
 }

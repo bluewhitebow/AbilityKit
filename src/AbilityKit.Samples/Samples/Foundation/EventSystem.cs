@@ -4,8 +4,9 @@ using AbilityKit.Samples.Infrastructure;
 namespace AbilityKit.Samples.Samples.Foundation
 {
     /// <summary>
-    /// EventSystem - ??????
+    /// EventSystem - 事件系统
     /// </summary>
+    [Sample]
     public sealed class EventSystem : SampleBase
     {
         public override string Title => "Event System";
