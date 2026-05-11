@@ -1,0 +1,22 @@
+{
+  "globalDefaults": {
+    "enabled": true,
+    "forbiddenNamespaces": [
+      "UnityEngine",
+      "UnityEditor",
+      "UnityEngine.UI",
+      "UnityEngine.UIElements",
+      "UnityEditor.UI"
+    ],
+    "forbiddenAssemblies": [
+      "UnityEngine",
+      "UnityEditor",
+      "UnityEngine.UI",
+      "UnityEditor.UI"
+    ],
+    "severity": 0,
+    "checkUsingAliases": true,
+    "applyToUnlistedPackages": true
+  },
+  "constraints": {}
+}

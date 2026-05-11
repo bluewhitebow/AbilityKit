@@ -13,10 +13,19 @@ namespace AbilityKit.Analyzer.Config
         private readonly Dictionary<string, PackageConstraint> _constraintCache = new Dictionary<string, PackageConstraint>();
         private bool _isLoaded;
 
-        public static readonly string[] SearchPaths = new[]
+        // Unity Packages 搜索路径
+        private static readonly string[] UnitySearchPaths = new[]
         {
             "Assets/Config/PackageConstraints.json",
             "Packages/com.abilitykit.analyzer/Config/PackageConstraints.json",
+        };
+
+        // src 目录构建时的搜索路径
+        private static readonly string[] SrcSearchPaths = new[]
+        {
+            "src/Config/PackageConstraints.json",
+            "src/AbilityKit.Analyzer/Config/PackageConstraints.json",
+            "Configs/PackageConstraints.json",
         };
 
         public ConstraintLoader()
@@ -51,39 +60,55 @@ namespace AbilityKit.Analyzer.Config
 
         public static string ResolveConfigPath()
         {
-            foreach (var relativePath in SearchPaths)
+            // 先尝试 Unity Packages 路径
+            foreach (var relativePath in UnitySearchPaths)
             {
-                var absolutePath = GetAbsolutePath(relativePath);
+                var absolutePath = GetAbsolutePath(relativePath, FindUnityRoot);
                 if (File.Exists(absolutePath))
                     return absolutePath;
             }
+
+            // 再尝试 src 目录路径
+            foreach (var relativePath in SrcSearchPaths)
+            {
+                var absolutePath = GetAbsolutePath(relativePath, FindSrcRoot);
+                if (File.Exists(absolutePath))
+                    return absolutePath;
+            }
+
             return null;
         }
 
-        private static string GetAbsolutePath(string relativePath)
+        private static string GetAbsolutePath(string relativePath, Func<string, string> rootFinder)
         {
             if (Path.IsPathRooted(relativePath))
                 return relativePath;
 
-            string result = null;
-
+            // 从 AppDomain.BaseDirectory 向上查找
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var unityRoot = FindUnityRoot(baseDir);
-            if (unityRoot != null)
+            var root = rootFinder(baseDir);
+            if (root != null)
             {
-                result = Path.Combine(unityRoot, relativePath);
+                var result = Path.Combine(root, relativePath);
                 if (File.Exists(result))
                     return result;
             }
 
+            // 从当前目录查找
             var currentDir = Directory.GetCurrentDirectory();
-            result = Path.Combine(currentDir, relativePath);
-            if (File.Exists(result))
-                return result;
+            var result2 = Path.Combine(currentDir, relativePath);
+            if (File.Exists(result2))
+                return result2;
 
-            result = Path.GetFullPath(Path.Combine(currentDir, "..", relativePath));
-            if (File.Exists(result))
-                return result;
+            // 尝试向上查找
+            var parent = Directory.GetParent(currentDir);
+            while (parent != null)
+            {
+                var result3 = Path.Combine(parent.FullName, relativePath);
+                if (File.Exists(result3))
+                    return result3;
+                parent = Directory.GetParent(parent.FullName);
+            }
 
             return Path.Combine(currentDir, relativePath);
         }
@@ -99,6 +124,27 @@ namespace AbilityKit.Analyzer.Config
                 var assetsDir = Path.Combine(dir, "Assets");
                 var packagesDir = Path.Combine(dir, "Packages");
                 if (Directory.Exists(assetsDir) && Directory.Exists(packagesDir))
+                    return dir;
+
+                var parent = Directory.GetParent(dir);
+                if (parent == null)
+                    break;
+                dir = parent.FullName;
+            }
+            return null;
+        }
+
+        private static string FindSrcRoot(string baseDir)
+        {
+            var dir = baseDir;
+            for (int i = 0; i < 10; i++)
+            {
+                if (string.IsNullOrEmpty(dir))
+                    break;
+
+                var srcDir = Path.Combine(dir, "src");
+                var slnFile = Path.Combine(dir, "AbilityKit.sln");
+                if (Directory.Exists(srcDir) && File.Exists(slnFile))
                     return dir;
 
                 var parent = Directory.GetParent(dir);

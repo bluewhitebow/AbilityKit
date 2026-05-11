@@ -93,6 +93,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AbilityKit.World.Snapshot",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AbilityKit.Game.Battle.Runtime", "AbilityKit.Game.Battle.Runtime\AbilityKit.Game.Battle.Runtime.csproj", "{A1000039-0039-0039-0039-000000000039}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AbilityKit.Analyzer", "AbilityKit.Analyzer\AbilityKit.Analyzer.csproj", "{A1000046-0046-0046-0046-000000000046}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -189,6 +191,8 @@ Global
 		{A1000038-0038-0038-0038-000000000038}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000039-0039-0039-0039-000000000039}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1000039-0039-0039-0039-000000000039}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1000046-0046-0046-0046-000000000046}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1000046-0046-0046-0046-000000000046}.Debug|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

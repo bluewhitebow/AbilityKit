@@ -53,6 +53,11 @@ namespace AbilityKit.Samples
         Abilities = 8,
 
         /// <summary>
+        /// 逻辑世界
+        /// </summary>
+        World = 10,
+
+        /// <summary>
         /// 综合演示
         /// </summary>
         Demo = 9,
@@ -76,6 +81,7 @@ namespace AbilityKit.Samples
                 SampleCategory.StateMachine => "StateMachine",
                 SampleCategory.Combat => "Combat",
                 SampleCategory.Abilities => "Abilities",
+                SampleCategory.World => "World",
                 SampleCategory.Demo => "Demo",
                 _ => "Unknown"
             };
