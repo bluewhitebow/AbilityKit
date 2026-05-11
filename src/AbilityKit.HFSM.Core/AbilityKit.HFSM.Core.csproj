@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>UnityHFSM</RootNamespace>
+    <AssemblyName>AbilityKit.HFSM.Core</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- 只包含 Core 部分，排除 Unity 子目录 -->
+  <ItemGroup>
+    <Compile Include="../../Unity/Packages/com.abilitykit.hfsm/Runtime/HFSM/Core/**/*.cs" />
+  </ItemGroup>
+
+  <!-- 项目引用 -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/AbilityKit.Core/AbilityKit.Core.csproj" />
+  </ItemGroup>
+
+</Project>
