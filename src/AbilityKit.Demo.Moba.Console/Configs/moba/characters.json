@@ -1,0 +1,72 @@
+[
+  {
+    "Id": 1,
+    "Code": "hero_warrior",
+    "Name": "战士",
+    "ModelId": 1,
+    "BaseHp": 800,
+    "BaseMp": 300,
+    "BaseAttack": 65,
+    "BaseDefense": 40,
+    "BaseMoveSpeed": 3.0,
+    "AttackRange": 1.5,
+    "Skills": [101, 102, 103, 104],
+    "Description": "近战物理输出，擅长冲锋和控制"
+  },
+  {
+    "Id": 2,
+    "Code": "hero_archer",
+    "Name": "弓箭手",
+    "ModelId": 2,
+    "BaseHp": 600,
+    "BaseMp": 250,
+    "BaseAttack": 70,
+    "BaseDefense": 30,
+    "BaseMoveSpeed": 3.5,
+    "AttackRange": 5.0,
+    "Skills": [201, 202, 203, 204],
+    "Description": "远程物理输出，擅长陷阱和狙击"
+  },
+  {
+    "Id": 3,
+    "Code": "hero_mage",
+    "Name": "法师",
+    "ModelId": 3,
+    "BaseHp": 500,
+    "BaseMp": 400,
+    "BaseAttack": 80,
+    "BaseDefense": 25,
+    "BaseMoveSpeed": 2.8,
+    "AttackRange": 6.0,
+    "Skills": [301, 302, 303, 304],
+    "Description": "远程魔法输出，擅长AOE和控制"
+  },
+  {
+    "Id": 10,
+    "Code": "minion_melee",
+    "Name": "近战小兵",
+    "ModelId": 10,
+    "BaseHp": 300,
+    "BaseMp": 100,
+    "BaseAttack": 20,
+    "BaseDefense": 10,
+    "BaseMoveSpeed": 2.5,
+    "AttackRange": 1.2,
+    "Skills": [401],
+    "Description": "近战小兵，会跟随小兵线进攻"
+  },
+  {
+    "Id": 11,
+    "Code": "minion_ranged",
+    "Name": "远程小兵",
+    "ModelId": 11,
+    "BaseHp": 200,
+    "BaseMp": 150,
+    "BaseAttack": 25,
+    "BaseDefense": 5,
+    "BaseMoveSpeed": 2.5,
+    "AttackRange": 3.0,
+    "Skills": [402],
+    "Description": "远程小兵，会在小兵后方输出"
+  }
+]
