@@ -1,115 +1,86 @@
-# Flow 模块文档索引
+# Flow — 流程编排引擎
 
-> Ability-Kit Flow 模块官方文档
+## 设计理念
 
----
+Flow 回答的问题是："如何组织异步/时间驱动的复杂逻辑？"
 
-## 📚 文档列表
+Flow 基于 IFlowNode 节点树组织逻辑，每个节点有 `Enter`/`Tick`/`Exit`/`Interrupt` 四个生命周期方法。FlowContext 作为作用域 Type→object 字典，在节点树间传递数据。WAKE/PUMP 机制让 Flow 可以等待外部信号（异步完成、事件）再继续执行，而无需阻塞线程。
 
-### 1. [Flow模块开发设计文档](./Flow模块开发设计文档.md)
+**与 Pipeline 的关系**：Pipeline 面向技能执行的结构化阶段，Flow 面向通用异步协调逻辑。Pipeline 的阶段是预定义的，Flow 的节点是动态组合的。
 
-**阅读对象**：首次接触 Flow 模块的开发者
+**与 HFSM 的关系**：`HfsmFlowRunner` 将 HFSM 作为 Flow 节点嵌入，使状态机可以被 Flow 的 Sequence/Parallel/Timeout 等组合器管理。
 
-**内容概要**：
-- 为什么需要 Flow 模块（解决回调地狱、状态追踪等问题）
-- 核心概念：节点、流程、执行器、上下文
-- 架构图和执行流程
-- 节点详解：基础节点 + 组合节点
-- 完整使用示例
-- 设计模式总结
+## 核心抽象
 
-**推荐阅读顺序**：从本文档开始
+```
+IFlowNode
+├── Enter(context)        → 初始化
+├── Tick(dt, context)     → 每帧推进
+├── Exit(context)         → 清理
+└── Interrupt(context)    → 中断
 
----
+FlowRunner
+├── Step(dt)             → 推进一步
+├── Wake()               → 唤醒等待中的节点
+└── Reset()              → 重置
 
-### 2. [Flow模块扩展指南](./Flow模块扩展指南.md)
+FlowContext                → Scoped DI (Set/Get/TryGet<T>)
+```
 
-**阅读对象**：想要扩展 Flow 模块的开发者
+## 内置节点
 
-**内容概要**：
-- 何时该写新节点 vs 组合现有节点
-- 自定义节点开发模板
-- 高级节点：组合节点、循环节点、进度节点
-- Flow 与其他模块协作
-- 完整示例：登录流程、技能释放流程
-- 最佳实践与调试技巧
-
-**推荐阅读顺序**：掌握基础后阅读
-
----
-
-## 🎯 快速入门
-
-### 想了解 Flow 是什么？
-
-👉 阅读 [Flow模块开发设计文档](./Flow模块开发设计文档.md) 第一章「设计理念」
-
-### 想学习如何使用？
-
-👉 阅读 [Flow模块开发设计文档](./Flow模块开发设计文档.md) 第五章「使用指南」
-
-### 想开发自定义节点？
-
-👉 阅读 [Flow模块扩展指南](./Flow模块扩展指南.md) 第二章「自定义节点开发」
-
-### 想看完整代码示例？
-
-👉 参考以下示例文件：
-
-| 示例 | 路径 | 说明 |
-|------|------|------|
-| 01_BasicSessionExample | `Samples~/FlowExamples/Runtime/` | 基础会话示例 |
-| 02_WakePumpExample | `Samples~/FlowExamples/Runtime/` | Wake/Pump 机制 |
-| 03_TimeoutAndRaceExample | `Samples~/FlowExamples/Runtime/` | 超时和竞速 |
-| 04_ParallelAllExample | `Samples~/FlowExamples/Runtime/` | 并行执行 |
-| 05_UsingResourceExample | `Samples~/FlowExamples/Runtime/` | 资源管理 |
-| 06_ExceptionHandlingExample | `Samples~/FlowExamples/Runtime/` | 异常处理 |
-
----
-
-## 📖 概念速查
-
-### 核心类
-
-| 类 | 职责 |
+| 节点 | 说明 |
 |------|------|
-| `IFlowNode` | 节点接口（Enter/Tick/Exit/Interrupt） |
-| `FlowRunner` | 流程执行引擎 |
-| `FlowSession` | 会话封装（推荐入口） |
-| `FlowContext` | 上下文容器（轻量 DI） |
-| `FlowWakeUp` | 唤醒机制（回调推进） |
-
-### 常用节点
-
-| 节点 | 用途 |
-|------|------|
-| `DoNode` | 执行自定义逻辑 |
-| `SequenceNode` | 顺序执行 |
-| `RaceNode` | 竞速（首个完成决定结果） |
-| `ParallelAllNode` | 并行执行（全部成功才成功） |
-| `IfNode` | 条件分支 |
-| `TimeoutNode` | 超时控制 |
-| `FinallyNode` | try-finally 语义 |
-| `UsingResourceNode` | RAII 资源管理 |
-| `AwaitCallbackNode` | 等待外部回调 |
+| `SequenceNode` | 顺序执行子节点，任一失败则整体失败 |
+| `RaceNode` | 并行执行，首个完成的子节点决定结果 |
+| `ParallelAllNode` | 并行执行，所有子节点成功才整体成功 |
+| `IfNode` | 条件分支，根据谓词选择分支 |
+| `SwitchNode` | 多路分支 |
+| `TimeoutNode` | 超时装饰器 |
+| `AwaitCompletionNode` | 等待外部 FlowCompletion.Set() 信号 |
+| `RunUntilCompletionNode` | Tick 一个异步任务直到完成 |
+| `TickWhileNode` | 循环执行，回调每帧触发 |
+| `UsingResourceNode` | RAII 模式（创建→使用→释放） |
+| `DoNode` | 叶子节点，执行回调 |
 | `WaitSecondsNode` | 等待指定秒数 |
 
-### 状态
+## 快速示例
 
-| 状态 | 含义 |
-|------|------|
-| `Running` | 运行中 |
-| `Succeeded` | 成功完成 |
-| `Failed` | 执行失败 |
-| `Canceled` | 被取消 |
+```csharp
+// 顺序执行：等待 0.5s，然后执行条件分支
+Sequence(
+    WaitSeconds(0.5f),
+    If(
+        () => hasTarget,
+        Do(() => ApplyEffect()),
+        Do(() => ShowMiss())
+    ),
+    Finally(() => ClearState())
+)
 
----
+// 使用 FlowContext 传递数据
+Sequence(
+    CreateResource<Target>("Target", () => FindTarget()),
+    UsingResource<Target>("Target", target => {
+        Do(() => target.ApplyDamage(damage));
+        WaitSeconds(1.0f);
+    }),
+    DisposeResource<Target>("Target")
+)
+```
 
-## 🔗 相关文档
+## WAKE/PUMP 机制
 
-- [Host模块开发设计文档](../com.abilitykit.host.extension/Document/Host模块开发设计文档.md) - Flow 模块所在的运行时框架
-- [Host模块扩展指南](../com.abilitykit.host.extension/Document/Host模块扩展指南.md) - 如何在 Host 中扩展 Flow 相关功能
+`FlowCompletion.Set()` 可以从任意线程调用，触发 Wake() 将等待中的节点推入就绪队列：
 
----
-
-*最后更新：2026-03-19*
+```csharp
+var completion = new FlowCompletion();
+Sequence(
+    AwaitCompletion(completion),
+    Do(() => OnComplete())
+);
+await Task.Run(() => {
+    // 异步操作...
+    completion.Set();  // 唤醒 Flow
+});
+```

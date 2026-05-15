@@ -8,13 +8,15 @@
 
 ## 核心特性
 
-| 特性 | 说明 |
-|------|------|
-| **逻辑与表现分离** | 纯 C# 逻辑层可在服务器、客户端、编辑器环境下运行，通过事件与表现层解耦 |
-| **帧同步确定性** | 支持帧同步、回滚、客户端预测、断线重连，保证多人战斗的确定性 |
-| **数据驱动** | 技能、效果、触发器均可通过配置定义，配合可视化编辑器提升效率 |
-| **高度可扩展** | 模块化设计，支持 Hook/Feature/Blueprint 扩展机制，按需裁剪 |
-| **高性能** | 索引表查询、对象池、流式处理、零 GC 分配优化 |
+
+| 特性          | 说明                                        |
+| ----------- | ----------------------------------------- |
+| **逻辑与表现分离** | 纯 C# 逻辑层可在服务器、客户端、编辑器环境下运行，通过事件与表现层解耦     |
+| **帧同步确定性**  | 支持帧同步、回滚、客户端预测、断线重连，保证多人战斗的确定性            |
+| **数据驱动**    | 技能、效果、触发器均可通过配置定义，配合可视化编辑器提升效率            |
+| **高度可扩展**   | 模块化设计，支持 Hook/Feature/Blueprint 扩展机制，按需裁剪 |
+| **高性能**     | 索引表查询、对象池、流式处理、零 GC 分配优化                  |
+
 
 ---
 
@@ -27,45 +29,38 @@
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                          游戏应用层                                   │   │
-│  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │   │
 │  │   │   技能系统   │  │   战斗系统   │  │   录像回放   │             │   │
 │  │   │  (Pipeline) │  │  (Combat)   │  │  (Record)   │             │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘             │   │
-│  │                                                                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
-│                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                          引擎层                                       │   │
-│  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │   │
 │  │   │   流程引擎   │  │   触发系统   │  │   状态机     │             │   │
 │  │   │    (Flow)    │  │ (Triggering) │  │   (HFSM)     │             │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘             │   │
-│  │                                                                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
-│                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                          世界层                                       │   │
-│  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │   │
 │  │   │   依赖注入   │  │    ECS      │  │   帧同步     │             │   │
 │  │   │  (World.DI)  │  │ (World.ECS) │  │(FrameSync)  │             │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘             │   │
-│  │                                                                      │   │
+│  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │   │
+│  │   │  状态同步    │  │ 帧数据层     │  │ 战斗传输层   │             │   │
+│  │   │(StateSync)  │  │(NetworkFrag)  │  │(Battle.Trans)│             │   │
+│  │   └──────────────┘  └──────────────┘  └──────────────┘             │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
-│                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                          核心层                                       │   │
-│  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │   │
 │  │   │   数学库     │  │   属性系统   │  │   效果系统   │             │   │
 │  │   │    (Math)    │  │(Attributes) │  │  (Effects)   │             │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘             │   │
-│  │                                                                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -77,142 +72,258 @@
 
 ### 核心基础设施
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.core` | 数学库（Vec2/Vec3/Quat/Transform3）、对象池、日志、事件系统、GameplayTag、数值系统 |
-| `com.abilitykit.attributes` | 属性系统，支持 Buff/Debuff、自定义公式、脏标记优化 |
-| `com.abilitykit.effects` | 效果系统核心：EffectScope、EffectInstance、EffectRegistry |
+
+| 模块                          | 说明                                                          |
+| --------------------------- | ----------------------------------------------------------- |
+| `com.abilitykit.core`       | 数学库（Vec2/Vec3/Quat/Transform3）、对象池、日志、事件系统、GameplayTag、数值系统 |
+| `com.abilitykit.attributes` | 属性系统，支持 Buff/Debuff、自定义公式、脏标记优化                             |
+| `com.abilitykit.effects`    | 效果系统核心：EffectScope、EffectInstance、EffectRegistry            |
+
 
 ### 世界管理层
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.world.di` | 依赖注入容器，支持 Singleton/Scoped/Transient 三种生命周期 |
-| `com.abilitykit.world.ecs` | 轻量级 ECS 框架：Entity、EntityWorld、ComponentTypeId |
-| `com.abilitykit.world.framesync` | 帧同步：FrameSync、Rollback、ClientPrediction、输入历史 |
-| `com.abilitykit.world.snapshot` | 快照路由：WorldStateSnapshot 编解码 |
-| `com.abilitykit.record` | 录像回放：Session、Container、Track，支持输入录制、状态哈希采样 |
+
+| 模块                                      | 说明                                                       |
+| --------------------------------------- | -------------------------------------------------------- |
+| `com.abilitykit.world.di`               | 依赖注入容器，支持 Singleton/Scoped/Transient 三种生命周期              |
+| `com.abilitykit.world.ecs`              | 轻量级 ECS 框架：Entity、EntityWorld、ComponentTypeId            |
+| `com.abilitykit.world.framesync`        | 帧同步：FrameSync、Rollback、ClientPrediction、输入历史             |
+| `com.abilitykit.world.snapshot`         | 快照路由：按 opCode 解码并分发到处理器（与网络解耦）                           |
+| `com.abilitykit.world.networkfragments` | 帧数据包：FramePacket、RemoteFrameBuffer、RemoteFrameAggregator |
+| `com.abilitykit.world.statesync`        | 状态同步与客户端预测：Rollback、Per-Entity/ECSPrediction、StateHash   |
+| `com.abilitykit.record`                 | 录像回放：Session、Container、Track，支持输入录制、状态哈希采样               |
+
 
 ### 技能与战斗层
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.pipeline` | 技能管线编排：Phase 基类、Timeline、Conditional、Parallel 等 |
-| `com.abilitykit.triggering` | 事件触发器：ITrigger、EventBus、TriggerRunner，支持 RPN 条件表达式 |
-| `com.abilitykit.ability.runtime` | 技能运行时：Ability、Effect、Triggering、EffectSource |
-| `com.abilitykit.ability.explain` | 技能解释/调试框架：Forest、Tree + Navigation Protocol |
-| `com.abilitykit.motion` | 移动系统：MotionPipeline、来源组合、碰撞求解 |
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.combat.entitymanager` | 实体管理器：索引表实现高效查询 |
-| `com.abilitykit.combat.skilllibrary` | 技能库：索引表实现高效技能查询 |
-| `com.abilitykit.combat.targeting` | 目标查找：圆形/扇形/矩形范围、流式处理、零 GC |
-| `com.abilitykit.combat.projectile` | 投射物系统：对象池、帧同步、命中策略、范围效果 |
-| `com.abilitykit.combat.damage` | 伤害系统：DamagePipeline、自定义伤害公式 |
+| 模块                               | 说明                                                                           |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `com.abilitykit.pipeline`        | **技能管线编排**：Phase 阶段模型（Sequence/Parallel/Conditional/Delay/Repeat），支持中断/暂停/恢复 |
+| `com.abilitykit.triggering`      | **事件触发引擎**：强类型事件驱动 + ExecCtx 依赖注入 + MarkerAttribute 自动注册                     |
+| `com.abilitykit.ability.runtime` | 技能运行时：Ability、Effect、Triggering、EffectSource                                 |
+| `com.abilitykit.ability.explain` | 技能解释/调试框架：Forest、Tree + Navigation Protocol                                  |
+| `com.abilitykit.motion`          | 移动系统：MotionPipeline、来源组合、碰撞求解                                                |
+
+
+
+| 模块                                    | 说明                          |
+| ------------------------------------- | --------------------------- |
+| `com.abilitykit.combat.entitymanager` | 实体管理器：索引表实现高效查询             |
+| `com.abilitykit.combat.skilllibrary`  | 技能库：索引表实现高效技能查询             |
+| `com.abilitykit.combat.targeting`     | 目标查找：圆形/扇形/矩形范围、流式处理、零 GC   |
+| `com.abilitykit.combat.projectile`    | 投射物系统：对象池、帧同步、命中策略、范围效果     |
+| `com.abilitykit.combat.damage`        | 伤害系统：DamagePipeline、自定义伤害公式 |
+
 
 ### 运行时与流程层
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.host` | 服务器端抽象：World 管理、客户端连接、消息广播 |
-| `com.abilitykit.host.extension` | Host 扩展：FrameSync、Rollback、Session、Hook、Feature、Blueprint |
-| `com.abilitykit.flow` | 流程编排引擎：Sequence、Race、Parallel、If、Timeout、UsingResource |
-| `com.abilitykit.hfsm` | 分层状态机：Hierarchical FSM |
+
+| 模块                              | 说明                                                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `com.abilitykit.host`           | 服务器端抽象：World 管理、客户端连接、消息广播                                                                         |
+| `com.abilitykit.host.extension` | Host 扩展：Session（FramePacketNetAdapter）、FrameSync、Rollback、Hook、Feature、Blueprint                   |
+| `com.abilitykit.flow`           | **流程编排引擎**：IFlowNode 节点树（Sequence/Race/Parallel/If/Timeout/Await），FlowContext 作用域注入，WAKE/PUMP 事件驱动 |
+| `com.abilitykit.hfsm`           | **分层状态机**：基于 UnityHFSM，ITriggerable 事件转换、IAction 行为层（BehaviorStatus）、Decorator AOP 包装              |
+
+
+### 战斗传输层
+
+
+| 模块                                             | 说明                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| `com.abilitykit.game.battle.runtime`           | 战斗逻辑传输接口：IBattleLogicTransport、请求/响应类型                       |
+| `com.abilitykit.game.battle.transport.runtime` | 传输层实现：NetworkTransport、StateSyncAdapter（Moba）、INetworkClient |
+
 
 ### 网络层
 
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.network.runtime` | 网络运行时抽象 |
-| `com.abilitykit.protocol` | 协议定义：客户端/服务器共享协议 |
-| `com.abilitykit.protocol.moba` | MOBA 协议定义 |
+
+| 模块                                   | 说明               |
+| ------------------------------------ | ---------------- |
+| `com.abilitykit.network.runtime`     | 网络运行时抽象          |
+| `com.abilitykit.protocol`            | 协议定义：客户端/服务器共享协议 |
+| `com.abilitykit.protocol.moba`       | MOBA 协议定义        |
 | `com.abilitykit.protocol.memorypack` | MemoryPack 序列化实现 |
 
-### 示例
-
-| 模块 | 说明 |
-|------|------|
-| `com.abilitykit.demo.moba.runtime` | MOBA 演示运行时：技能系统、战斗规则、实体管理 |
-| `com.abilitykit.demo.moba.view.runtime` | MOBA 演示表现层：Unity 表现、动画、特效、UI |
 
 ---
 
-## 核心概念
+## 核心模块设计理念
 
-### World（世界）
+### Pipeline（技能管线）
 
-World 是独立的游戏逻辑空间，类似"游戏房间"。每个 World 包含 Entities（数据）和 Systems（逻辑），通过 WorldId 标识。框架支持多世界并行管理。
+Pipeline 回答"技能应该经历哪些执行步骤"。每个技能被建模为一个 Phase（阶段）序列，支持中断（Interrupt）、暂停（Pause）和恢复（Resume）。
 
-```csharp
-// 创建世界
-var worldId = await worldManager.CreateWorldAsync();
-
-// 在世界中获取服务
-var clock = worldManager.Resolve<IWorldClock>(worldId);
+```mermaid
+flowchart TD
+    subgraph Pipeline["Pipeline"]
+        P1["InstantPhase\n冷却检查"] --> P2["DurationalPhase\n吟唱"] --> P3["TimelinePhase\n施法"] --> P4["InstantPhase\n后摇"]
+        P3 -.->|"Parallel"| P3_1["EffectPhase\n特效"]
+        P3 -.->|"Parallel"| P3_2["SoundPhase\n音效"]
+    end
 ```
 
-### Dependency Injection（依赖注入）
 
-框架提供 WorldContainer 全局容器和 WorldScope 作用域，支持三种生命周期：
 
-| 生命周期 | 说明 |
-|----------|------|
-| Singleton | 全局单例，整个应用生命周期内唯一 |
-| Scoped | 作用域单例，在 World 生命周期内唯一 |
-| Transient | 瞬时实例，每次请求都创建新实例 |
+**核心抽象**：`IAbilityPipelinePhase<TCtx>` — 阶段需实现 `Execute()`、`OnUpdate(dt)`、`IsComplete`、`ShouldExecute()`、`Reset()`。Composite 阶段（Sequence、Parallel、Conditional）持有子阶段列表，按需嵌套。Pipeline 不直接依赖 Triggering，两者通过"Pipeline 编排技能阶段、Triggering 处理阶段内事件"的协作模式配合。
 
-### Pipeline（管线系统）
+**适用场景**：技能施放流程（冷却→吟唱→施法→后摇）、Buff 持续效果、连招系统。
 
-Pipeline 用于编排技能执行流程，Phase（阶段）是基本单元：
-
-| 阶段类型 | 说明 |
-|----------|------|
-| InstantPhase | 瞬时执行，无需时间 |
-| DurationalPhase | 持续执行，占用时间 |
-| TimelinePhase | 时间轴阶段，支持关键帧事件 |
-| ConditionalBranch | 条件分支，根据条件选择执行路径 |
-| Parallel | 并行执行，多个阶段同时运行 |
+---
 
 ### Triggering（触发器系统）
 
-基于事件的触发器引擎，支持确定性回放：
+Triggering 回答"当战斗事件发生时，应该执行哪些规则"。强类型事件驱动，触发器按 Phase→Priority→Order 三级排序。
 
-```csharp
-// 定义触发器
-public class OnDamageReceivedTrigger : Trigger<DamageEvent> { }
-
-// 触发条件
-[TriggerCondition("Source.Tag == 'Enemy' && Event.Damage > 100")]
-public class BossRageTrigger : Trigger<DamageEvent> { }
+```mermaid
+flowchart LR
+    subgraph Triggering["Triggering"]
+        EB["EventBus\nPublish / Subscribe"] --> TR["TriggerRunner\nPhase→Priority→Order"]
+        TR -->|"Evaluate"| Cond["ICondition\nAnd / Or / Not / NumericExpr"]
+        TR -->|"Execute"| Exec["IExecutable\nBehavior tree nodes"]
+        Exec -->|"ITriggerCue"| Cue["ITriggerCue\nVFX / SFX / UI 回调"]
+    end
 ```
+
+
+
+**ExecCtx**：执行上下文结构体，通过依赖注入向所有 Evaluate/Execute 调用传递 `EventBus`、`FunctionRegistry`、`ActionRegistry`、`BlackboardResolver`、`NumericDomains`、`ExecutionControl`。**Marker 注册**：`[ExecutableTypeId]` 和 `[ConditionTypeId]` 属性标记类型，通过 `MarkerScanner<T>` 自动扫描程序集并注册到 `ExecutableRegistry`，零侵入扩展。**确定性保证**：`ExecPolicy.RequireDeterministic` 模式在注册时拒绝非确定性函数，确保帧同步回放安全。
+
+**适用场景**：伤害事件触发 Buff、属性变化监听、被动技能生效、条件化战斗规则。
+
+---
 
 ### Flow（流程引擎）
 
-节点树组织异步/时间驱动的逻辑：
+Flow 回答"如何组织异步/时间驱动的复杂逻辑"。基于 IFlowNode 节点树，支持事件驱动的 WAKE/PUMP 机制。
 
-```csharp
-// 顺序执行
-Sequence(
-    Log("开始施法"),
-    Wait(0.5f),
-    If(() => hasTarget,
-        Do(() => ApplyEffect()),
-        Do(() => ShowMiss())
-    ),
-    Finally(() => ClearState())
-);
+```mermaid
+flowchart TD
+    subgraph Flow["Flow"]
+        FR["FlowRunner\nStep(deltaTime) / Wake()"] --> FN["IFlowNode\nEnter / Tick / Exit / Interrupt"]
+        FN --> Comp["Composite Nodes\nSequence / Race / Parallel / If / Timeout / Await"]
+        Comp --> Leaf["Leaf Nodes\nDo / Wait / WaitUntil"]
+        Comp --> Nested["Nested Flow Nodes"]
+        Nested --> HFSM["HFSM\nHfsmFlowRunner adapter"]
+    end
 ```
 
-### FrameSync（帧同步）
 
-确定性保证，支持回滚和预测：
 
-| 功能 | 说明 |
-|------|------|
-| Rollback | 帧回滚，修正客户端与服务端不一致 |
-| ClientPrediction | 客户端预测，提前执行操作 |
-| InputHistory | 输入历史，支持断线重连 |
+**核心特性**：FlowContext 作为作用域 Type→object 字典，在节点树间传递数据（RAII 风格的 UsingResource）。WAKE/PUMP 机制让 Flow 节点可以等待外部信号（异步完成、事件）再继续执行。AwaitCompletionNode 支持外部 `FlowCompletion.Set()` 信号，RunUntilCompletionNode 在 Flow 内部调度异步任务。**与 HFSM 的集成**：`HfsmFlowRunner` 将 HFSM 作为 Flow 节点嵌入，使状态机可以被 Flow 的 Sequence/Parallel/Timeout 等组合器管理。
+
+**适用场景**：异步技能演出序列、UI 动画编排、跨系统协调流程（等待多个异步操作全部完成）。
+
+---
+
+### HFSM（分层状态机）
+
+HFSM 回答"实体的状态是什么，以及如何在不同状态间切换"。基于 UnityHFSM，提供 ITriggerable 事件驱动转换和 IAction 行为层。
+
+```mermaid
+flowchart TD
+    subgraph HFSM["HFSM"]
+        SM["StateMachine\nRequestStateChange / Trigger"]
+        SM --> S1["State\nOnEnter / OnLogic / OnExit"]
+        SM --> S2["State\nOnEnter / OnLogic / OnExit"]
+        S1 -->|"TransitionAfter / Transition"| S2
+        S2 -->|"ITriggerable<TEvent>"| S1
+        SM -.->|"Decorator"| Deco["DecoratedState\nBeforeEnter / AfterEnter / ..."]
+    end
+```
+
+
+
+**状态转换**：Transition 支持条件谓词（ShouldTransition） + BeforeTransition/AfterTransition 钩子。TransitionAfter 支持时间延迟转换（可选）。**Trigger 系统**：ITriggerable 接口让状态可以订阅事件并触发转换，实现事件驱动的状态切换（如"受到伤害时切换到受击状态"）。**Action 层**：IAction 接口返回 `BehaviorStatus { Running, Success, Failure }`，支持行为树风格的动作（与 HFSM 正交）。**Decorator 模式**：DecoratedState 包装器为状态提供 AOP 钩子（BeforeEnter/AfterEnter/BeforeExit/AfterExit），用于日志、统计、横切逻辑。
+
+**适用场景**：NPC AI（巡逻→追击→攻击→撤退）、角色状态机（站立/移动/跳跃/受击）、Boss 阶段切换。
+
+---
+
+## src/ 源码结构
+
+`src/` 包含多个 .NET SDK 项目，通过 `<Compile Include>` 引用 `Unity/Packages/` 中的唯一源码。同一套源码既用于 Unity 编译，也用于 `dotnet build` 纯 C# 测试。
+
+### 编译模式
+
+
+| 模式       | 说明                           | 示例项目                                         |
+| -------- | ---------------------------- | -------------------------------------------- |
+| **纯引用**  | 直接引用 Unity/Packages 源码，无本地覆盖 | AbilityKit.Core, AbilityKit.Host             |
+| **局部覆盖** | 引用源码时排除某些文件，本地提供 .NET 专用实现   | AbilityKit.World.ECS (`Impl/EntityWorld.cs`) |
+| **聚合入口** | 不含源码，仅引用其他项目作为依赖             | AbilityKit.Demo.Moba.Infrastructure          |
+
+
+### 目录树
+
+```
+src/
+├── AbilityKit.Core/                          # 数学库、日志、事件、GameplayTag、数值系统
+├── AbilityKit.GameplayTags/                  # 标签系统
+├── AbilityKit.Modifiers/                    # 属性修改器
+├── AbilityKit.Diagnostics/                   # 诊断工具
+├── AbilityKit.GameFramework/                # 游戏框架基础
+│
+├── AbilityKit.World.DI/                     # 依赖注入容器
+├── AbilityKit.World.ECS/                    # ECS 框架（含 Impl/EntityWorld.cs）
+├── AbilityKit.World.Entitas/                 # Entitas ECS 适配
+├── AbilityKit.World.FrameSync/              # 帧同步运行时
+├── AbilityKit.World.NetworkFragments/       # 帧数据包
+├── AbilityKit.World.Snapshot/               # 快照路由
+├── AbilityKit.World.StateSync/              # 状态同步与预测
+│
+├── AbilityKit.Behavior/                     # Behavior 行为系统
+├── AbilityKit.BTCore/                      # Behavior Tree 核心
+├── AbilityKit.Context/                      # 上下文抽象
+├── AbilityKit.Dataflow/                    # 数据流处理
+├── AbilityKit.Threading/                    # 线程抽象
+├── AbilityKit.Timer/                       # 定时器
+├── AbilityKit.Trace/                       # 追踪系统
+│
+├── AbilityKit.Pipeline/                     # 技能管线编排
+├── AbilityKit.Triggering/                   # 事件触发引擎
+├── AbilityKit.Triggering.Abstractions/       # 触发器抽象
+├── AbilityKit.Ability/                     # 技能系统聚合入口（引用多个子项目）
+├── AbilityKit.Ability.Config/              # 技能配置数据模型
+├── AbilityKit.Ability.Explain/             # 技能解释框架
+│
+├── AbilityKit.Flow/                        # 流程引擎
+├── AbilityKit.HFSM.Core/                   # 分层状态机
+├── AbilityKit.ActionSchema/               # 时序数据格式（DTO + TimelinePlayer）
+│
+├── AbilityKit.Host/                         # 服务器端抽象
+├── AbilityKit.HotReload/                  # 热重载支持
+├── AbilityKit.Record/                      # 录像系统
+├── AbilityKit.Record.MemoryPack/           # MemoryPack 序列化
+│
+├── AbilityKit.Network.Runtime/              # 网络运行时
+├── AbilityKit.Protocol/                     # 协议定义
+├── AbilityKit.Protocol.Moba/               # MOBA 协议
+│
+├── AbilityKit.Combat.EntityManager/         # 实体管理器
+├── AbilityKit.Combat.SkillLibrary/         # 技能库
+├── AbilityKit.Combat.Targeting/            # 目标查找
+├── AbilityKit.Combat.Motion/               # 移动系统
+├── AbilityKit.Combat.Projectile/           # 投射物
+├── AbilityKit.Combat.Damage/              # 伤害系统
+├── AbilityKit.Combat.Collision.Abstractions/ # 碰撞抽象
+├── AbilityKit.Combat.Collision.Unity/      # Unity 碰撞实现
+│
+├── AbilityKit.Game.Battle.Runtime/          # 战斗传输接口
+├── AbilityKit.Game.Battle.Transport.Runtime/ # 传输层实现
+│
+├── AbilityKit.Samples/                      # 示例聚合入口
+├── AbilityKit.Samples.Abstractions/         # 示例抽象
+├── AbilityKit.Samples.Logic/                # 示例逻辑代码
+├── AbilityKit.Demo.Moba.Core/              # MOBA 示例核心
+├── AbilityKit.Demo.Moba.Infrastructure/    # MOBA 示例基础设施
+├── AbilityKit.Demo.Moba.Console/           # MOBA Console Demo（可执行）
+│
+├── AbilityKit.CodeGen/                     # 代码生成器
+├── AbilityKit.Analyzer/                    # Roslyn 分析器
+├── AbilityKit.ThirdParty.Luban.Runtime/    # Luban 配置热更
+```
 
 ---
 
@@ -221,13 +332,20 @@ Sequence(
 ### 环境要求
 
 - Unity 2022.3 LTS 或更高版本
-- .NET Standard 2.1
+- .NET SDK 6.0+（用于 `src/` 目录下的纯 C# 开发）
 
 ### 安装
 
 1. 打开 Unity Package Manager
 2. 点击 `+` → `Add package from git URL`
 3. 添加所需的包 URL（参见各模块的 README）
+
+### 运行 Console Demo
+
+```powershell
+cd src/AbilityKit.Demo.Moba.Console
+dotnet run
+```
 
 ### 创建第一个技能
 
@@ -262,7 +380,6 @@ public class LowHealthTrigger : Trigger<DamageEvent>
 {
     protected override void Execute(DamageEvent evt, ExecCtx ctx)
     {
-        // 触发时激活狂怒效果
         ctx.Source.GetComponent<AttributeComponent>()
             .Modify("AttackBonus", ModifierType.PercentAdd, 50);
     }
@@ -275,17 +392,66 @@ public class LowHealthTrigger : Trigger<DamageEvent>
 
 详细设计文档位于各模块的 `Document/` 目录下：
 
-| 模块 | 文档 |
-|------|------|
-| [技术选型](./Unity/Packages/技术选型文档.md) | 从零开发战斗框架的技术选型 |
-| [Host 模块](./Unity/Packages/com.abilitykit.host.extension/Document/) | 游戏服务器运行时框架 |
-| [World DI](./Unity/Packages/com.abilitykit.world.di/Document/) | 依赖注入与组合系统 |
-| [Flow 模块](./Unity/Packages/com.abilitykit.flow/Document/) | 流程编排引擎 |
-| [Pipeline](./Unity/Packages/com.abilitykit.pipeline/Document/) | 技能管线编排 |
-| [Triggering](./Unity/Packages/com.abilitykit.triggering/Document/) | 事件触发器系统 |
-| [Targeting](./Unity/Packages/com.abilitykit.combat.targeting/Document/) | 目标查找框架 |
-| [Projectile](./Unity/Packages/com.abilitykit.combat.projectile/Document/) | 投射物系统 |
-| [帧同步](./Unity/Packages/com.abilitykit.host.extension/Runtime/FrameSync/README.md) | 帧同步与回滚 |
+
+| 模块                                                                                                | 文档                                         |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| [技术选型](./Unity/Packages/技术选型文档.md)                                                                | 从零开发战斗框架的技术选型                              |
+| [Host 模块](./Unity/Packages/com.abilitykit.host.extension/Document/)                               | 游戏服务器运行时框架                                 |
+| [状态同步与预测](./Unity/Packages/com.abilitykit.world.statesync/Document/StateSyncDesign.md)            | 客户端预测、Rollback、StateHash 校验                |
+| [快照路由](./Unity/Packages/com.abilitykit.world.snapshot/Document/SnapshotRoutingBoundary.md)        | 快照路由与解码层边界                                 |
+| [帧数据层](./Unity/Packages/com.abilitykit.world.networkfragments/Document/NetworkFragmentsDesign.md) | FramePacket、RemoteFrameBuffer 帧数据结构        |
+| [World DI](./Unity/Packages/com.abilitykit.world.di/Document/)                                    | 依赖注入与组合系统                                  |
+| [Flow 模块](./Unity/Packages/com.abilitykit.flow/)                                                  | 流程编排引擎（参考 Samples~/FlowExamples/README.md） |
+| [Pipeline](./Unity/Packages/com.abilitykit.pipeline/Document/)                                    | 技能管线编排                                     |
+| [Triggering](./Unity/Packages/com.abilitykit.triggering/Document/)                                | 事件触发器系统                                    |
+| [帧同步](./Unity/Packages/com.abilitykit.world.framesync/Document/)                                  | 帧同步与回滚                                     |
+| [Targeting](./Unity/Packages/com.abilitykit.combat.targeting/Document/)                           | 目标查找框架                                     |
+| [Projectile](./Unity/Packages/com.abilitykit.combat.projectile/Document/)                         | 投射物系统                                      |
+| [战斗传输层](./Unity/Packages/com.abilitykit.game.battle.runtime/Document/BattleTransportDesign.md)    | 战斗传输层架构、NetworkTransport                   |
+
+
+---
+
+## 网络同步架构
+
+### 分层模型
+
+```
+┌────────────────────────────────────────────────────┐
+│                  游戏应用层                         │
+│         (MOBAGame、FPSTest、RPGDemo)               │
+├────────────────────────────────────────────────────┤
+│                  战斗传输层                         │
+│  IBattleLogicTransport ← NetworkTransport           │
+│                  (game.battle)                     │
+├────────────────────────────────────────────────────┤
+│               状态同步与客户端预测                   │
+│  IClientPredictionModule / IPredictionCoordinator  │
+│                  (world.statesync)                 │
+├──────────────────────┬─────────────────────────────┤
+│        帧数据层       │         快照路由层          │
+│  FramePacket、Buffer │  FrameSnapshotDispatcher     │
+│   (networkfragments) │         (world.snapshot)    │
+├──────────────────────┴─────────────────────────────┤
+│                  Host / Session                    │
+│           FramePacketNetAdapter                    │
+│              (host.extension)                     │
+├────────────────────────────────────────────────────┤
+│                  网络层                            │
+│          INetworkClient、Orleans                   │
+│             (network.runtime)                     │
+└────────────────────────────────────────────────────┘
+```
+
+### 两种同步风格
+
+
+| 风格                  | 推荐游戏            | 特点                     |
+| ------------------- | --------------- | ---------------------- |
+| **帧同步（FrameSync）**  | MOBA、格斗、RTS     | 服务器统一驱动，每帧输入同步，客户端本地计算 |
+| **状态同步（StateSync）** | MMORPG、大型多人、FPS | 服务器权威，客户端接收快照，可选预测回滚   |
+| **混合同步（Hybrid）**    | FPS+技能          | 移动帧同步，伤害状态同步           |
+
 
 ---
 
