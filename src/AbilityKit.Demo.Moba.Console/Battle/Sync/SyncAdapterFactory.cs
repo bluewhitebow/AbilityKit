@@ -47,15 +47,11 @@ public static class SyncAdapterFactory
 
     /// <summary>
     /// 创建混合模式适配器
-    /// 混合模式使用帧同步 + 客户端预测
-    /// 目前暂时返回帧同步适配器
+    /// 混合模式使用帧同步 + 客户端预测 + 回滚
     /// </summary>
     private static IBattleSyncAdapter CreateHybridSyncAdapter(ConsoleBattleContext context, BattleStartConfig config)
     {
-        Platform.Log.Sync($"[SyncFactory] Creating HybridSyncAdapter (HybridPredictReconcile mode - using FrameSync for now)");
-        // TODO: 实现混合模式
-        // 混合模式需要：帧同步 + ClientPredictionRunner + RollbackCoordinator
-        // 目前暂时使用帧同步适配器
-        return new FrameSyncAdapter();
+        Platform.Log.Sync($"[SyncFactory] Creating HybridSyncAdapter (HybridPredictReconcile mode)");
+        return new HybridSyncAdapter();
     }
 }

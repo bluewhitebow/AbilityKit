@@ -24,7 +24,11 @@ namespace AbilityKit.Demo.Moba.Console.Platform
         /// <summary>
         /// 追踪日志 - 用于排查流程完整性问题
         /// </summary>
-        Trace
+        Trace,
+        /// <summary>
+        /// 客户端预测日志
+        /// </summary>
+        Prediction
     }
 
     /// <summary>

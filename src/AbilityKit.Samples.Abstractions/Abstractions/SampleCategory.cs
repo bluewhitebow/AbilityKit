@@ -64,6 +64,11 @@ namespace AbilityKit.Samples.Abstractions
         /// 持续行为系统
         /// </summary>
         Continuous = 11,
+
+        /// <summary>
+        /// 目标搜索系统
+        /// </summary>
+        Targeting = 12,
     }
 
     /// <summary>
@@ -90,6 +95,7 @@ namespace AbilityKit.Samples.Abstractions
                 SampleCategory.World => "World",
                 SampleCategory.Demo => "Demo",
                 SampleCategory.Continuous => "Continuous",
+                SampleCategory.Targeting => "Targeting",
                 _ => "Unknown"
             };
         }

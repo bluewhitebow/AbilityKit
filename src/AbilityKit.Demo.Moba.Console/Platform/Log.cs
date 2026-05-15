@@ -71,7 +71,7 @@ namespace AbilityKit.Demo.Moba.Console.Platform
         {
             Trace = 0, Debug = 1, System = 2, Config = 3, Phase = 4, Battle = 5,
             Skill = 6, Damage = 7, Sync = 8, Input = 9, View = 10,
-            Warning = 11, Error = 12
+            Prediction = 11, Warning = 12, Error = 13
         }
 
         private static LogLevel _minLevel = LogLevel.Battle;
@@ -92,6 +92,7 @@ namespace AbilityKit.Demo.Moba.Console.Platform
                 OutputChannel.Damage => LogLevel.Damage,
                 OutputChannel.Sync => LogLevel.Warning,      // ?????????Warning??????
                 OutputChannel.Input => LogLevel.Warning,      // ?????????Warning??????
+                OutputChannel.Prediction => LogLevel.Prediction,
                 OutputChannel.View => LogLevel.View,
                 OutputChannel.Buff => LogLevel.Skill,
                 OutputChannel.Projectile => LogLevel.Skill,
@@ -132,6 +133,8 @@ namespace AbilityKit.Demo.Moba.Console.Platform
         public static void Sync(string format, params object[] args) => WriteFormatToChannel(OutputChannel.Sync, format, args);
         public static void Input(string message) => WriteToChannel(OutputChannel.Input, message);
         public static void Input(string format, params object[] args) => WriteFormatToChannel(OutputChannel.Input, format, args);
+        public static void Prediction(string message) => WriteToChannel(OutputChannel.Prediction, message);
+        public static void Prediction(string format, params object[] args) => WriteFormatToChannel(OutputChannel.Prediction, format, args);
         public static void Battle(string message) => WriteToChannel(OutputChannel.Battle, message);
         public static void Battle(string format, params object[] args) => WriteFormatToChannel(OutputChannel.Battle, format, args);
         public static void Skill(string message) => WriteToChannel(OutputChannel.Skill, message);

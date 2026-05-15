@@ -27,6 +27,7 @@
     <ProjectReference Include="..\AbilityKit.Behavior\AbilityKit.Behavior.csproj" />
     <ProjectReference Include="..\AbilityKit.Host\AbilityKit.Host.csproj" />
     <ProjectReference Include="..\AbilityKit.World.DI\AbilityKit.World.DI.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.Targeting\AbilityKit.Combat.Targeting.csproj" />
   </ItemGroup>
 
   <!-- NuGet Dependencies -->
