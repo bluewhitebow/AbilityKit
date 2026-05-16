@@ -80,11 +80,12 @@ namespace AbilityKit.Demo.Moba.Systems
 
         private Action1<object, IWorldResolver> CreateHandler1(string actionName)
         {
-            return (args, a0, ctx) =>
+            return (args, namedArgs, ctx) =>
             {
                 try
                 {
                     if (ctx.Context == null) return;
+                    var a0 = ExtractDouble(namedArgs, "_0");
                     Execute1(args, a0, ctx);
                 }
                 catch (Exception ex)
@@ -96,11 +97,13 @@ namespace AbilityKit.Demo.Moba.Systems
 
         private Action2<object, IWorldResolver> CreateHandler2(string actionName)
         {
-            return (args, a0, a1, ctx) =>
+            return (args, namedArgs, ctx) =>
             {
                 try
                 {
                     if (ctx.Context == null) return;
+                    var a0 = ExtractDouble(namedArgs, "_0");
+                    var a1 = ExtractDouble(namedArgs, "_1");
                     Execute2(args, a0, a1, ctx);
                 }
                 catch (Exception ex)
@@ -108,6 +111,16 @@ namespace AbilityKit.Demo.Moba.Systems
                     Log.Exception(ex, $"[Plan] {actionName} executed failed");
                 }
             };
+        }
+
+        private static double ExtractDouble(NamedArgsDict namedArgs, string key)
+        {
+            if (namedArgs == null) return 0;
+            if (namedArgs.TryGetValue(key, out var value))
+            {
+                return value.Ref.ConstValue;
+            }
+            return 0;
         }
 
         /// <summary>
@@ -188,11 +201,12 @@ namespace AbilityKit.Demo.Moba.Systems
 
         protected virtual Action1<object, IWorldResolver> CreateHandler1()
         {
-            return (args, a0, ctx) =>
+            return (args, namedArgs, ctx) =>
             {
                 try
                 {
                     if (ctx.Context == null) return;
+                    var a0 = ExtractDouble(namedArgs, "_0");
                     Execute1(args, a0, ctx);
                 }
                 catch (Exception ex)
@@ -204,11 +218,13 @@ namespace AbilityKit.Demo.Moba.Systems
 
         protected virtual Action2<object, IWorldResolver> CreateHandler2()
         {
-            return (args, a0, a1, ctx) =>
+            return (args, namedArgs, ctx) =>
             {
                 try
                 {
                     if (ctx.Context == null) return;
+                    var a0 = ExtractDouble(namedArgs, "_0");
+                    var a1 = ExtractDouble(namedArgs, "_1");
                     Execute2(args, a0, a1, ctx);
                 }
                 catch (Exception ex)
@@ -216,6 +232,16 @@ namespace AbilityKit.Demo.Moba.Systems
                     Log.Exception(ex, $"[Plan] Action {ActionId.Value} executed failed");
                 }
             };
+        }
+
+        private static double ExtractDouble(NamedArgsDict namedArgs, string key)
+        {
+            if (namedArgs == null) return 0;
+            if (namedArgs.TryGetValue(key, out var value))
+            {
+                return value.Ref.ConstValue;
+            }
+            return 0;
         }
 
         protected virtual void Execute0(object args, ExecCtx<IWorldResolver> ctx) { }

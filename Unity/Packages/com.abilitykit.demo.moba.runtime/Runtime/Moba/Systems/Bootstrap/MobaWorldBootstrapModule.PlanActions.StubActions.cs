@@ -57,13 +57,13 @@ namespace AbilityKit.Demo.Moba.Systems
                 var hasNamedArgs = hasNamedArgsById.TryGetValue(kv.Key, out var hna) && hna;
                 if (hasNamedArgs)
                 {
-                    // 鍏峰悕鍙傛暟妯″紡鐨?Action 涓嶆敞鍐?stub
-                    // 鍥犱负 PlanActionModule 浼氭敞鍐屾纭被鍨嬬殑 NamedAction<TArgs> 濮旀墭
-                    // 娉ㄥ唽 stub 浼氬鑷寸被鍨嬩笉鍖归厤
+                    // 具名参数模式的 Action 不注册 stub
+                    // 因为 PlanActionModule 会注册正确类型的 NamedAction<TArgs> 委托
+                    // 注册 stub 会导致类型不匹配
                     continue;
                 }
 
-                // 娉ㄥ唽浼犵粺 Action stub锛堝悜鍚庡吋瀹癸級
+                // 注册传统 Action stub（向后兼容）
                 switch (arity)
                 {
                     case 0:
@@ -75,13 +75,13 @@ namespace AbilityKit.Demo.Moba.Systems
                     case 1:
                         actions.Register<Action1<object, IWorldResolver>>(
                             actionId,
-                            static (args, a0, ctx) => { },
+                            static (args, namedArgs, ctx) => { },
                             isDeterministic: true);
                         break;
                     case 2:
                         actions.Register<Action2<object, IWorldResolver>>(
                             actionId,
-                            static (args, a0, a1, ctx) => { },
+                            static (args, namedArgs, ctx) => { },
                             isDeterministic: true);
                         break;
                 }

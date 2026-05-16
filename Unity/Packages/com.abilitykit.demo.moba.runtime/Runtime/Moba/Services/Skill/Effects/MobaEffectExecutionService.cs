@@ -27,6 +27,19 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly ActionRegistry _planActions;
 
         /// <summary>
+        /// 从 NamedArgsDict 中提取双精度浮点参数
+        /// </summary>
+        private static double ExtractArg(NamedArgsDict namedArgs, string key)
+        {
+            if (namedArgs == null) return 0;
+            if (namedArgs.TryGetValue(key, out var value))
+            {
+                return value.Ref.ConstValue;
+            }
+            return 0;
+        }
+
+        /// <summary>
         /// 溯源注册表（可选，用于链路追踪）
         /// </summary>
         public MobaTraceRegistry Trace { get; }
@@ -190,8 +203,10 @@ namespace AbilityKit.Demo.Moba.Services
 
                 _planActions.Register<Action2<object, IWorldResolver>>(
                     debugLogId,
-                    static (args, a0, a1, ctx) =>
+                    static (args, namedArgs, ctx) =>
                     {
+                        var a0 = ExtractArg(namedArgs, "_0");
+                        var a1 = ExtractArg(namedArgs, "_1");
                         var msgId = (int)a0;
                         var dump = a1 >= 0.5;
                         var msg = string.Empty;
@@ -353,10 +368,10 @@ namespace AbilityKit.Demo.Moba.Services
                         actions.Register<Action0<object, IWorldResolver>>(actionId, static (args, ctx) => { }, true);
                         break;
                     case 1:
-                        actions.Register<Action1<object, IWorldResolver>>(actionId, static (args, a0, ctx) => { }, true);
+                        actions.Register<Action1<object, IWorldResolver>>(actionId, static (args, namedArgs, ctx) => { }, true);
                         break;
                     case 2:
-                        actions.Register<Action2<object, IWorldResolver>>(actionId, static (args, a0, a1, ctx) => { }, true);
+                        actions.Register<Action2<object, IWorldResolver>>(actionId, static (args, namedArgs, ctx) => { }, true);
                         break;
                 }
             }
@@ -472,10 +487,10 @@ namespace AbilityKit.Demo.Moba.Services
                         actions.Register<Action0<object, IWorldResolver>>(actionId, static (args, ctx) => { }, true);
                         break;
                     case 1:
-                        actions.Register<Action1<object, IWorldResolver>>(actionId, static (args, a0, ctx) => { }, true);
+                        actions.Register<Action1<object, IWorldResolver>>(actionId, static (args, namedArgs, ctx) => { }, true);
                         break;
                     case 2:
-                        actions.Register<Action2<object, IWorldResolver>>(actionId, static (args, a0, a1, ctx) => { }, true);
+                        actions.Register<Action2<object, IWorldResolver>>(actionId, static (args, namedArgs, ctx) => { }, true);
                         break;
                 }
             }

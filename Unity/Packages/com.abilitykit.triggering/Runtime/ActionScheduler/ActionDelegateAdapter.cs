@@ -37,12 +37,21 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
                         break;
                     case 1:
                         var v0 = arg0.Resolve(args);
-                        action1?.Invoke(args, v0, execCtx);
+                        var argsDict1 = new NamedArgsDict(new System.Collections.Generic.Dictionary<string, ActionArgValue>
+                        {
+                            ["_0"] = ActionArgValue.OfConst(v0, "_0")
+                        });
+                        action1?.Invoke(args, argsDict1, execCtx);
                         break;
                     case 2:
                         var v1 = arg0.Resolve(args);
                         var v2 = arg1.Resolve(args);
-                        action2?.Invoke(args, v1, v2, execCtx);
+                        var argsDict2 = new NamedArgsDict(new System.Collections.Generic.Dictionary<string, ActionArgValue>
+                        {
+                            ["_0"] = ActionArgValue.OfConst(v1, "_0"),
+                            ["_1"] = ActionArgValue.OfConst(v2, "_1")
+                        });
+                        action2?.Invoke(args, argsDict2, execCtx);
                         break;
                 }
             };
@@ -71,11 +80,20 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
                         return predicate0(args, execCtx);
                     case 1:
                         var v0 = arg0.Resolve(args);
-                        return predicate1(args, v0, execCtx);
+                        var argsDict1 = new NamedArgsDict(new System.Collections.Generic.Dictionary<string, ActionArgValue>
+                        {
+                            ["_0"] = ActionArgValue.OfConst(v0, "_0")
+                        });
+                        return predicate1(args, argsDict1, execCtx);
                     case 2:
                         var v1 = arg0.Resolve(args);
                         var v2 = arg1.Resolve(args);
-                        return predicate2(args, v1, v2, execCtx);
+                        var argsDict2 = new NamedArgsDict(new System.Collections.Generic.Dictionary<string, ActionArgValue>
+                        {
+                            ["_0"] = ActionArgValue.OfConst(v1, "_0"),
+                            ["_1"] = ActionArgValue.OfConst(v2, "_1")
+                        });
+                        return predicate2(args, argsDict2, execCtx);
                     default:
                         return false;
                 }
