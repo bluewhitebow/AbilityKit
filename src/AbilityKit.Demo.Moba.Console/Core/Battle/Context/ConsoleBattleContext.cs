@@ -1,86 +1,76 @@
 using System;
 using System.Collections.Generic;
-using AbilityKit.Ability.World.DI;
-using AbilityKit.Ability.World.Services;
-using AbilityKit.Demo.Moba.Services;
-using AbilityKit.Demo.Moba.Console.MobaCore;
 using AbilityKit.Demo.Moba.Console.Battle;
 using AbilityKit.Demo.Moba.Console.Core.Battle.ECS.Entities;
-using AbilityKit.World.ECS;
 using EC = AbilityKit.World.ECS;
 
 namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
 {
     /// <summary>
-    /// ?????
-    /// ???????????
+    /// 战斗上下文
+    /// 管理表现层状态，不涉及逻辑执行
     /// </summary>
     public sealed class ConsoleBattleContext : Flow.IModuleContext, IDisposable
     {
         /// <summary>
-        /// ECS ??
+        /// ECS 世界
         /// </summary>
         public EC.EntityWorld EcsWorld { get; private set; }
 
         /// <summary>
-        /// moba.core ?????
-        /// </summary>
-        public MobaCoreContext MobaCore { get; private set; } = new();
-
-        /// <summary>
-        /// ?????
+        /// 实体节点
         /// </summary>
         public EC.IEntity EntityNode { get; private set; }
 
         /// <summary>
-        /// ?????
+        /// 实体查找器
         /// </summary>
         public BattleEntityLookup EntityLookup { get; private set; }
 
         /// <summary>
-        /// ????
+        /// 实体工厂
         /// </summary>
         public BattleEntityFactory EntityFactory { get; private set; }
 
         /// <summary>
-        /// ????
+        /// 战斗启动计划
         /// </summary>
         public BattleStartPlan Plan { get; set; }
 
         /// <summary>
-        /// ???? ID
+        /// 本地玩家 ID
         /// </summary>
         public int LocalActorId { get; set; }
 
         /// <summary>
-        /// ????
+        /// 玩家数量
         /// </summary>
         public int PlayerCount { get; set; }
 
         /// <summary>
-        /// ???
+        /// 当前帧
         /// </summary>
         public int LastFrame { get; set; }
 
         /// <summary>
-        /// ???????
+        /// 逻辑时间（秒）
         /// </summary>
         public double LogicTimeSeconds { get; set; }
 
         /// <summary>
-        /// HUD ????
+        /// HUD 移动输入
         /// </summary>
         public float HudMoveDx { get; set; }
         public float HudMoveDz { get; set; }
         public bool HudHasMove { get; set; }
 
         /// <summary>
-        /// HUD ??????
+        /// HUD 技能点击输入
         /// </summary>
         public int HudSkillClickSlot { get; set; }
 
         /// <summary>
-        /// HUD ??????
+        /// HUD 技能瞄准输入
         /// </summary>
         public bool HudSkillAiming { get; set; }
         public int HudSkillAimSlot { get; set; }
@@ -88,7 +78,7 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
         public float HudSkillAimDz { get; set; }
 
         /// <summary>
-        /// HUD ????????
+        /// HUD 技能瞄准释放输入
         /// </summary>
         public bool HudSkillAimSubmit { get; set; }
         public int HudSkillAimSubmitSlot { get; set; }
@@ -96,17 +86,17 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
         public float HudSkillAimSubmitDz { get; set; }
 
         /// <summary>
-        /// ????
+        /// 战斗状态
         /// </summary>
         public BattleState State { get; set; } = BattleState.Idle;
 
         /// <summary>
-        /// ??????
+        /// 是否已初始化
         /// </summary>
         public bool IsInitialized { get; set; }
 
         /// <summary>
-        /// ??? ECS ??
+        /// 初始化 ECS 世界
         /// </summary>
         public void InitializeEcsWorld()
         {
@@ -119,7 +109,7 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
         }
 
         /// <summary>
-        /// ?? HUD ????
+        /// 重置 HUD 状态
         /// </summary>
         public void ResetHudState()
         {
@@ -138,7 +128,7 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
         }
 
         /// <summary>
-        /// ?????
+        /// 重置上下文
         /// </summary>
         public void Reset()
         {
@@ -164,7 +154,7 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
     }
 
     /// <summary>
-    /// ????
+    /// 战斗状态
     /// </summary>
     public enum BattleState
     {
@@ -175,31 +165,5 @@ namespace AbilityKit.Demo.Moba.Console.Core.Battle.Context
         LoadAssets = 4,
         InMatch = 5,
         End = 6
-    }
-
-    /// <summary>
-    /// Console ?????????? moba.core
-    /// </summary>
-    public sealed class MobaCoreContext
-    {
-        /// <summary>
-        /// moba.core World ?????
-        /// </summary>
-        public IWorldResolver WorldServices { get; set; }
-
-        /// <summary>
-        /// ?????
-        /// </summary>
-        public MobaActorRegistry ActorRegistry { get; set; }
-
-        /// <summary>
-        /// ?????
-        /// </summary>
-        public IMobaSkillPipelineLibrary SkillPipelineLibrary { get; set; }
-
-        /// <summary>
-        /// moba.core ?????
-        /// </summary>
-        public MobaCoreSkillExecutor SkillExecutor { get; set; }
     }
 }

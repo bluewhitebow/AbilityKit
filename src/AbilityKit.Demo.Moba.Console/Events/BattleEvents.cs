@@ -52,6 +52,10 @@ namespace AbilityKit.Demo.Moba.Console.Events
     public readonly struct EntityDestroyedEvent
     {
         public int ActorId { get; init; }
+        /// <summary>
+        /// 是否死亡（由逻辑层判定）
+        /// </summary>
+        public bool IsDead { get; init; }
     }
 
     /// <summary>
@@ -78,6 +82,7 @@ namespace AbilityKit.Demo.Moba.Console.Events
 
     /// <summary>
     /// 伤害事件
+    /// 注意：表现层应直接使用 CurrentHp 和 MaxHp 进行渲染，不应自行计算
     /// </summary>
     public readonly struct DamageEvent
     {
@@ -85,16 +90,37 @@ namespace AbilityKit.Demo.Moba.Console.Events
         public int TargetId { get; init; }
         public float Damage { get; init; }
         public int SkillId { get; init; }
+        /// <summary>
+        /// 伤害后的最终 HP（由逻辑层计算）
+        /// </summary>
+        public float CurrentHp { get; init; }
+        /// <summary>
+        /// 最大 HP
+        /// </summary>
+        public float MaxHp { get; init; }
+        /// <summary>
+        /// 是否死亡（由逻辑层判定）
+        /// </summary>
+        public bool IsDead { get; init; }
     }
 
     /// <summary>
     /// 治疗事件
+    /// 注意：表现层应直接使用 CurrentHp 和 MaxHp 进行渲染，不应自行计算
     /// </summary>
     public readonly struct HealEvent
     {
         public int SourceId { get; init; }
         public int TargetId { get; init; }
         public float Amount { get; init; }
+        /// <summary>
+        /// 治疗后的最终 HP（由逻辑层计算）
+        /// </summary>
+        public float CurrentHp { get; init; }
+        /// <summary>
+        /// 最大 HP
+        /// </summary>
+        public float MaxHp { get; init; }
     }
 
     /// <summary>

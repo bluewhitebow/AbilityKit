@@ -13,6 +13,7 @@ using AbilityKit.Demo.Moba.Console.Bootstrap;
 using AbilityKit.Demo.Moba.Console.Battle;
 using AbilityKit.Demo.Moba.Console.Battle.Sync;
 using AbilityKit.Demo.Moba.Console.Battle.Sync.View;
+using AbilityKit.Demo.Moba.Console.Events;
 using AbilityKit.Demo.Moba.Console.Flow;
 using AbilityKit.Demo.Moba.Console.Platform;
 using AbilityKit.Demo.Moba.Console.View;
@@ -20,7 +21,6 @@ using AbilityKit.Demo.Moba.Console.Services;
 using AbilityKit.Demo.Moba.Console.Replay;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Demo.Moba.Console.AutoTest;
-using AbilityKit.Demo.Moba.Console.MobaCore;
 using AbilityKit.Demo.Moba.Config.Core;
 using EC = AbilityKit.World.ECS;
 
@@ -43,13 +43,15 @@ namespace AbilityKit.Demo.Moba.Console
         private readonly BattleStartConfig _config;
         private AbilityKit.Demo.Moba.Config.Core.MobaConfigDatabase _mobaConfig;
         private readonly BattleServices _battleServices;
-        private ConsoleSkillExecutor _skillExecutor;
         private readonly RecordConfig _recordConfig;
 
         // 同步适配器（支持帧同步/状态同步切换）
         private IBattleSyncAdapter? _syncAdapter;
         private ConsoleViewBinder? _viewBinder;
         private ConsoleViewEventSink? _viewEventSink;
+
+        // 输入适配器（表现层持有）
+        private ConsoleInputSink? _inputSink;
 
         // 自动测试输入（可选，由 AutoTestRunner 管理）
         private AutoTestInputFeature? _autoTestInput;
@@ -196,12 +198,7 @@ namespace AbilityKit.Demo.Moba.Console
         }
 
         /// <summary>
-        /// ???????
-        /// </summary>
-        public ConsoleSkillExecutor SkillExecutor => _skillExecutor;
-
-        /// <summary>
-        /// ??????
+        /// 构建战斗计划
         /// </summary>
         public BattleStartPlan Build()
         {
@@ -244,102 +241,41 @@ namespace AbilityKit.Demo.Moba.Console
             // 从 DI 容器解析 MobaConfig（由 ConsoleConfigModule 注册）
             if (_mobaConfig == null)
             {
-                _mobaConfig = container.Resolve<AbilityKit.Demo.Moba.Config.Core.MobaConfigDatabase>();
+                _mobaConfig = container.Resolve<MobaConfigDatabase>();
                 Log.System($"MobaConfig resolved from DI: {_mobaConfig.GetTable<AbilityKit.Demo.Moba.Config.BattleDemo.MO.CharacterMO>().Count} characters, {_mobaConfig.GetTable<AbilityKit.Demo.Moba.Config.BattleDemo.MO.SkillMO>().Count} skills");
             }
 
             // 创建表现层服务
             var effectService = new ConsoleEffectExecutionService();
 
-            // 创建 SkillExecutor（只依赖 BattleServices）
-            _skillExecutor = new ConsoleSkillExecutor(_battleServices);
-
-            _inputFeature.SetServices(_skillExecutor, _battleServices);
-
-            // ??? moba.core ??
-            InitializeMobaCore();
+            // 初始化输入服务
+            InitializeInputSink();
 
             Log.Trace("[TRACE] ConsoleBattleBootstrapper.ConfigureWorld - Exit");
         }
 
-        private void InitializeMobaCore()
+        private void InitializeInputSink()
         {
-            Log.Trace("[TRACE] ConsoleBattleBootstrapper.InitializeMobaCore - Entry");
-            Log.System("Initializing MobaCore...");
+            Log.Trace("[TRACE] ConsoleBattleBootstrapper.InitializeInputSink - Entry");
+            Log.System("Initializing InputSink...");
 
-            // ???? MobaActorRegistry????????????
-            MobaActorRegistry actorRegistry = null;
+            // 创建 ConsoleInputSink
+            _inputSink = new ConsoleInputSink();
+            Log.System("ConsoleInputSink created");
+
+            // 尝试解析逻辑层的 IWorldInputSink（如果可用）
             try
             {
-                actorRegistry = _worldResolver.Resolve<MobaActorRegistry>();
+                var worldInputSink = _worldResolver.Resolve<AbilityKit.Ability.Host.IWorldInputSink>();
+                Log.System("IWorldInputSink resolved from DI (can be used for sync)");
             }
             catch (Exception ex)
             {
-                Log.Trace($"[TRACE] MobaActorRegistry resolve failed (expected in standalone mode): {ex.Message}");
+                Log.Warn($"IWorldInputSink not found: {ex.Message}");
             }
 
-            if (actorRegistry != null)
-            {
-                Log.System("MobaActorRegistry resolved");
-                Log.Trace("[TRACE] InitializeMobaCore - ActorRegistry found");
-                _context.MobaCore.ActorRegistry = actorRegistry;
-            }
-            else
-            {
-                Log.System("MobaActorRegistry not found (using ConsoleSkillExecutor instead)");
-                Log.Trace("[TRACE] InitializeMobaCore - ActorRegistry NOT found, using fallback");
-            }
-
-            // ???? SkillPipelineLibrary
-            IMobaSkillPipelineLibrary skillPipelineLib = null;
-            try
-            {
-                skillPipelineLib = _worldResolver.Resolve<IMobaSkillPipelineLibrary>();
-            }
-            catch (Exception ex)
-            {
-                Log.Trace($"[TRACE] IMobaSkillPipelineLibrary resolve failed: {ex.Message}");
-            }
-
-            if (skillPipelineLib != null)
-            {
-                Log.System("IMobaSkillPipelineLibrary resolved");
-                Log.Trace("[TRACE] InitializeMobaCore - SkillPipelineLibrary found");
-                _context.MobaCore.SkillPipelineLibrary = skillPipelineLib;
-            }
-            else
-            {
-                Log.System("IMobaSkillPipelineLibrary not found (using ConsoleSkillExecutor)");
-                Log.Trace("[TRACE] InitializeMobaCore - SkillPipelineLibrary NOT found");
-            }
-
-            _context.MobaCore.WorldServices = _worldResolver;
-
-            if (_context.MobaCore.ActorRegistry != null)
-            {
-                var mobaSkillExecutor = new MobaCoreSkillExecutor(_worldResolver, _context.MobaCore.ActorRegistry);
-                _context.MobaCore.SkillExecutor = mobaSkillExecutor;
-
-                mobaSkillExecutor.OnSkillCast += (actorId, skillId, slot, targetId) =>
-                {
-                    Log.Skill($"[MobaCore] Skill cast: Actor#{actorId} Skill#{skillId} Slot{slot} -> Target#{targetId}");
-                };
-
-                mobaSkillExecutor.OnDamageDealt += (sourceId, targetId, damage, skillId) =>
-                {
-                    Log.Damage($"[MobaCore] Damage: Actor#{sourceId} dealt {damage:F0} to Actor#{targetId} with Skill#{skillId}");
-                };
-
-                Log.System("MobaCoreSkillExecutor initialized");
-                Log.Trace("[TRACE] InitializeMobaCore - MobaCoreSkillExecutor initialized");
-            }
-            else
-            {
-                Log.System("MobaCoreSkillExecutor skipped (using ConsoleSkillExecutor instead)");
-            }
-
-            Log.System("MobaCore initialized (standalone mode)");
-            Log.Trace("[TRACE] ConsoleBattleBootstrapper.InitializeMobaCore - Exit");
+            Log.System("InputSink initialized");
+            Log.Trace("[TRACE] ConsoleBattleBootstrapper.InitializeInputSink - Exit");
         }
 
         private void LogBattleConfig()
