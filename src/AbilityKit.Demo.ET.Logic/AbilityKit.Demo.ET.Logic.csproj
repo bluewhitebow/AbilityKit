@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ET.AbilityKit.Demo.ET.Logic</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>DOTNET</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ========== ET Demo 自定义代码 (ET 风格) ========== -->
+    <!-- Model 层 - 流程管理 -->
+    <Compile Include="Model/Process/**/*.cs" />
+
+    <!-- Model 层 - 登录 -->
+    <Compile Include="Model/Login/**/*.cs" />
+
+    <!-- Model 层 - 战斗 -->
+    <Compile Include="Model/Battle/**/*.cs" />
+
+    <!-- Hotfix 层 - 共享 -->
+    <Compile Include="Hotfix/Share/**/*.cs" />
+
+    <!-- Hotfix 层 - 客户端 -->
+    <Compile Include="Hotfix/Client/**/*.cs" />
+
+    <!-- Hotfix 层 - 服务器 -->
+    <Compile Include="Hotfix/Server/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
+  </ItemGroup>
+
+</Project>

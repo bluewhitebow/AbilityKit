@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>ET</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 禁用默认编译项，由我们显式指定 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>DOTNET</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ========== ET Demo 共享层 ========== -->
+    <!-- 接口定义 -->
+    <Compile Include="Interface/**/*.cs" />
+
+    <!-- 共享数据结构 (不包含业务逻辑) -->
+    <Compile Include="Model/Share/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ========== ET 框架源码 (仅核心部分) ========== -->
+    <!-- Source Generator 运行时属性 -->
+    <Compile Include="src/cn.etetet.sourcegenerator@3.0.1/Runtime/**/*.cs" />
+
+    <!-- ET.Core 核心库 (Share 部分) -->
+    <Compile Include="src/cn.etetet.core@3.0.3/Scripts/Core/Share/**/*.cs" />
+
+    <!-- ET.Core Model 共享部分 (包括 PackageType, SceneType 等) -->
+    <Compile Include="src/cn.etetet.core@3.0.3/Scripts/Model/Share/**/*.cs" />
+
+    <!-- ET.Loader Server 端 -->
+    <Compile Include="src/cn.etetet.loader@3.0.1/Scripts/Loader/Server/**/*.cs" />
+
+    <!-- ET.Excel ConfigLoader -->
+    <Compile Include="src/cn.etetet.excel@3.0.0/Scripts/**/*.cs" />
+
+    <!-- ET.MemoryPack -->
+    <Compile Include="src/cn.etetet.memorypack@1.10.1/Scripts/**/*.cs" />
+
+    <!-- ET.StateSync - 仅 Share 部分 (排除依赖 Unity 的文件) -->
+    <Compile Include="src/cn.etetet.statesync/Scripts/Model/Share/**/*.cs" Exclude="src/cn.etetet.statesync/Scripts/Model/Share/EventType.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="MemoryPack" Version="1.10.0" />
+    <PackageReference Include="MongoDB.Driver" Version="2.17.1" />
+    <PackageReference Include="NLog" Version="5.3.2" />
+  </ItemGroup>
+
+</Project>

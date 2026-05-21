@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ET</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 禁用默认编译项，由我们显式指定 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>DOTNET</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 根目录的 C# 文件 -->
+    <Compile Include="*.cs" />
+    <Compile Include="ModelView/**/*.cs" />
+    <Compile Include="Hotfix/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ET.Core ModelView 客户端视图组件 -->
+    <Compile Include="src/cn.etetet.statesync/Scripts/ModelView/**/*.cs" />
+
+    <!-- ET.Core HotfixView 客户端热更新视图逻辑 -->
+    <Compile Include="src/cn.etetet.statesync/Scripts/HotfixView/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
+  </ItemGroup>
+
+</Project>

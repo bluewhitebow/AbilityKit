@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ET</RootNamespace>
+    <AssemblyName>AbilityKit.Demo.ET.App</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <OutputType>Exe</OutputType>
+    <!-- 禁用默认编译项，由我们显式指定 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- Copy NLog.config to output -->
+  <ItemGroup>
+    <None Update="NLog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Compile items -->
+  <ItemGroup>
+    <!-- Entry 入口 -->
+    <Compile Include="Entry/**/*.cs" />
+
+    <!-- 主程序 -->
+    <Compile Include="Program.cs" />
+    <Compile Include="ETDemoApp.cs" />
+  </ItemGroup>
+
+  <!-- Project references -->
+  <ItemGroup>
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Logic\AbilityKit.Demo.ET.Logic.csproj" />
+    <ProjectReference Include="..\AbilityKit.Demo.ET.View\AbilityKit.Demo.ET.View.csproj" />
+    <ProjectReference Include="..\AbilityKit.Demo.ET.HotfixView\AbilityKit.Demo.ET.HotfixView.csproj" />
+  </ItemGroup>
+
+</Project>

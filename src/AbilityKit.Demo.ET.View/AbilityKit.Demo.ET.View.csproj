@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ET</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>DOTNET</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ========== ET Demo View 层代码 ========== -->
+    <!-- 根目录入口 -->
+    <Compile Include="*.cs" />
+
+    <!-- ModelView 层（视图组件） -->
+    <Compile Include="ModelView/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
+  </ItemGroup>
+
+</Project>
