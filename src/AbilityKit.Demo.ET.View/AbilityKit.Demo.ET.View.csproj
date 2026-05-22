@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>ET</RootNamespace>
+    <RootNamespace>ET.AbilityKit.Demo.ET.View</RootNamespace>
     <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -15,12 +15,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- ========== ET Demo View 层代码 ========== -->
-    <!-- 根目录入口 -->
-    <Compile Include="*.cs" />
+    <!-- ========== Model 层 - 视图组件 ========== -->
+    <!-- 战斗视图 -->
+    <Compile Include="Model/Battle/**/*.cs" />
 
-    <!-- ModelView 层（视图组件） -->
-    <Compile Include="ModelView/**/*.cs" />
+    <!-- 单位视图 -->
+    <Compile Include="Model/Unit/**/*.cs" />
+
+    <!-- ========== Hotfix 层 ========== -->
+    <!-- 战斗表现逻辑 -->
+    <Compile Include="Hotfix/Battle/**/*.cs" />
+
+    <!-- 单位表现逻辑 -->
+    <Compile Include="Hotfix/Unit/**/*.cs" />
+
+    <!-- 入口 -->
+    <Compile Include="Hotfix/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

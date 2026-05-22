@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace ET
@@ -13,8 +13,8 @@ namespace ET
             this.templates.Add("EntitySystem", 
                 $$"""
                         $attribute$
-                        public class $argsTypesUnderLine$_$methodName$System: $methodName$System<$argsTypes$>
-                        {   
+                        public class $argsTypesUnderLine$_$methodName$System: $methodName$System<$fullArgsTypes$>
+                        {
                             protected override $returnType$ $methodName$($argsTypesVars$)
                             {
                                 $return$$argsVars0$.$methodName$($argsVarsWithout0$);

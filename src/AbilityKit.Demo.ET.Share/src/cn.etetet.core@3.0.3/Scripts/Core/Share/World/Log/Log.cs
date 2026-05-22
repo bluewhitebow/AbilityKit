@@ -12,121 +12,152 @@ namespace ET
 
         private static ILog GetLog()
         {
-            return Fiber.Instance != null? Fiber.Instance.Log : Logger.Instance.Log;
+            try
+            {
+                if (Fiber.Instance != null)
+                {
+                    return Fiber.Instance.Log ?? Logger.Instance.Log;
+                }
+                return Logger.Instance.Log;
+            }
+            catch
+            {
+                return null;
+            }
         }
         
+        private static bool IsLogLevelEnabled(int level)
+        {
+            var options = Options.Instance;
+            return options == null || options.LogLevel <= level;
+        }
+
         [Conditional("DEBUG")]
         public static void Debug(string msg)
         {
-            if (Options.Instance.LogLevel > DebugLevel)
+            if (!IsLogLevelEnabled(DebugLevel))
             {
                 return;
             }
 
-            GetLog().Debug(msg);
+            var log = GetLog();
+            log?.Debug(msg);
         }
-        
+
         [Conditional("DEBUG")]
         public static void Trace(string msg)
         {
-            if (Options.Instance.LogLevel > TraceLevel)
+            if (!IsLogLevelEnabled(TraceLevel))
             {
                 return;
             }
             StackTrace st = new(1, true);
-            GetLog().Trace($"{msg}\n{st}");
+            var log = GetLog();
+            log?.Trace($"{msg}\n{st}");
         }
 
         public static void Info(string msg)
         {
-            if (Options.Instance.LogLevel > InfoLevel)
+            if (!IsLogLevelEnabled(InfoLevel))
             {
                 return;
             }
-            GetLog().Info(msg);
+            var log = GetLog();
+            log?.Info(msg);
         }
 
         public static void TraceInfo(string msg)
         {
-            if (Options.Instance.LogLevel > InfoLevel)
+            if (!IsLogLevelEnabled(InfoLevel))
             {
                 return;
             }
             StackTrace st = new(1, true);
-            GetLog().Trace($"{msg}\n{st}");
+            var log = GetLog();
+            log?.Trace($"{msg}\n{st}");
         }
 
         public static void Warning(string msg)
         {
-            if (Options.Instance.LogLevel > WarningLevel)
+            if (!IsLogLevelEnabled(WarningLevel))
             {
                 return;
             }
-            GetLog().Warning(msg);
+            var log = GetLog();
+            log?.Warning(msg);
         }
 
         public static void Error(string msg)
         {
             StackTrace st = new(1, true);
-            GetLog().Error($"{msg}\n{st}");
+            var log = GetLog();
+            log?.Error($"{msg}\n{st}");
         }
 
         public static void Error(Exception e)
         {
-            GetLog().Error(e.ToString());
+            var log = GetLog();
+            log?.Error(e.ToString());
         }
         
         public static void Console(string msg)
         {
-            if (Options.Instance.Console == 1)
+            var options = Options.Instance;
+            if (options != null && options.Console == 1)
             {
                 System.Console.WriteLine(msg);
             }
-            GetLog().Debug(msg);
+            var log = GetLog();
+            log?.Debug(msg);
         }
 
 #if DOTNET
         [Conditional("DEBUG")]
         public static void Trace(ref System.Runtime.CompilerServices.DefaultInterpolatedStringHandler message)
         {
-            if (Options.Instance.LogLevel > TraceLevel)
+            if (!IsLogLevelEnabled(TraceLevel))
             {
                 return;
             }
             StackTrace st = new(1, true);
-            GetLog().Trace($"{message.ToStringAndClear()}\n{st.ToString()}");
+            var log = GetLog();
+            log?.Trace($"{message.ToStringAndClear()}\n{st.ToString()}");
         }
         [Conditional("DEBUG")]
         public static void Warning(ref System.Runtime.CompilerServices.DefaultInterpolatedStringHandler message)
         {
-            if (Options.Instance.LogLevel > WarningLevel)
+            if (!IsLogLevelEnabled(WarningLevel))
             {
                 return;
             }
-            GetLog().Warning(ref message);
+            var log = GetLog();
+            log?.Warning(ref message);
         }
 
         public static void Info(ref System.Runtime.CompilerServices.DefaultInterpolatedStringHandler message)
         {
-            if (Options.Instance.LogLevel > InfoLevel)
+            if (!IsLogLevelEnabled(InfoLevel))
             {
                 return;
             }
-            GetLog().Info(ref message);
+            var log = GetLog();
+            log?.Info(ref message);
         }
         [Conditional("DEBUG")]
         public static void Debug(ref System.Runtime.CompilerServices.DefaultInterpolatedStringHandler message)
         {
-            if (Options.Instance.LogLevel > DebugLevel)
+            if (!IsLogLevelEnabled(DebugLevel))
             {
                 return;
             }
-            GetLog().Debug(ref message);
+            var log = GetLog();
+            log?.Debug(ref message);
         }
 
         public static void Error(ref System.Runtime.CompilerServices.DefaultInterpolatedStringHandler message)
         {
-            GetLog().Error(ref message);
+            var log = GetLog();
+            log?.Error(ref message);
         }
 #endif
     }

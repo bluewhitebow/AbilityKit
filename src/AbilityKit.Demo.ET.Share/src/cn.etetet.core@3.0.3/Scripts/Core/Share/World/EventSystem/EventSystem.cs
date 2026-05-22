@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace ET
@@ -33,7 +33,7 @@ namespace ET
                 {
                     throw new Exception($"type not is AEvent: {type.Name}");
                 }
-                
+
                 object[] attrs = type.GetCustomAttributes(typeof(EventAttribute), false);
                 foreach (object attr in attrs)
                 {
@@ -59,7 +59,7 @@ namespace ET
                 {
                     throw new Exception($"type not is callback: {type.Name}");
                 }
-                
+
                 object[] attrs = type.GetCustomAttributes(typeof(InvokeAttribute), false);
                 foreach (object attr in attrs)
                 {
@@ -68,9 +68,9 @@ namespace ET
                         dict = new Dictionary<long, object>();
                         this.allInvokers.Add(iInvoke.Type, dict);
                     }
-                    
+
                     InvokeAttribute invokeAttribute = attr as InvokeAttribute;
-                    
+
                     try
                     {
                         dict.Add(invokeAttribute.Type, obj);

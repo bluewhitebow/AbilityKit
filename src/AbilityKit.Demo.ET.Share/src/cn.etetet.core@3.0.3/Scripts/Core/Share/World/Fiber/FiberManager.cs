@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
@@ -66,8 +66,8 @@ namespace ET
             if (sceneType == 0)
             {
                 throw new Exception("fiberId is 0");
-            } 
-            
+            }
+
             try
             {
                 Fiber fiber = new(fiberId, zone, sceneType, name);
@@ -77,9 +77,10 @@ namespace ET
                     throw new Exception($"same fiber already existed, if you remove, please await Remove then Create fiber! {fiberId}");
                 }
                 this.schedulers[(int) schedulerType].Add(fiberId);
-                
+
                 TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
 
+                // 先提交 Action 到 Fiber 的线程执行
                 fiber.ThreadSynchronizationContext.Post(() =>
                 {
                     Action().NoContext();

@@ -12,24 +12,51 @@ namespace ET.AbilityKit.Demo.ET.Share
     }
 
     /// <summary>
-    /// ET View 事件接口
+    /// ET View 事件 Sink 接口 - 逻辑层通知视图层
     /// </summary>
     public interface IETViewEventSink
     {
-        void OnActorSpawn(long actorId, string name, float x, float y);
-        void OnActorMove(long actorId, float x, float y);
-        void OnActorDamage(long actorId, float damage, float hpAfter, float maxHp);
-        void OnActorDead(long actorId);
-        void OnSkillCast(long casterId, int skillId, float targetX, float targetY);
+        // 单位事件
+        void OnActorSpawn(ActorSpawnEvent evt);
+        void OnActorDead(ActorDeadEvent evt);
+        void OnActorMove(ActorMoveEvent evt);
+        void OnActorDamage(ActorDamageEvent evt);
+        void OnActorAttributeChange(ActorAttributeChangeEvent evt);
+
+        // 技能事件
+        void OnSkillCast(SkillCastEvent evt);
+        void OnSkillHit(SkillHitEvent evt);
+
+        // 特效事件
+        void OnVfxSpawn(VfxSpawnEvent evt);
+        void OnFloatingText(FloatingTextEvent evt);
+
+        // 战斗事件
+        void OnBattleStart(BattleStartEvent evt);
+        void OnBattleEnd(BattleEndEvent evt);
+        void OnFrameTick(FrameTickEvent evt);
     }
 
     /// <summary>
-    /// ET 输入接口
+    /// ET 输入 Sink 接口 - 输入层提交到逻辑层
     /// </summary>
     public interface IETInputSink
     {
-        void SubmitMoveInput(long actorId, float x, float y);
-        void SubmitSkillInput(long actorId, int skillSlot, float targetX, float targetY);
+        void SubmitMoveInput(int frame, long actorId, float x, float y);
+        void SubmitSkillInput(int frame, long actorId, int skillSlot, float targetX, float targetY);
+        void SubmitStopInput(int frame, long actorId);
+    }
+
+    /// <summary>
+    /// 战斗上下文 Sink 接口 - 提供战斗上下文数据访问
+    /// </summary>
+    public interface IETBattleContextSink
+    {
+        int CurrentFrame { get; }
+        float LogicTimeSeconds { get; }
+        long LocalActorId { get; }
+        BattleState State { get; }
+        ActorData? GetActor(long actorId);
     }
 
     /// <summary>
@@ -39,19 +66,33 @@ namespace ET.AbilityKit.Demo.ET.Share
     {
         public long ActorId;
         public string Name;
+        public ActorKind Kind;
         public float X;
         public float Y;
+        public float Rotation;
         public float Hp;
         public float MaxHp;
+        public float Attack;
+        public float Defense;
+        public float MoveSpeed;
+        public bool IsDead;
+        public bool IsLocalPlayer;
 
-        public ActorData(long actorId, string name, float x, float y)
+        public ActorData(long actorId, string name, ActorKind kind, float x, float y)
         {
             ActorId = actorId;
             Name = name;
+            Kind = kind;
             X = x;
             Y = y;
+            Rotation = 0;
             Hp = 100f;
             MaxHp = 100f;
+            Attack = 10f;
+            Defense = 5f;
+            MoveSpeed = 5f;
+            IsDead = false;
+            IsLocalPlayer = false;
         }
     }
 
@@ -64,13 +105,70 @@ namespace ET.AbilityKit.Demo.ET.Share
         public string Name;
         public float Cooldown;
         public float Range;
+        public float Damage;
 
-        public SkillData(int skillId, string name, float cooldown, float range)
+        public SkillData(int skillId, string name, float cooldown, float range, float damage)
         {
             SkillId = skillId;
             Name = name;
             Cooldown = cooldown;
             Range = range;
+            Damage = damage;
+        }
+    }
+
+    /// <summary>
+    /// 移动命令
+    /// </summary>
+    public struct MoveCommand
+    {
+        public int Frame;
+        public long ActorId;
+        public float TargetX;
+        public float TargetY;
+
+        public MoveCommand(int frame, long actorId, float targetX, float targetY)
+        {
+            Frame = frame;
+            ActorId = actorId;
+            TargetX = targetX;
+            TargetY = targetY;
+        }
+    }
+
+    /// <summary>
+    /// 技能命令
+    /// </summary>
+    public struct SkillCommand
+    {
+        public int Frame;
+        public long ActorId;
+        public int SkillSlot;
+        public float TargetX;
+        public float TargetY;
+
+        public SkillCommand(int frame, long actorId, int skillSlot, float targetX, float targetY)
+        {
+            Frame = frame;
+            ActorId = actorId;
+            SkillSlot = skillSlot;
+            TargetX = targetX;
+            TargetY = targetY;
+        }
+    }
+
+    /// <summary>
+    /// 停止命令
+    /// </summary>
+    public struct StopCommand
+    {
+        public int Frame;
+        public long ActorId;
+
+        public StopCommand(int frame, long actorId)
+        {
+            Frame = frame;
+            ActorId = actorId;
         }
     }
 }

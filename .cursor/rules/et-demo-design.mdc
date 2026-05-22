@@ -1,0 +1,797 @@
+---
+description: ET Demo 工程编码规范和设计模式
+alwaysApply: true
+---
+
+# ET Demo 工程编码规范
+
+## 一、项目结构
+
+### 1.1 目录结构
+
+```
+src/AbilityKit.Demo.ET/
+├── AbilityKit.Demo.ET.Share/     # 共享层（接口、数据结构、事件）
+├── AbilityKit.Demo.ET.Logic/      # 逻辑层（Model + Hotfix）
+├── AbilityKit.Demo.ET.View/       # 表现层
+├── AbilityKit.Demo.ET.HotfixView/ # 表现层热重载代码
+└── AbilityKit.Demo.ET.App/       # 启动入口
+```
+
+### 1.2 层级依赖规则
+
+```
+App → View/HotfixView → Share ← Logic
+```
+
+| 层级 | 依赖关系 |
+|------|----------|
+| Share | 只被依赖，不依赖其他层 |
+| Logic | 依赖 Share |
+| View | 依赖 Share |
+| App | 依赖所有层 |
+
+## 二、Component + System 模式
+
+### 2.1 核心原则
+
+**ET 标准模式：数据和逻辑分离**
+
+```
+Component (Model)   → 只定义数据
+System (Hotfix)    → 处理所有逻辑
+```
+
+### 2.2 Component 规范
+
+```csharp
+// ✅ 正确：Component 只定义数据
+[ComponentOf(typeof(Scene))]
+public class DemoBattleComponent: Entity, IAwake, IUpdate
+{
+    public long BattleId { get; set; }
+    public long PlayerId { get; set; }
+    public DemoBattleState State { get; set; }
+    
+    public void Awake() { }
+    public void Update(DemoBattleComponent self) { }
+}
+```
+
+```csharp
+// ❌ 错误：Component 包含业务逻辑
+[ComponentOf(typeof(Scene))]
+public class DemoBattleComponent: Entity, IAwake
+{
+    public long BattleId { get; set; }
+    
+    public void Awake()
+    {
+        Log.Info("...");  // ❌ 不应在 Component 中写逻辑
+    }
+    
+    public void StartBattle()  // ❌ 逻辑应该放在 System 中
+    {
+        // ...
+    }
+}
+```
+
+### 2.3 System 规范
+
+```csharp
+// ✅ 正确：System 使用 partial class + 扩展方法
+[EntitySystemOf(typeof(DemoBattleComponent))]
+[FriendOf(typeof(DemoBattleComponent))]
+public static partial class DemoBattleComponentSystem
+{
+    [EntitySystem]
+    private static void Awake(this DemoBattleComponent self)
+    {
+        Log.Info($"[DemoBattle] DemoBattleComponent awake");
+    }
+    
+    [EntitySystem]
+    private static void Update(this DemoBattleComponent self)
+    {
+        // 更新逻辑
+    }
+    
+    // 业务方法作为扩展方法
+    public static void InitializeBattle(this DemoBattleComponent self, long playerId, string playerName)
+    {
+        // ...
+    }
+    
+    public static void StartBattle(this DemoBattleComponent self)
+    {
+        // ...
+    }
+}
+```
+
+### 2.4 FriendOf 声明
+
+必须声明所有需要访问的 Component：
+
+```csharp
+[EntitySystemOf(typeof(DemoBattleComponent))]
+[FriendOf(typeof(DemoBattleComponent))]
+[FriendOf(typeof(DemoUnitComponent))]  // 需要访问 UnitComponent
+[FriendOf(typeof(DemoUnit))]            // 需要访问 Unit
+public static partial class DemoBattleComponentSystem
+```
+
+### 2.5 生命周期方法
+
+| 接口 | 方法 | 调用时机 |
+|------|------|----------|
+| `IAwake` | `Awake` | 创建时 |
+| `IDestroy` | `Destroy` | 销毁时 |
+| `IUpdate` | `Update(T self)` | 每帧更新 |
+| `ILateUpdate` | `LateUpdate(T self)` | 每帧晚于 Update |
+
+## 三、文件组织规范
+
+### 3.1 命名空间
+
+```
+ET.AbilityKit.Demo.ET.Logic      # Logic 层
+ET.AbilityKit.Demo.ET.Share      # Share 层
+ET.AbilityKit.Demo.ET.View       # View 层
+```
+
+### 3.2 文件命名
+
+| 类型 | 命名规范 | 示例 |
+|------|----------|------|
+| Component | `*Component.cs` | `DemoBattleComponent.cs` |
+| System | `*ComponentSystem.cs` | `DemoBattleComponentSystem.cs` |
+| Event | `*Event.cs` | `DemoBattleStart.cs` |
+| Event Handler | `*Handler.cs` | `DemoBattleEnd_Handler.cs` |
+| Interface | `I*Sink.cs` | `IETViewEventSink.cs` |
+
+### 3.3 目录结构
+
+```
+Logic/
+├── Model/
+│   └── Battle/
+│       └── DemoBattleComponent.cs    # Component 定义
+├── Hotfix/
+│   └── Share/
+│       └── DemoBattleComponentSystem.cs  # System 实现
+└── Model/
+    └── Login/
+        └── DemoLoginComponent.cs
+
+Share/
+├── Interface/
+│   └── IETViewEventSink.cs
+└── Model/
+    └── EventType.cs
+```
+
+## 四、事件系统规范
+
+### 4.1 事件定义
+
+```csharp
+// ✅ 正确：实现 IEvent 接口
+public struct DemoBattleStart: IEvent
+{
+    public Type Type => typeof(DemoBattleStart);
+    public long BattleId;
+}
+```
+
+### 4.2 事件发布
+
+```csharp
+EventSystem.Instance.Publish<Scene, DemoBattleStart>(scene, new DemoBattleStart() { BattleId = id });
+```
+
+### 4.3 事件订阅
+
+```csharp
+[Event(SceneType.DemoBattle)]
+public class DemoBattleEnd_Handler: AEvent<Scene, BattleEnd>
+{
+    protected override async ETTask Run(Scene scene, BattleEnd args)
+    {
+        // 处理逻辑
+    }
+}
+```
+
+## 五、日志规范
+
+### 5.1 日志标签
+
+使用 `[类名]` 前缀：
+
+```csharp
+Log.Info($"[DemoBattle] Battle {BattleId} started!");
+Log.Info($"[DemoUnitComponent] Unit created: {name}");
+```
+
+### 5.2 日志级别
+
+| 级别 | 使用场景 |
+|------|----------|
+| `Log.Debug` | 调试信息 |
+| `Log.Info` | 重要流程节点 |
+| `Log.Warning` | 警告但可继续 |
+| `Log.Error` | 错误需要处理 |
+
+## 六、禁止事项
+
+### 6.1 Component 禁止事项
+
+| 禁止 | 说明 | 正确做法 |
+|------|------|----------|
+| ❌ 写业务逻辑 | Component 只存数据 | 使用 System 扩展方法 |
+| ❌ 直接实例化其他 Component | 使用依赖注入 | 通过 Scene 获取 |
+| ❌ 引用 Unity 类型 | 应使用跨平台替代 | 使用 Vector2/Vector3 |
+
+### 6.2 System 禁止事项
+
+| 禁止 | 说明 | 正确做法 |
+|------|------|----------|
+| ❌ 遗漏 FriendOf | 访问私有成员必须声明 | 声明所有需要的 FriendOf |
+| ❌ 在 System 中定义字段 | 状态存在 Component 中 | 使用静态字典或 Component 字段 |
+| ❌ 同步长时间操作 | 可能阻塞帧 | 使用 async/await + ETTask |
+
+### 6.3 项目结构禁止事项
+
+| 禁止 | 说明 |
+|------|------|
+| ❌ 跨层依赖 | View 不应依赖 Logic |
+| ❌ 循环依赖 | 依赖关系必须是有向无环图 |
+| ❌ 在 Share 层写实现 | Share 只定义接口 |
+
+## 七、最佳实践
+
+### 7.1 获取其他 Component
+
+```csharp
+// ✅ 正确：通过 Scene 获取
+var unitComponent = self.Scene().GetComponent<DemoUnitComponent>();
+var unit = unitComponent.GetUnit(unitId);
+
+// ❌ 错误：在构造时缓存引用
+public class DemoBattleComponent: Entity
+{
+    private DemoUnitComponent _unitComponent;  // ❌
+}
+```
+
+### 7.2 扩展方法调用
+
+```csharp
+// ✅ 正确：调用扩展方法
+battleComponent.InitializeBattle(playerId, playerName);
+battleComponent.StartBattle();
+
+// ❌ 错误：调用不存在的方法
+battleComponent.DoSomething();  // 方法应该在 System 中定义
+```
+
+### 7.3 异步操作
+
+```csharp
+// ✅ 正确：使用 ETTask
+public static async ETTask ChangeToBattleScene(this DemoProcessComponent self, long playerId)
+{
+    await Task.Delay(1000);  // 实际使用 Fiber 异步操作
+    // ...
+}
+```
+
+## 八、ET Demo 与 moba.core 的关系
+
+### 8.1 核心原则
+
+**ET Demo 只负责表现层和生命周期管理，战斗逻辑全部在 moba.core 中实现。**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ET Demo 架构定位 │
+│ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ View 层 (ETBattleViewComponent) │ │
+│ │ 职责：渲染表现，接收 IETViewEventSink 事件 │ │
+│ │ 禁止：任何战斗逻辑 │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+│ │ │
+│ ▼ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ Logic 层 (ETBattleComponent) │ │
+│ │ 职责： │ │
+│ │ - 生命周期管理（创建/销毁/Update） │ │
+│ │ - 调用 moba.core 服务执行战斗逻辑 │ │
+│ │ - 通过 IWorldResolver 获取服务 │ │
+│ │ 禁止：自己实现伤害计算、冷却管理等 │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+│ │ │
+│ ▼ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ moba.core 服务层 (AbilityKit.Demo.Moba.Core) │ │
+│ │ 职责：所有战斗逻辑 │ │
+│ │ - DamagePipelineService - 伤害计算 │ │
+│ │ - MobaEffectExecutionService - 技能执行 │ │
+│ │ - SkillPipelineLibrary - 技能管道 │ │
+│ │ - CooldownService - 冷却管理 │ │
+│ │ - ECS 世界 - 实体/组件管理 │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+│ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 禁止事项
+
+| 禁止 | 说明 | 正确做法 |
+|------|------|----------|
+| ❌ 自己实现伤害计算 | `ApplyDamage`、`ExecuteDamage` 等方法 | 使用 `DamagePipelineService` |
+| ❌ 自己实现冷却管理 | `_skillCooldowns` 字典等 | 使用 moba.core 冷却系统 |
+| ❌ 自己实现目标查找 | `FindUnitsInRange` 等 | 使用 ECS 查询 |
+| ❌ 自己实现技能执行 | `ExecuteSkill`、`ExecuteTargetSkill` 等 | 使用 `MobaEffectExecutionService` |
+
+### 8.3 正确调用 moba.core 服务
+
+```csharp
+// ✅ 正确：通过 IWorldResolver 获取 moba.core 服务
+[EntitySystem]
+private static void Update(this ETBattleComponent self)
+{
+    // 获取 moba.core 服务
+    var worldResolver = self.Scene().GetComponent<ETWorldResolverComponent>();
+    if (worldResolver == null) return;
+
+    // 通过 IWorldResolver 获取 DamagePipelineService
+    if (worldResolver.Resolver.TryResolve<DamagePipelineService>(out var damageService))
+    {
+        // 创建 AttackInfo
+        var attack = new AttackInfo
+        {
+            AttackerActorId = casterId,
+            TargetActorId = targetId,
+            DamageType = DamageType.Physical,
+            // ...
+        };
+        // 调用伤害服务
+        damageService.Execute(attack);
+    }
+}
+
+// ❌ 错误：自己实现伤害计算
+private void ApplyDamage(ETUnit caster, ETUnit target, float damage)
+{
+    float actualDamage = Math.Max(1f, damage - target.Defense * 0.5f); // ❌
+    target.Hp = Math.Max(0, target.Hp - actualDamage);
+}
+```
+
+### 8.4 项目引用
+
+必须在 `AbilityKit.Demo.ET.Logic.csproj` 中添加 moba.core 引用：
+
+```xml
+<ItemGroup>
+    <ProjectReference Include="..\AbilityKit.Demo.Moba.Core\AbilityKit.Demo.Moba.Core.csproj" />
+</ItemGroup>
+```
+
+## 九、自动测试组件规范
+
+### 9.1 自动测试组件设计原则
+
+**ET Demo 使用自动测试组件验证核心流程（移动、技能释放）。**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 自动测试组件定位 │
+│ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ ETBattleAutoTestComponent │ │
+│ │ 职责：模拟玩家移动输入，验证位置同步流程 │ │
+│ │ 触发：每 N 帧发送 MoveCommand │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+│ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ ETBattleSkillTestComponent │ │
+│ │ 职责：模拟玩家技能释放，验证技能配置加载和触发器调用 │ │
+│ │ 触发：每 N 帧发送 SkillCommand │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+│ │
+│ ┌───────────────────────────────────────────────────────────────────────┐ │
+│ │ ETBattleDriverBridge │ │
+│ │ 职责：驱动自动测试组件的更新，调用 ProcessInput │ │
+│ │ 在 ETBattleDriverBridgeSystem.Update 中调用 │ │
+│ └───────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 自动测试组件命名
+
+| 类型 | 命名规范 | 示例 |
+|------|----------|------|
+| 移动测试 Component | `ETBattleAutoTestComponent` | `ETBattleAutoTestComponent.cs` |
+| 移动测试 System | `ETBattleAutoTestComponentSystem` | `ETBattleAutoTestComponentSystem.cs` |
+| 技能测试 Component | `ETBattleSkillTestComponent` | `ETBattleSkillTestComponent.cs` |
+| 技能测试 System | `ETBattleSkillTestComponentSystem` | `ETBattleSkillTestComponentSystem.cs` |
+
+### 9.3 自动测试组件模板
+
+**Component 模板：**
+
+```csharp
+[ComponentOf(typeof(Scene))]
+public class ETBattleAutoTestComponent : Entity, IAwake, IUpdate, IDestroy
+{
+    // Is auto test enabled
+    public bool IsEnabled { get; set; } = false;
+
+    // Test parameters
+    public long TestActorId { get; set; }
+    public int TestIntervalFrames { get; set; } = 5; // Test interval
+
+    // Internal state
+    private int _currentFrame;
+    private int _testCount;
+
+    // Stats
+    public int TestCount => _testCount;
+
+    public void Awake()
+    {
+        Log.Info("[AutoTest] Component created");
+    }
+
+    /// <summary>
+    /// Initialize auto test
+    /// </summary>
+    public void Initialize(long actorId)
+    {
+        TestActorId = actorId;
+        _currentFrame = 0;
+        _testCount = 0;
+        Log.Info($"[AutoTest] Initialized for ActorId={actorId}");
+    }
+
+    public void Update() { }
+
+    /// <summary>
+    /// Every frame update
+    /// </summary>
+    public void OnUpdate(int frame)
+    {
+        if (!IsEnabled)
+            return;
+
+        _currentFrame = frame;
+
+        if (_currentFrame % TestIntervalFrames == 0)
+        {
+            ExecuteTest();
+            _testCount++;
+        }
+    }
+
+    private void ExecuteTest()
+    {
+        // Test implementation
+    }
+
+    public void Destroy()
+    {
+        Log.Info($"[AutoTest] Destroyed. Total tests: {_testCount}");
+    }
+}
+```
+
+**System 模板：**
+
+```csharp
+[EntitySystemOf(typeof(ETBattleAutoTestComponent))]
+[FriendOf(typeof(ETBattleAutoTestComponent))]
+[FriendOf(typeof(ETInputComponent))]
+public static partial class ETBattleAutoTestComponentSystem
+{
+    [EntitySystem]
+    private static void Awake(this ETBattleAutoTestComponent self)
+    {
+        Log.Info("[AutoTest] System awake");
+    }
+
+    [EntitySystem]
+    private static void Update(this ETBattleAutoTestComponent self) { }
+
+    [EntitySystem]
+    private static void Destroy(this ETBattleAutoTestComponent self)
+    {
+        Log.Info($"[AutoTest] System destroyed");
+    }
+
+    /// <summary>
+    /// Enable auto test
+    /// </summary>
+    public static void Enable(this ETBattleAutoTestComponent self)
+    {
+        self.IsEnabled = true;
+        Log.Info("[AutoTest] Auto test enabled");
+    }
+
+    /// <summary>
+    /// Disable auto test
+    /// </summary>
+    public static void Disable(this ETBattleAutoTestComponent self)
+    {
+        self.IsEnabled = false;
+        Log.Info("[AutoTest] Auto test disabled");
+    }
+}
+```
+
+### 9.4 驱动桥接规范
+
+**在 `ETBattleDriverBridgeSystem.Update` 中驱动自动测试：**
+
+```csharp
+[EntitySystemOf(typeof(ETBattleComponent))]
+[FriendOf(typeof(ETBattleAutoTestComponent))]
+[FriendOf(typeof(ETBattleSkillTestComponent))]
+[FriendOf(typeof(ETInputComponent))]
+public static partial class ETBattleDriverBridgeSystem
+{
+    [EntitySystem]
+    private static void Update(this ETBattleComponent self)
+    {
+        int currentFrame = ETBattleDriverBridge.GetCurrentFrame(self);
+
+        // 1. Process auto test components
+        ETBattleDriverBridge.ProcessAutoTest(self, currentFrame);
+        ETBattleDriverBridge.ProcessSkillTest(self, currentFrame);
+
+        // 2. Process input buffer
+        ETBattleDriverBridge.ProcessInput(self, currentFrame);
+    }
+}
+```
+
+**`ETBattleDriverBridge.cs` 中的辅助方法：**
+
+```csharp
+public static class ETBattleDriverBridge
+{
+    /// <summary>
+    /// Process auto test (move test)
+    /// </summary>
+    public static void ProcessAutoTest(ETBattleComponent self, int currentFrame)
+    {
+        var scene = self.Scene();
+        var autoTest = scene?.GetComponent<ETBattleAutoTestComponent>();
+        if (autoTest != null && autoTest.IsEnabled)
+        {
+            autoTest.OnUpdate(currentFrame);
+        }
+    }
+
+    /// <summary>
+    /// Process skill test
+    /// </summary>
+    public static void ProcessSkillTest(ETBattleComponent self, int currentFrame)
+    {
+        var scene = self.Scene();
+        var skillTest = scene?.GetComponent<ETBattleSkillTestComponent>();
+        if (skillTest != null && skillTest.IsEnabled)
+        {
+            skillTest.OnUpdate(currentFrame);
+        }
+    }
+
+    /// <summary>
+    /// Process input buffer
+    /// </summary>
+    public static void ProcessInput(ETBattleComponent self, int currentFrame)
+    {
+        var scene = self.Scene();
+        var inputComponent = scene?.GetComponent<ETInputComponent>();
+        if (inputComponent != null)
+        {
+            ETInputComponentSystem.ProcessInput(inputComponent, currentFrame);
+        }
+    }
+}
+```
+
+## 十、输入处理规范
+
+### 10.1 输入组件职责
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 输入处理流程 │
+│ │
+│ 自动测试组件 (AutoTest/SkillTest) │ │
+│ │ AddMoveCommand / AddSkillCommand │ │
+│ ▼ │ │
+│ ETInputComponent (输入缓冲) │ │
+│ │ GetInputsForFrame │ │
+│ ▼ │ │
+│ ETInputComponentSystem.ProcessInput │ │
+│ │ ProcessMoveCommand / ProcessSkillCommand │ │
+│ ▼ │ │
+│ ETUnitComponent.GetUnit │ │
+│ │ │
+│ ▼ │ │
+│ ETUnit.TargetX / TargetY │ │
+│ │ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 输入命令定义
+
+```csharp
+public sealed record MoveCommand(int Frame, long ActorId, float X, float Y);
+public sealed record SkillCommand(int Frame, long ActorId, int SkillSlot, float TargetX, float TargetY);
+public sealed record StopCommand(int Frame, long ActorId);
+```
+
+### 10.3 输入处理禁止事项
+
+| 禁止 | 说明 | 正确做法 |
+|------|------|----------|
+| ❌ 在输入处理中直接修改 ETUnit 位置 | 应设置 TargetX/Y | `unit.TargetX = cmd.X; unit.TargetY = cmd.Y;` |
+| ❌ 在输入处理中计算伤害 | 应在 SkillCommand 中调用 `ExecuteDamage` | 使用 `unitComponent.ExecuteDamage()` |
+| ❌ 跳过 ETInputComponent 直接操作 | 所有输入必须经过缓冲 | 使用 `AddMoveCommand` / `AddSkillCommand` |
+
+## 十一、事件桥接规范
+
+### 11.1 事件桥接职责
+
+**`ETBattleViewEventSink` 将 AbilityKit 事件桥接到 ET 事件系统。**
+
+```csharp
+public sealed class ETBattleViewEventSink : IBattleViewEventSink
+{
+    private readonly ETBattleComponent _battleComponent;
+
+    public void OnEnterGameSnapshot(in FrameSnapshotData snapshot)
+    {
+        var scene = _battleComponent.Scene();
+
+        // 1. 发布 ActorSpawnEvent（触发 ETUnit 创建）
+        foreach (var spawn in snapshot.ActorSpawns)
+        {
+            var evt = new ActorSpawnEvent { /* ... */ };
+            EventSystem.Instance.Publish<Scene, ActorSpawnEvent>(scene, evt);
+        }
+
+        // 2. 初始化自动测试组件（在单位创建之后）
+        InitializeAutoTestComponent(scene, snapshot);
+    }
+}
+```
+
+### 11.2 ActorSpawnEvent 处理器职责
+
+**`ETBattleView_EventHandler` 负责创建 Logic 层和 View 层单位：**
+
+```csharp
+[Event(SceneType.DemoBattle)]
+public class ETBattleView_EventHandler : AEvent<Scene, ActorSpawnEvent>
+{
+    protected override async ETTask Run(Scene scene, ActorSpawnEvent args)
+    {
+        // 1. 创建 Logic 层单位
+        var unitComponent = scene.GetComponent<ETUnitComponent>();
+        if (unitComponent != null)
+        {
+            unitComponent.CreateUnit(
+                args.ActorId,
+                args.EntityCode,
+                args.Kind,
+                args.Name,
+                args.X,
+                args.Y,
+                args.MaxHp);
+        }
+
+        // 2. 创建 View 层单位视图
+        var unitViewComponent = scene.GetComponent<ETUnitViewComponent>();
+        unitViewComponent?.CreateUnitView(args);
+    }
+}
+```
+
+### 11.3 事件处理器命名
+
+| 事件类型 | 处理器命名 | 示例 |
+|----------|------------|------|
+| `ActorSpawnEvent` | `ETBattleView_EventHandler` | `ActorSpawnEvent` 处理器 |
+| `ActorMoveEvent` | `ETBattleView_ActorMove_Handler` | `ActorMoveEvent` 处理器 |
+| `ActorDamageEvent` | `ETBattleView_ActorDamage_Handler` | `ActorDamageEvent` 处理器 |
+| `ActorDeadEvent` | `ETBattleView_ActorDead_Handler` | `ActorDeadEvent` 处理器 |
+| `BattleStartEvent` | `ETBattleView_BattleStart_Handler` | `BattleStartEvent` 处理器 |
+| `BattleEndEvent` | `ETBattleView_BattleEnd_Handler` | `BattleEndEvent` 处理器 |
+
+## 十二、初始化时序规范
+
+### 12.1 战斗初始化顺序
+
+```
+1. ETBattleComponent.StartBattle()
+   └── 创建 ETBattleAutoTestComponent
+   └── 创建 ETBattleSkillTestComponent
+   └── 通知 View 层战斗开始 (OnBattleStart)
+
+2. ETMobaBattleDriver.TriggerEnterGameSnapshot()
+   └── 调用 ETBattleViewEventSink.OnEnterGameSnapshot()
+       └── 发布 ActorSpawnEvent（触发单位创建）
+       └── 初始化自动测试组件（使用正确的 ActorId）
+
+3. ETBattleView_EventHandler 处理 ActorSpawnEvent
+   └── 创建 ETUnit
+   └── 创建 ETUnitViewComponent
+
+4. ETBattleDriverBridgeSystem.Update 每帧调用
+   └── ProcessSkillTest（发送技能命令）
+   └── ProcessAutoTest（发送移动命令）
+   └── ProcessInput（处理输入缓冲）
+```
+
+### 12.2 自动测试组件初始化
+
+**在 `ETBattleViewEventSink.OnEnterGameSnapshot` 中初始化：**
+
+```csharp
+private void InitializeAutoTestComponent(Scene scene, in FrameSnapshotData snapshot)
+{
+    var autoTest = scene.GetComponent<ETBattleAutoTestComponent>();
+    var skillTest = scene.GetComponent<ETBattleSkillTestComponent>();
+
+    if (autoTest == null && skillTest == null)
+        return;
+
+    // 使用第一个 spawn 的 ActorId
+    long actorIdToUse = 0;
+    if (snapshot.ActorSpawns?.Count > 0)
+    {
+        actorIdToUse = snapshot.ActorSpawns[0].ActorId;
+    }
+
+    if (autoTest != null)
+    {
+        autoTest.Initialize(actorIdToUse);
+    }
+
+    if (skillTest != null)
+    {
+        skillTest.Initialize(actorIdToUse);
+    }
+}
+```
+
+## 十三、调试建议
+
+### 13.1 查看自动测试日志
+
+```bash
+# 过滤自动测试日志
+grep "AutoTest\|Skill cast\|Move command" logs/*.log
+
+# 查看技能释放
+grep "ProcessSkillCommand\|cast skill" logs/*.log
+
+# 查看输入处理
+grep "ProcessInput\|Move processed" logs/*.log
+```
+
+### 13.2 常见问题排查
+
+| 问题 | 可能原因 | 解决方案 |
+|------|----------|----------|
+| `unit not found` | `ActorSpawnEvent` 处理器未创建 ETUnit | 检查 `ETBattleView_EventHandler` 是否调用 `CreateUnit` |
+| 自动测试命令未处理 | `ProcessInput` 未调用 | 在 `ETBattleDriverBridgeSystem.Update` 中添加调用 |
+| ActorId 不匹配 | 自动测试组件初始化太早 | 在 `OnEnterGameSnapshot` 后初始化 |

@@ -1,21 +1,22 @@
-﻿namespace ET
+namespace ET
 {
     public class Logger: Singleton<Logger>, ISingletonAwake
     {
-        private ILog log;
+        private ILog _log;
+        private readonly ConsoleLog _fallbackLog = new();
 
         public ILog Log
         {
             set
             {
-                this.log = value;
+                this._log = value;
             }
             get
             {
-                return this.log;
+                return this._log ?? _fallbackLog;
             }
         }
-        
+
         public void Awake()
         {
         }

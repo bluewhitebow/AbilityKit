@@ -1,5 +1,4 @@
-﻿#if DOTNET
-
+#if DOTNET
 using System;
 using System.Threading;
 using CommandLine;

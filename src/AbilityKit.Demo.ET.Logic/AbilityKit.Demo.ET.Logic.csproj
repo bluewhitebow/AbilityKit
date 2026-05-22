@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>ET.AbilityKit.Demo.ET.Logic</RootNamespace>
+    <RootNamespace>ET.Logic</RootNamespace>
     <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -15,28 +15,73 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- ========== ET Demo 自定义代码 (ET 风格) ========== -->
-    <!-- Model 层 - 流程管理 -->
+    <!-- ========== Model 层 ========== -->
+    <!-- Model 层 - 流程 -->
     <Compile Include="Model/Process/**/*.cs" />
 
     <!-- Model 层 - 登录 -->
     <Compile Include="Model/Login/**/*.cs" />
 
-    <!-- Model 层 - 战斗 -->
+    <!-- Model 层 - 战斗相关 -->
     <Compile Include="Model/Battle/**/*.cs" />
 
-    <!-- Hotfix 层 - 共享 -->
-    <Compile Include="Hotfix/Share/**/*.cs" />
+    <!-- Model 层 - 单位相关 -->
+    <Compile Include="Model/Unit/**/*.cs" />
 
-    <!-- Hotfix 层 - 客户端 -->
-    <Compile Include="Hotfix/Client/**/*.cs" />
+    <!-- Model 层 - 会话相关 -->
+    <Compile Include="Model/Session/**/*.cs" />
 
-    <!-- Hotfix 层 - 服务器 -->
-    <Compile Include="Hotfix/Server/**/*.cs" />
+    <!-- Model 层 - 视图相关 -->
+    <Compile Include="Model/View/**/*.cs" />
+
+    <!-- Model 层 - 流程控制 -->
+    <Compile Include="Model/Flow/**/*.cs" />
+
+    <!-- Model 层 - 输入 -->
+    <Compile Include="Model/Input/**/*.cs" />
+
+    <!-- Model 层 - moba.core 集成 -->
+    <Compile Include="Model/MobaCore/**/*.cs" />
+
+    <!-- ========== Hotfix 层 ========== -->
+    <!-- Hotfix 层 - 战斗 -->
+    <Compile Include="Hotfix/Battle/**/*.cs" />
+
+    <!-- Hotfix 层 - 单位 -->
+    <Compile Include="Hotfix/Unit/**/*.cs" />
+
+    <!-- Hotfix 层 - 会话 -->
+    <Compile Include="Hotfix/Session/**/*.cs" />
+
+    <!-- Hotfix 层 - 视图 -->
+    <Compile Include="Hotfix/View/**/*.cs" />
+
+    <!-- Hotfix 层 - 登录 -->
+    <Compile Include="Hotfix/Login/**/*.cs" />
+
+    <!-- Hotfix 层 - 流程 -->
+    <Compile Include="Hotfix/Process/**/*.cs" />
+
+    <!-- Hotfix 层 - MobaCore -->
+    <Compile Include="Hotfix/MobaCore/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
+    <ProjectReference Include="..\AbilityKit.Core\AbilityKit.Core.csproj" />
+    <ProjectReference Include="..\AbilityKit.Host\AbilityKit.Host.csproj" />
+    <ProjectReference Include="..\AbilityKit.Triggering\AbilityKit.Triggering.csproj" />
+    <ProjectReference Include="..\AbilityKit.Game.Battle.Runtime\AbilityKit.Game.Battle.Runtime.csproj" />
+    <ProjectReference Include="..\AbilityKit.World.FrameSync\AbilityKit.World.FrameSync.csproj" />
+    <ProjectReference Include="..\AbilityKit.World.Snapshot\AbilityKit.World.Snapshot.csproj" />
+    <ProjectReference Include="..\AbilityKit.Ability\AbilityKit.Ability.csproj" />
+    <ProjectReference Include="..\AbilityKit.Demo.Moba.Core\AbilityKit.Demo.Moba.Core.csproj" />
+    <ProjectReference Include="..\AbilityKit.Demo.Moba.Share\AbilityKit.Demo.Moba.Share.csproj" />
+    <ProjectReference Include="..\AbilityKit.Host.Extension\AbilityKit.Host.Extension.csproj" />
+
+    <!-- ET SourceGenerator - 只作为 Analyzer 使用，不引用程序集以避免类型冲突 -->
+    <!-- Share 项目已包含 Runtime 中的 Attribute 定义 -->
+    <ProjectReference Include="..\AbilityKit.Demo.ET.Share\src\cn.etetet.sourcegenerator@3.0.1\DotNet~\ET.SourceGenerator\ET.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

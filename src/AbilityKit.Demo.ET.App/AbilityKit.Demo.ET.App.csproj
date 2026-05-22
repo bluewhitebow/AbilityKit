@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>ET</RootNamespace>
+    <RootNamespace>ET.AbilityKit.Demo.ET.App</RootNamespace>
     <AssemblyName>AbilityKit.Demo.ET.App</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
@@ -29,12 +29,19 @@
     <Compile Include="ETDemoApp.cs" />
   </ItemGroup>
 
+  <!-- 复制配置文件到输出目录 -->
+  <ItemGroup>
+    <Content Include="..\AbilityKit.Demo.Moba.Console\Configs\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Configs\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+
   <!-- Project references -->
   <ItemGroup>
     <ProjectReference Include="..\AbilityKit.Demo.ET.Share\AbilityKit.Demo.ET.Share.csproj" />
     <ProjectReference Include="..\AbilityKit.Demo.ET.Logic\AbilityKit.Demo.ET.Logic.csproj" />
     <ProjectReference Include="..\AbilityKit.Demo.ET.View\AbilityKit.Demo.ET.View.csproj" />
-    <ProjectReference Include="..\AbilityKit.Demo.ET.HotfixView\AbilityKit.Demo.ET.HotfixView.csproj" />
   </ItemGroup>
 
 </Project>

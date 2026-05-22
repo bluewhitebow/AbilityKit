@@ -32,7 +32,12 @@
         <Compile Include="$(SolutionDir)Packages\cn.etetet.*\DotNet~\SourceGenerator\**\*.cs">
             <Link>%(RecursiveDir)%(FileName)%(Extension)</Link>
         </Compile>
-        
+
+        <!-- 支持 src 目录结构 -->
+        <Compile Include="$(SolutionDir)src\cn.etetet.*\DotNet~\SourceGenerator\**\*.cs">
+            <Link>%(RecursiveDir)%(FileName)%(Extension)</Link>
+        </Compile>
+
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.9.0" PrivateAssets="all" />
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.3">
             <PrivateAssets>all</PrivateAssets>

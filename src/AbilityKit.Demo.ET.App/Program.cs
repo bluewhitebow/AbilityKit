@@ -13,22 +13,37 @@ namespace ET.AbilityKit.Demo.ET.App
             Console.WriteLine("=== AbilityKit ET Demo ===");
             Console.WriteLine("Starting ET Framework with Demo Process Component...");
             Console.WriteLine();
-            
+
             try
             {
                 // 初始化核心系统
                 DemoEntry.Init(args);
-                
+
                 // 启动 Main Fiber 并等待完成
                 DemoEntry.StartAsync().NoContext();
-                
+
                 Console.WriteLine();
                 Console.WriteLine("=== ET Framework Started ===");
                 Console.WriteLine("Press Ctrl+C to exit.");
                 Console.WriteLine();
-                
-                // 保持主线程运行
-                System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
+
+                // 主循环：持续调用 FiberManager.Update()
+                while (true)
+                {
+                    try
+                    {
+                        // 更新 Fiber 管理器
+                        global::ET.FiberManager.Instance.Update();
+                        global::ET.FiberManager.Instance.LateUpdate();
+
+                        // 简单帧率控制（约 60 FPS）
+                        System.Threading.Thread.Sleep(16);
+                    }
+                    catch (Exception ex)
+                    {
+                        global::ET.Log.Error($"Main loop error: {ex}");
+                    }
+                }
             }
             catch (Exception e)
             {
