@@ -4,6 +4,7 @@ using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Coordinator.Core;
+using AbilityKit.Core.Common.Log;
 
 namespace AbilityKit.Coordinator
 {
@@ -376,11 +377,22 @@ namespace AbilityKit.Coordinator
         {
             if (spawns == null || spawns.Length == 0)
             {
+                Log.Warning("[SessionCoordinator] No player spawns to create");
                 return;
             }
 
-            // Get spawn service from world if available
-            // TODO: Implement player spawn logic
+            // 尝试通过 ISpawnService 创建玩家生成点
+            if (_worldResolver != null && _worldResolver.TryResolve<ISpawnService>(out var spawnService))
+            {
+                if (spawnService.CreateSpawns(spawns))
+                {
+                    Log.Info($"[SessionCoordinator] Created {spawns.Length} player spawns via ISpawnService");
+                    return;
+                }
+            }
+
+            // 如果没有 ISpawnService，记录警告但继续启动
+            Log.Warning($"[SessionCoordinator] ISpawnService not found, {spawns.Length} spawns not created");
         }
 
         // ============== IDisposable ==============

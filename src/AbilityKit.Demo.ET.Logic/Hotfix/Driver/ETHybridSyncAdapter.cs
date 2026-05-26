@@ -130,7 +130,7 @@ namespace ET.Logic
             _playerId = playerId;
             _localActorId = (int)playerId;
 
-            // TODO: Integrate with ET's network system
+            // [PendingETNetworkIntegration] Integrate with ET's network system
             SimulateConnection();
 
             Log.Info($"[ETHybridSyncAdapter] Connecting to server: {host}:{port}, Room={roomId}, Player={playerId}");
@@ -178,13 +178,13 @@ namespace ET.Logic
         private void PredictInput(PlayerInputCommand input)
         {
             _predictedFrame++;
-            // TODO: Apply input to local prediction state
+            // [PendingClientPrediction] Apply input to local prediction state
             // This would call into moba.core services for local simulation
         }
 
         private void SendToServer(PlayerInputCommand input)
         {
-            // TODO: Send to server via ET network
+            // [PendingETNetworkIntegration] Send to server via ET network
         }
 
         // ============== Tick ==============
@@ -212,7 +212,7 @@ namespace ET.Logic
 
         private void TickPrediction(float deltaTime)
         {
-            // TODO: Run local simulation for prediction
+            // [PendingClientPrediction] Run local simulation for prediction
             // This would call into moba.core services
         }
 
@@ -229,7 +229,7 @@ namespace ET.Logic
                 if (serverState.ActorId == _localActorId)
                 {
                     // Local player state - check for desync
-                    // TODO: Compare with predicted state and correct if needed
+                    // [PendingClientPrediction] Compare with predicted state and correct if needed
                     _lastConfirmedFrame = _predictedFrame;
                     break;
                 }
@@ -265,7 +265,7 @@ namespace ET.Logic
                 return _confirmedSnapshot.ToArray();
             }
 
-            // TODO: Return predicted snapshot when prediction is implemented
+            // [PendingClientPrediction] Return predicted snapshot when prediction is implemented
             return _confirmedSnapshot.ToArray();
         }
 

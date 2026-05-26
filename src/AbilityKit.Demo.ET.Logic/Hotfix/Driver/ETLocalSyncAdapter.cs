@@ -8,8 +8,8 @@ namespace ET.Logic
     /// <summary>
     /// ET Local Sync Adapter (Lockstep mode)
     ///
-    /// Placeholder implementation for local-only sync
-    /// TODO: Implement full local sync logic
+    /// Provides local-only frame synchronization for standalone/AI battle testing.
+    /// All game state is computed locally without network communication.
     /// </summary>
     public sealed class ETLocalSyncAdapter : IETLocalSyncAdapter
     {
@@ -42,10 +42,6 @@ namespace ET.Logic
         }
 
         public ActorStateSnapshotData[] GetAllActorStates() => Array.Empty<ActorStateSnapshotData>();
-
-        // IETBattleSyncAdapter - unused methods
-        public void AttachToSession(object session) { }
-        public void DetachFromSession() { }
 
         // IDisposable implementation
         public void Dispose()

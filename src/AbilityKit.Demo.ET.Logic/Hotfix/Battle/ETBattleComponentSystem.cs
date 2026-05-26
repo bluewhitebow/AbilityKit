@@ -1,6 +1,5 @@
 using System;
 using AbilityKit.Ability.Config;
-using AbilityKit.Ability.World.Abstractions;
 using ET.AbilityKit.Demo.ET.Share;
 using BattleStartPlan = AbilityKit.Demo.Moba.Share.BattleStartPlan;
 
@@ -34,6 +33,30 @@ namespace ET.Logic
         [EntitySystem]
         private static void Update(this ETBattleComponent self)
         {
+            // Only update when battle is in progress
+            if (self.State != BattleState.InProgress)
+                return;
+
+            // 1. Process auto test (generates move commands to ETInputComponent)
+            ETBattleDriverBridge.ProcessAutoTest(self, self.BattleDriver?.CurrentFrame ?? 0);
+
+            // 2. Process skill test (generates skill commands to ETInputComponent)
+            ETBattleDriverBridge.ProcessSkillTest(self, self.BattleDriver?.CurrentFrame ?? 0);
+
+            // 3. Tick the battle driver
+            //    - PreTickPhase: 递增帧号
+            //    - ProcessETInputPhase: 从 ETInputComponent 读取命令并提交到 IWorldInputSink
+            //    - DriveWorldPhase: 驱动 moba.core 执行命令
+            //    - CollectSnapshotPhase: 收集实体状态快照
+            //    - DispatchSnapshotPhase: 分发快照到视图层
+            if (self.BattleDriver is ETMobaBattleDriver driver)
+            {
+                float deltaTime = 1f / self.TickRate;
+                driver.Tick(deltaTime);
+            }
+
+            // 4. Advance frame (check battle end, send tick event)
+            self.AdvanceFrame();
         }
 
         [EntitySystem]
@@ -72,6 +95,9 @@ namespace ET.Logic
             // Create BattleDriver with HostRuntime + WorldManager
             var battleDriver = scene.AddComponent<ETMobaBattleDriver>();
             self.BattleDriver = battleDriver;
+
+            // 必须手动调用 Awake 来注册 Handlers
+            battleDriver.Awake();
 
             // Create Entity Cache Component for ET.View
             var cacheComponent = scene.AddComponent<ETBattleEntityCacheComponent>();
@@ -127,15 +153,15 @@ namespace ET.Logic
             // Create AutoTest component (will be initialized in OnEnterGameSnapshot)
             var scene = self.Scene();
             var autoTest = scene.AddComponent<ETBattleAutoTestComponent>();
-            autoTest.MoveIntervalFrames = 5;
-            autoTest.MoveSpeed = 5f;
+            autoTest.MoveIntervalFrames = BattleTestConfig.DefaultMoveIntervalFrames;
+            autoTest.MoveSpeed = BattleTestConfig.DefaultMoveSpeed;
             autoTest.Enable();
             Log.Info($"[ETBattle] AutoTest component created");
 
             // Create SkillTest component
             var skillTest = scene.AddComponent<ETBattleSkillTestComponent>();
-            skillTest.SkillIntervalFrames = 120; // Every 4 seconds at 30fps
-            skillTest.SkillSlot = 0; // First skill
+            skillTest.SkillIntervalFrames = BattleTestConfig.DefaultSkillIntervalFrames * 2; // Every 8 seconds at 30fps
+            skillTest.SkillSlot = BattleTestConfig.DefaultSkillSlot;
             skillTest.Enable();
             Log.Info($"[ETBattle] SkillTest component created");
 
@@ -231,26 +257,6 @@ namespace ET.Logic
         public static void SubmitSkillInput(this ETBattleComponent self, long actorId, int slot, float targetX, float targetZ)
         {
             ETBattleDriverBridge.SubmitSkillInput(self, actorId, slot, targetX, targetZ);
-        }
-
-        #endregion
-
-        #region Services
-
-        /// <summary>
-        /// Get World
-        /// </summary>
-        public static IWorld GetWorld(this ETBattleComponent self)
-        {
-            return ETBattleDriverBridge.GetWorld(self);
-        }
-
-        /// <summary>
-        /// Try resolve service
-        /// </summary>
-        public static bool TryResolve<T>(this ETBattleComponent self, out T service) where T : class
-        {
-            return ETBattleDriverBridge.TryResolve(self, out service);
         }
 
         #endregion

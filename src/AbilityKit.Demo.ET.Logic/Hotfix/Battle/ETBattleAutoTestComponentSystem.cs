@@ -5,7 +5,7 @@ namespace ET.Logic
 {
     /// <summary>
     /// ETBattleAutoTestComponent System
-    /// Handles auto test logic
+    /// 处理所有自动测试业务逻辑
     /// </summary>
     [EntitySystemOf(typeof(ETBattleAutoTestComponent))]
     [FriendOf(typeof(ETBattleAutoTestComponent))]
@@ -15,7 +15,6 @@ namespace ET.Logic
         [EntitySystem]
         private static void Awake(this ETBattleAutoTestComponent self)
         {
-            Log.Info("[ETBattleAutoTest] System awake");
         }
 
         [EntitySystem]
@@ -26,41 +25,63 @@ namespace ET.Logic
         [EntitySystem]
         private static void Destroy(this ETBattleAutoTestComponent self)
         {
-            Log.Info($"[ETBattleAutoTest] System destroyed. Total move commands: {self.MoveCommandCount}, Distance: {self.MoveDistance:F2}");
+            Log.Info($"[ETBattleAutoTest] Destroyed. Total move commands: {self.MoveCommandCount}, Distance: {self.MoveDistance:F2}");
         }
 
         /// <summary>
-        /// Every frame update - send auto move command
+        /// 初始化自动测试
+        /// </summary>
+        public static void Initialize(this ETBattleAutoTestComponent self, long actorId, float startX, float startY)
+        {
+            self.Initialize(actorId, startX, startY);
+            Log.Info($"[ETBattleAutoTest] Initialized for ActorId={actorId}, StartPos=({startX}, {startY})");
+        }
+
+        /// <summary>
+        /// 每帧更新 - 发送自动移动命令
         /// </summary>
         public static void OnUpdate(this ETBattleAutoTestComponent self, int frame)
         {
             if (!self.IsEnabled)
                 return;
 
-            // Send move command every N frames
+            // 每隔指定帧数发送移动命令
             if (frame % self.MoveIntervalFrames == 0)
             {
-                self.SendAutoMoveCommand(frame);
+                SendMoveCommand(self, frame);
             }
         }
 
         /// <summary>
-        /// Send auto move command
+        /// 发送移动命令
         /// </summary>
-        private static void SendAutoMoveCommand(this ETBattleAutoTestComponent self, int frame)
+        private static void SendMoveCommand(ETBattleAutoTestComponent self, int frame)
         {
-            // Calculate new target (time-based dynamic target)
-            float time = frame * 0.1f;
-            float newTargetX = 25f + (float)Math.Sin(time) * 20f; // X range 5-45
-            float newTargetY = (float)Math.Cos(time) * 15f; // Y range -15 to 15
+            // 计算新目标（基于时间动态计算）
+            float newTargetX = self.CurrentX + (float)Math.Sin(frame * 0.1) * BattleTestConfig.MovementAmplitude;
+            float newTargetY = self.CurrentY + (float)Math.Cos(frame * 0.1) * BattleTestConfig.MovementAmplitude;
 
-            // Get input component and send command
+            // 限制范围
+            newTargetX = Math.Clamp(newTargetX, BattleTestConfig.MovementMinBound, BattleTestConfig.MovementMaxBound);
+            newTargetY = Math.Clamp(newTargetY, BattleTestConfig.MovementMinBound, BattleTestConfig.MovementMaxBound);
+
+            // 获取输入组件并发送命令
             var inputComponent = self.Scene().GetComponent<ETInputComponent>();
             if (inputComponent != null)
             {
-                inputComponent.AddMoveCommand(frame, (int)self.TestActorId, newTargetX, newTargetY);
+                inputComponent.AddMoveCommand(frame, self.TestActorId, newTargetX, newTargetY);
+                self.MoveCommandCount++;
 
-                Log.Debug($"[ETBattleAutoTest] Frame={frame}: Move command sent, ActorId={self.TestActorId}, Target=({newTargetX:F2}, {newTargetY:F2})");
+                // 计算移动距离
+                float dx = newTargetX - self.CurrentX;
+                float dy = newTargetY - self.CurrentY;
+                self.MoveDistance += (float)Math.Sqrt(dx * dx + dy * dy);
+
+                // 更新当前位置
+                self.CurrentX = newTargetX;
+                self.CurrentY = newTargetY;
+
+                Log.Info($"[ETBattleAutoTest] Move command: Frame={frame}, ActorId={self.TestActorId}, Target=({newTargetX:F2}, {newTargetY:F2})");
             }
             else
             {
@@ -69,7 +90,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Enable auto test
+        /// 启用自动测试
         /// </summary>
         public static void Enable(this ETBattleAutoTestComponent self)
         {
@@ -78,7 +99,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Disable auto test
+        /// 禁用自动测试
         /// </summary>
         public static void Disable(this ETBattleAutoTestComponent self)
         {
@@ -87,11 +108,13 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Reset stats
+        /// 重置统计
         /// </summary>
         public static void ResetStats(this ETBattleAutoTestComponent self)
         {
             Log.Info($"[ETBattleAutoTest] Stats reset. Previous: Commands={self.MoveCommandCount}, Distance={self.MoveDistance:F2}");
+            self.MoveCommandCount = 0;
+            self.MoveDistance = 0f;
         }
     }
 }

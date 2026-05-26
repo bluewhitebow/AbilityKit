@@ -1,8 +1,10 @@
 ﻿using System;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(ActorIdAllocator))]
     public sealed class ActorIdAllocator : IService
     {
         private int _nextId = 1;

@@ -5,6 +5,7 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan.Json;
@@ -12,6 +13,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaTriggerPlanSubscriptionService))]
     public sealed class MobaTriggerPlanSubscriptionService : IService
     {
         private readonly TriggerPlanJsonDatabase _db;

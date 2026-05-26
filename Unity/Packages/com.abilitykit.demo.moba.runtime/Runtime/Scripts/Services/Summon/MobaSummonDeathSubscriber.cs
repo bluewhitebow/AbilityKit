@@ -1,10 +1,13 @@
 ﻿using System;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
+using AbilityKit.Demo.Moba.Events.Summon;
 using StableStringId = AbilityKit.Triggering.Eventing.StableStringId;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaSummonDeathSubscriber))]
     public sealed class MobaSummonDeathSubscriber : IService
     {
         private readonly AbilityKit.Triggering.Eventing.IEventBus _eventBus;

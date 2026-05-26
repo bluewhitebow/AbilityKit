@@ -2,9 +2,11 @@
 using Entitas;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
-{ 
+{
+    [WorldService(typeof(MobaActorLookupService))]
     public sealed class MobaActorLookupService : IService
     {
         private readonly ActorIdIndex _index;

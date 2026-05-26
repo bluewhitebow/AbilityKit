@@ -5,6 +5,8 @@ using AbilityKit.Ability.Share.ECS; using AbilityKit.ECS; using AbilityKit.Abili
 using AbilityKit.Core.Math;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Pipeline;
 
@@ -234,6 +236,7 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    [WorldService(typeof(MobaSkillCastInstanceSyncSettings))]
     public sealed class MobaSkillCastInstanceSyncSettings : AbilityKit.Ability.World.Services.IService
     {
         public int RetainCompletedFrames { get; set; } = 30;

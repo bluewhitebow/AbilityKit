@@ -4,9 +4,11 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Ability.Triggering.Definitions;
 using AbilityKit.Ability.Triggering.Json;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaTriggerIndexService))]
     public sealed class MobaTriggerIndexService : IService
     {
         private const string TriggerJsonResourcesPath = "ability/ability_triggers";

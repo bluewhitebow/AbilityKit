@@ -11,7 +11,7 @@ namespace ET.AbilityKit.Demo.ET.Share
         public Type Type => typeof(ActorDeadEvent);
 
         /// <summary>
-        /// 逻辑层（MobaCore）的 ActorId
+        /// 死亡单位的 ActorId
         /// </summary>
         public int ActorId;
 

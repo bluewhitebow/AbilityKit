@@ -1,6 +1,6 @@
 using System;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// 位置同步到 GameObject

@@ -19,6 +19,7 @@ namespace ET.AbilityKit.Demo.ET.Share
     public enum ActorKind
     {
         None,
+        Hero,
         Character,
         Monster,
         NPC,

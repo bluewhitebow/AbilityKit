@@ -44,12 +44,26 @@ AbilityKit 采用**分层架构**，从底层到顶层依次为：
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │               Host Extension 包 (com.abilitykit.host.extension)      │   │
+│  │          Host Extension 包 (com.abilitykit.host.extension)           │   │
 │  │                                                                     │   │
 │  │   MobaRoomState ─── 权威房间状态                                    │   │
 │  │   MobaRoomOrchestrator ─── 房间编排器                               │   │
 │  │   MobaGameStartOrchestrator ─── 开局编排器                          │   │
 │  │   FrameSyncDriverModule ─── 帧同步驱动                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │          moba.runtime 包 (com.abilitykit.demo.moba.runtime)         │   │
+│  │          战斗逻辑世界层 ⭐                                          │   │
+│  │                                                                     │   │
+│  │   MobaBattleDriverHost ─── 驱动宿主（Coordinator 适配）             │   │
+│  │   MobaEnterGameFlowService ─── 实体创建入口服务                    │   │
+│  │   MobaLobbyInputSink ─── 输入处理（IWorldInputSink）              │   │
+│  │   SkillExecutor ─── 技能执行流水线                                 │   │
+│  │   DamagePipelineService ─── 伤害计算                               │   │
+│  │   MobaSnapshotRouter ─── 快照聚合                                  │   │
+│  │   ActorSpawnPipeline ─── 实体生成管线                              │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
 │                                    ▼                                        │
@@ -71,6 +85,7 @@ AbilityKit 采用**分层架构**，从底层到顶层依次为：
 | World | 无依赖 |
 | Host | 依赖 World |
 | Host Extension | 依赖 Host, World |
+| moba.runtime | 依赖 Host, World, Host Extension |
 | Coordinator | 依赖 Host, World |
 | Game | 依赖所有层 |
 
@@ -482,11 +497,148 @@ public sealed class MobaRoomOrchestrator : IMobaRoomOrchestrator
 
 ---
 
-## 八、禁止事项
+## 八、moba.runtime 战斗逻辑世界层
+
+### 8.1 核心定位
+
+moba.runtime 包是**战斗逻辑世界层**，包含所有 MOBA 游戏特定的业务逻辑。
+
+### 8.2 核心组件
+
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| `MobaBattleDriverHost` | `Session/MobaBattleDriverHost.cs` | 战斗驱动宿主（Coordinator 适配） |
+| `MobaEnterGameFlowService` | `Services/EnterGame/MobaEnterGameFlowService.cs` | 实体创建入口服务 |
+| `MobaLobbyInputSink` | `Services/Input/MobaLobbyInputSink.cs` | 输入处理（IWorldInputSink 实现） |
+| `SkillExecutor` | `Services/Skill/Cast/SkillExecutor.cs` | 技能执行流水线 |
+| `DamagePipelineService` | `Services/Combat/Damage/DamagePipelineService.cs` | 伤害计算 |
+| `MobaSnapshotRouter` | `Services/Snapshot/MobaSnapshotRouter.cs` | 快照聚合 |
+| `ActorSpawnPipeline` | `Util/Generator/ActorSpawnPipeline.cs` | 实体生成管线 |
+| `MobaEntityManager` | `Services/EntityManager/MobaEntityManager.cs` | 实体管理（索引） |
+
+### 8.3 实体创建流程
+
+```csharp
+// MobaEnterGameFlowService.cs
+public bool ApplyGameStartSpec(ActorContext actorContext, in MobaGameStartSpec spec)
+{
+    // 通过 ActorSpawnPipeline 创建实体
+    var built = ActorSpawnPipeline.BuildActorsFromEnterGameReqAndInitialize(
+        actorContext,
+        _actorIds,
+        _registry,
+        _entities,
+        effectiveReq,
+        initializer: (entity, loadout) =>
+        {
+            // 初始化属性、技能等
+            _generator.InitializeFromLoadout(entity, loadout);
+        },
+        onActorBuilt: (entity, loadout) =>
+        {
+            // 发布 spawn 快照
+            spawnEntries.Add(...);
+        });
+
+    // 发布 EnterGameResponse
+    _snapshot.PublishEnterGameResPayload(...);
+    _spawn.PublishSpawnPayload(...);
+
+    return true;
+}
+```
+
+### 8.4 单一入口原则
+
+moba.runtime 是战斗逻辑的**唯一实现位置**：
+
+| 职责 | 正确做法 |
+|------|----------|
+| 伤害计算 | `DamagePipelineService` |
+| 技能执行 | `SkillExecutor` |
+| 实体创建 | `MobaEnterGameFlowService` |
+| 移动逻辑 | `MobaMotionTickSystem` |
+| Buff 管理 | `MobaBuffService` |
+
+### 8.5 禁止事项
 
 | 禁止 | 说明 | 正确做法 |
 |------|------|----------|
-| ❌ Host 包包含游戏逻辑 | Host 只负责世界管理和网络 | 游戏逻辑放在 Host Extension |
+| ❌ 在 Game 层实现战斗逻辑 | Game 层只协调 | 在 moba.runtime 实现 |
+| ❌ 在表现层计算伤害 | 伤害必须由 moba.core 计算 | 通过事件传递结果 |
+| ❌ 直接修改实体属性 | 通过服务接口 | 使用 SkillExecutor 等 |
+
+---
+
+## 九、数据流
+
+```
+玩家输入 ──▶ SessionCoordinator ──▶ SyncAdapter ──▶ IBattleDriverHost
+                              │                              │
+                              │                              ▼
+                              │                    moba.runtime (战斗逻辑)
+                              │                    ┌────────────────────┐
+                              │                    │ MobaLobbyInputSink │
+                              │                    │ SkillExecutor      │
+                              │                    │ DamagePipeline     │
+                              │                    └────────────────────┘
+                              │                              │
+                              ▼                              │
+                         SessionHooks ◀──────────────────────┘
+                              │
+                              ▼
+                    SubFeature (Events/TickLoop/Snapshot)
+                              │
+                              ▼
+                      IViewEventSink ──▶ 视图渲染
+```
+
+---
+
+## 十、设计模式
+
+| 模式 | 应用场景 |
+|------|----------|
+| **策略模式** | `ISyncAdapter` - 不同同步策略 |
+| **观察者模式** | `SessionHooks` / `IMobaRoomEvents` - 事件通知 |
+| **命令模式** | `MobaRoomCommand` - 幂等命令处理 |
+| **门面模式** | `SessionCoordinator` - 统一入口 |
+| **享元模式** | `ViewTimeline` - 实体状态缓存 |
+| **建造者模式** | `IWorldHostBuilder` - 组件组装 |
+| **管线模式** | `ActorSpawnPipeline`, `SkillPipeline` - 流水线处理 |
+
+---
+
+## 十一、关键文件清单
+
+| 文件路径 | 说明 |
+|----------|------|
+| `com.abilitykit.host/Runtime/Host/Framework/HostRuntime.cs` | Host 运行时 |
+| `com.abilitykit.host/Runtime/Host/IWorldHost.cs` | WorldHost 接口 |
+| `com.abilitykit.host/Runtime/Host/Builder/IWorldHostBuilder.cs` | Builder 接口 |
+| `com.abilitykit.world.di/Runtime/World/Management/WorldManager.cs` | 世界管理器 |
+| `com.abilitykit.coordinator/Runtime/Core/SessionCoordinator.cs` | 会话协调器实现 |
+| `com.abilitykit.coordinator/Runtime/Core/ISessionCoordinator.cs` | 会话协调器接口 |
+| `com.abilitykit.coordinator/Runtime/Core/ISessionCoordinatorHost.cs` | 宿主接口 |
+| `com.abilitykit.coordinator/Runtime/Core/SessionHooks.cs` | 生命周期钩子 |
+| `com.abilitykit.coordinator/Runtime/SubFeatures/ISessionSubFeature.cs` | SubFeature 接口 |
+| `com.abilitykit.host.extension/Runtime/Moba/Shared/Room/MobaRoomState.cs` | 房间状态 |
+| `com.abilitykit.host.extension/Runtime/Moba/Server/Room/MobaRoomOrchestrator.cs` | 房间编排器 |
+| `com.abilitykit.host.extension/Runtime/Moba/Shared/Room/IMobaRoomOrchestrator.cs` | 房间编排器接口 |
+| `com.abilitykit.demo.moba.runtime/Session/MobaBattleDriverHost.cs` | 战斗驱动宿主 |
+| `com.abilitykit.demo.moba.runtime/Services/EnterGame/MobaEnterGameFlowService.cs` | 实体创建入口 |
+| `com.abilitykit.demo.moba.runtime/Services/Input/MobaLobbyInputSink.cs` | 输入处理 |
+| `com.abilitykit.demo.moba.runtime/Services/Snapshot/MobaSnapshotRouter.cs` | 快照聚合 |
+| `com.abilitykit.demo.moba.runtime/Util/Generator/ActorSpawnPipeline.cs` | 实体生成管线 |
+
+---
+
+## 十二、禁止事项
+
+| 禁止 | 说明 | 正确做法 |
+|------|------|----------|
+| ❌ Host 包包含游戏逻辑 | Host 只负责世界管理和网络 | 游戏逻辑放在 Host Extension / moba.runtime |
 | ❌ Coordinator 包含具体游戏逻辑 | Coordinator 是通用框架 | 具体逻辑放在游戏层 |
 | ❌ Host Extension 依赖具体游戏层 | Host Extension 是业务扩展 | 游戏层依赖 Host Extension |
+| ❌ 在 Game 层实现战斗逻辑 | Game 层只协调 | 在 moba.runtime 实现 |
 | ❌ 循环依赖 | 依赖关系必须是有向无环图 | 分层依赖 |

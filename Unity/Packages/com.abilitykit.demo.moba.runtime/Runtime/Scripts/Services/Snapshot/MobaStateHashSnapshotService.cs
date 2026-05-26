@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaStateHashSnapshotService))]
     public sealed class MobaStateHashSnapshotService : IService
     {
         private readonly MobaGamePhaseService _phase;

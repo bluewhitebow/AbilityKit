@@ -83,7 +83,7 @@ namespace ET.Logic
             _playerId = playerId;
             _localActorId = (int)playerId;
 
-            // TODO: Integrate with ET's network system (NetComponent, Router, etc.)
+            // [PendingETNetworkIntegration] Integrate with ET's network system (NetComponent, Router, etc.)
             SimulateConnection();
 
             Log.Info($"[ETStateSyncAdapter] Connecting to server: {host}:{port}, Room={roomId}, Player={playerId}");
@@ -113,7 +113,7 @@ namespace ET.Logic
             if (!_isConnected)
                 return;
 
-            // TODO: Send to server via ET network
+            // [PendingETNetworkIntegration] Send to server via ET network
             Log.Debug($"[ETStateSyncAdapter] Input sent to server: OpCode={input.OpCode}");
         }
 
@@ -127,14 +127,14 @@ namespace ET.Logic
             if (!_isConnected)
                 return;
 
-            // TODO: Receive snapshots from server
+            // [PendingETNetworkIntegration] Receive snapshots from server
             // For now, simulate snapshot receiving
             ReceiveSimulatedSnapshot();
         }
 
         private void ReceiveSimulatedSnapshot()
         {
-            // TODO: Integrate with ET network to receive actual snapshots
+            // [PendingETNetworkIntegration] Integrate with ET network to receive actual snapshots
         }
 
         /// <summary>

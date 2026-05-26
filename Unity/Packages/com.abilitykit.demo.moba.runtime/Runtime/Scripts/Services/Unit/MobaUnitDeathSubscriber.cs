@@ -2,12 +2,15 @@
 using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
+using AbilityKit.Demo.Moba.Events.Unit;
 using StableStringId = AbilityKit.Triggering.Eventing.StableStringId;
 
 namespace AbilityKit.Demo.Moba.Services
 {
     using AbilityKit.Demo.Moba;
+    [WorldService(typeof(MobaUnitDeathSubscriber))]
     public sealed class MobaUnitDeathSubscriber : IService
     {
         private readonly AbilityKit.Triggering.Eventing.IEventBus _eventBus;

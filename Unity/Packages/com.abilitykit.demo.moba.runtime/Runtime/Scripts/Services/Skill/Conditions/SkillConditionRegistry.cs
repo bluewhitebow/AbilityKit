@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
@@ -11,6 +12,7 @@ namespace AbilityKit.Demo.Moba.Services
     /// 技能条件注册表
     /// 提供技能条件的发现、注册和创建
     /// </summary>
+    [WorldService(typeof(SkillConditionRegistry))]
     public sealed class SkillConditionRegistry : IService
     {
         private readonly Dictionary<string, ConditionDescriptor> _byId = new Dictionary<string, ConditionDescriptor>(StringComparer.OrdinalIgnoreCase);

@@ -136,15 +136,18 @@ namespace ET.Logic
         public List<ActorSpawnData> BuildActorSpawns(List<ETPlayerSpawnData> players)
         {
             var spawns = new List<ActorSpawnData>();
+            int nextEntityCode = 1;
 
             foreach (var player in players)
             {
                 int actorId = player.ActorId;
+                int entityCode = nextEntityCode++;
                 float hp = player.Hp > 0 ? player.Hp : 200f;
                 float maxHp = player.MaxHp > 0 ? player.MaxHp : hp;
 
                 spawns.Add(new ActorSpawnData(
                     actorId,
+                    entityCode,
                     player.CharacterId,
                     player.CharacterName,
                     player.PositionX,
@@ -156,7 +159,7 @@ namespace ET.Logic
                     hp,
                     maxHp));
 
-                Log.Info($"[ETConfigLoaderService] Built spawn: ActorId={actorId}, Character={player.CharacterName}, Team={player.TeamId}, HP={hp}");
+                Log.Info($"[ETConfigLoaderService] Built spawn: ActorId={actorId}, EntityCode={entityCode}, Character={player.CharacterName}, Team={player.TeamId}");
             }
 
             return spawns;
@@ -168,23 +171,26 @@ namespace ET.Logic
         public List<ActorSpawnData> CreateDefaultSpawns(int playerActorId = 1)
         {
             var spawns = new List<ActorSpawnData>();
+            int nextEntityCode = 1;
+
+            // 使用 DeterministicHash 计算 ActorId
+            int playerActorIdHashed = DeterministicHash.StringToActorId(playerActorId.ToString());
 
             // Player character
             spawns.Add(new ActorSpawnData(
-                playerActorId, 1001, "Hero_001",
+                playerActorIdHashed, nextEntityCode++, 1001, "Hero_001",
                 0f, 0f, 0f, 0f, 1f,
                 1, 200f, 200f));
 
             // Default minions
-            spawns.Add(new ActorSpawnData(
-                2001, 2001, "Enemy_Minion_1",
-                10f, 0f, 5f, 0f, 1f,
-                2, 80f, 80f));
-
-            spawns.Add(new ActorSpawnData(
-                2002, 2001, "Enemy_Minion_2",
-                10f, 0f, -5f, 0f, 1f,
-                2, 80f, 80f));
+            for (int i = 1; i <= 2; i++)
+            {
+                int minionActorId = DeterministicHash.StringToActorId((2000 + i).ToString());
+                spawns.Add(new ActorSpawnData(
+                    minionActorId, nextEntityCode++, 2001, $"Enemy_Minion_{i}",
+                    10f, 0f, i * 5f, 0f, 1f,
+                    2, 80f, 80f));
+            }
 
             Log.Info($"[ETConfigLoaderService] Created {spawns.Count} default spawns");
 
@@ -228,7 +234,16 @@ namespace ET.Logic
     /// </summary>
     public class ETPlayerSpawnData
     {
+        /// <summary>
+        /// 玩家 ID（字符串，用于生成确定性 ActorId）
+        /// </summary>
+        public string PlayerId { get; set; }
+
+        /// <summary>
+        /// 运行时 ActorId（通过 DeterministicHash 从 PlayerId 计算）
+        /// </summary>
         public int ActorId { get; set; }
+
         public int CharacterId { get; set; }
         public string CharacterName { get; set; }
         public int TeamId { get; set; }
@@ -242,11 +257,33 @@ namespace ET.Logic
 
         public ETPlayerSpawnData()
         {
+            PlayerId = string.Empty;
         }
 
+        public ETPlayerSpawnData(string playerId, int characterId, string characterName, int teamId,
+            float x, float y, float z)
+        {
+            PlayerId = playerId;
+            ActorId = DeterministicHash.StringToActorId(playerId);
+            CharacterId = characterId;
+            CharacterName = characterName;
+            TeamId = teamId;
+            PositionX = x;
+            PositionY = y;
+            PositionZ = z;
+            RotationY = 0f;
+            Scale = 1f;
+            Hp = 500f;
+            MaxHp = 500f;
+        }
+
+        /// <summary>
+        /// 构造函数（兼容旧代码，使用 actorId 直接赋值）
+        /// </summary>
         public ETPlayerSpawnData(int actorId, int characterId, string characterName, int teamId,
             float x, float y, float z)
         {
+            PlayerId = actorId.ToString();
             ActorId = actorId;
             CharacterId = characterId;
             CharacterName = characterName;
@@ -263,6 +300,7 @@ namespace ET.Logic
         public ETPlayerSpawnData(int actorId, int characterId, string characterName, int teamId,
             float x, float y, float z, float rotY, float scale, float hp, float maxHp)
         {
+            PlayerId = actorId.ToString();
             ActorId = actorId;
             CharacterId = characterId;
             CharacterName = characterName;

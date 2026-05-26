@@ -35,14 +35,18 @@ namespace ET.Logic
                     team2Count++;
                 }
 
+                // 使用 DeterministicHash 计算 ActorId（与 moba.core 一致）
                 var spawnData = new ETPlayerSpawnData(
-                    player.PlayerId,
+                    DeterministicHash.StringToActorId(player.PlayerId.ToString()),
                     player.CharacterId,
                     player.PlayerName,
                     player.TeamId,
                     x,
                     0f,
-                    z);
+                    z)
+                {
+                    PlayerId = player.PlayerId.ToString()
+                };
 
                 spawnList.Add(spawnData);
             }
@@ -70,6 +74,7 @@ namespace ET.Logic
                 return players;
             }
 
+            // 使用 DeterministicHash 计算本地玩家的 ActorId
             int actorIdBase = localPlayerId > 0 ? localPlayerId : 1;
 
             // Team 1 本地玩家
@@ -79,8 +84,16 @@ namespace ET.Logic
                 float hp = attrs?.Hp ?? 500f;
                 float maxHp = (attrs?.MaxHp > 0 ? attrs.MaxHp : hp);
 
-                players.Add(new ETPlayerSpawnData(actorIdBase, heroConfig.Id, heroConfig.Name, 1, 0f, 0f, 0f));
-                Log.Info($"[PlayerSpawnBuilder] Loaded player: {heroConfig.Name} (Team 1)");
+                // 使用 DeterministicHash 计算 ActorId
+                string playerIdStr = actorIdBase.ToString();
+                int actorId = DeterministicHash.StringToActorId(playerIdStr);
+                
+                var spawnData = new ETPlayerSpawnData(actorId, heroConfig.Id, heroConfig.Name, 1, 0f, 0f, 0f)
+                {
+                    PlayerId = playerIdStr
+                };
+                players.Add(spawnData);
+                Log.Info($"[PlayerSpawnBuilder] Loaded player: {heroConfig.Name} (Team 1, ActorId={actorId})");
             }
 
             // Team 1 AI
@@ -93,8 +106,16 @@ namespace ET.Logic
                     float hp = aiAttr?.Hp ?? 500f;
                     float maxHp = (aiAttr?.MaxHp > 0 ? aiAttr.MaxHp : hp);
 
-                    players.Add(new ETPlayerSpawnData(actorIdBase + i, aiConfig.Id, aiConfig.Name, 1, 10f * (i - 1), 0f, 0f));
-                    Log.Info($"[PlayerSpawnBuilder] Loaded AI: {aiConfig.Name} (Team 1)");
+                    // 使用 DeterministicHash 计算 ActorId
+                    string aiPlayerId = (actorIdBase + i).ToString();
+                    int aiActorId = DeterministicHash.StringToActorId(aiPlayerId);
+
+                    var spawnData = new ETPlayerSpawnData(aiActorId, aiConfig.Id, aiConfig.Name, 1, 10f * (i - 1), 0f, 0f)
+                    {
+                        PlayerId = aiPlayerId
+                    };
+                    players.Add(spawnData);
+                    Log.Info($"[PlayerSpawnBuilder] Loaded AI: {aiConfig.Name} (Team 1, ActorId={aiActorId})");
                 }
             }
 
@@ -108,8 +129,16 @@ namespace ET.Logic
                     float hp = enemyAttr?.Hp ?? 500f;
                     float maxHp = (enemyAttr?.MaxHp > 0 ? enemyAttr.MaxHp : hp);
 
-                    players.Add(new ETPlayerSpawnData(2000 + i, enemyConfig.Id, enemyConfig.Name, 2, 0f, 0f, 50f + 10f * (i - 1)));
-                    Log.Info($"[PlayerSpawnBuilder] Loaded enemy: {enemyConfig.Name} (Team 2)");
+                    // 使用 DeterministicHash 计算 ActorId
+                    string enemyPlayerId = (2000 + i).ToString();
+                    int enemyActorId = DeterministicHash.StringToActorId(enemyPlayerId);
+
+                    var spawnData = new ETPlayerSpawnData(enemyActorId, enemyConfig.Id, enemyConfig.Name, 2, 0f, 0f, 50f + 10f * (i - 1))
+                    {
+                        PlayerId = enemyPlayerId
+                    };
+                    players.Add(spawnData);
+                    Log.Info($"[PlayerSpawnBuilder] Loaded enemy: {enemyConfig.Name} (Team 2, ActorId={enemyActorId})");
                 }
             }
 

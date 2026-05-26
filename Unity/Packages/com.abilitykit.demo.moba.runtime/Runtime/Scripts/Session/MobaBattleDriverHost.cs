@@ -9,6 +9,7 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Protocol.Moba.StateSync;
 using MobaOpCode = AbilityKit.Demo.Moba.Services.MobaOpCode;
 using MobaSnapshotRouter = AbilityKit.Demo.Moba.Services.MobaSnapshotRouter;
+using AbilityKit.Demo.Moba.Services;
 
 namespace AbilityKit.Demo.Moba.Session
 {
@@ -55,13 +56,18 @@ namespace AbilityKit.Demo.Moba.Session
 
         /// <summary>
         /// 订阅快照事件
-        /// 在 HostRuntime 的帧循环中，通过 IWorldStateSnapshotProvider 获取快照
+        ///
+        /// 快照获取在 AdvanceFrame() 中进行，通过 TryGetTransformSnapshot() 方法
+        /// 在每个逻辑帧结束后（HostRuntime.Tick 之后）获取最新的快照数据
+        ///
+        /// 这种设计确保：
+        /// 1. ECS 系统已经执行完成，快照数据是最新的
+        /// 2. 快照获取与帧推进同步，不会出现竞态条件
+        /// 3. 不需要依赖 HostRuntimeOptions 的修改
         /// </summary>
         private void SubscribeToSnapshots()
         {
-            // TODO: 实现快照订阅机制
-            // 方案：1. 通过 HostRuntimeOptions 的 PreTick/PostTick 钩子
-            //       2. 或通过事件系统订阅快照
+            Log.Info("[MobaBattleDriverHost] Snapshot subscription initialized (acquired per frame in AdvanceFrame)");
         }
 
         /// <summary>
@@ -125,9 +131,51 @@ namespace AbilityKit.Demo.Moba.Session
 
         public EntityState[] GetAllEntityStates()
         {
-            // 位置查询通过快照事件机制，不再直接查询
-            // 如果需要初始快照，返回之前设置的状态
-            return Array.Empty<EntityState>();
+            // 通过服务接口获取实体状态
+            // 这是一个同步查询接口，用于获取当前帧的实体状态
+            // 主要用于初始快照或调试目的
+
+            if (_world?.Services == null)
+            {
+                return Array.Empty<EntityState>();
+            }
+
+            // 通过 MobaActorRegistry 获取所有 Actor 实体状态
+            if (!_world.Services.TryResolve<MobaActorRegistry>(out var registry))
+            {
+                return Array.Empty<EntityState>();
+            }
+
+            var entries = registry.Entries;
+            var states = new List<EntityState>(8);
+
+            foreach (var kv in entries)
+            {
+                var actorId = kv.Key;
+                var entity = kv.Value;
+                if (entity == null) continue;
+
+                var state = new EntityState(actorId);
+
+                // 获取实体的 Transform 信息（核心位置数据）
+                if (entity.hasTransform)
+                {
+                    var pos = entity.transform.Value.Position;
+                    state.X = pos.X;
+                    state.Y = pos.Y;
+                    state.Z = pos.Z;
+                }
+
+                // Team 信息
+                if (entity.hasTeam)
+                {
+                    state.TeamId = (int)entity.team.Value;
+                }
+
+                states.Add(state);
+            }
+
+            return states.ToArray();
         }
 
         public void AdvanceFrame(float deltaTime)

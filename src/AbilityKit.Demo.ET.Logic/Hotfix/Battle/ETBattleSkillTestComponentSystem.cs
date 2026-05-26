@@ -5,7 +5,7 @@ namespace ET.Logic
 {
     /// <summary>
     /// ETBattleSkillTestComponent System
-    /// Handles skill test logic
+    /// 处理所有技能测试业务逻辑
     /// </summary>
     [EntitySystemOf(typeof(ETBattleSkillTestComponent))]
     [FriendOf(typeof(ETBattleSkillTestComponent))]
@@ -16,7 +16,6 @@ namespace ET.Logic
         [EntitySystem]
         private static void Awake(this ETBattleSkillTestComponent self)
         {
-            Log.Info("[ETBattleSkillTest] System awake");
         }
 
         [EntitySystem]
@@ -27,11 +26,70 @@ namespace ET.Logic
         [EntitySystem]
         private static void Destroy(this ETBattleSkillTestComponent self)
         {
-            Log.Info($"[ETBattleSkillTest] System destroyed. Total skill casts: {self.SkillCastCount}");
+            Log.Info($"[ETBattleSkillTest] Destroyed. Total skill casts: {self.SkillCastCount}");
         }
 
         /// <summary>
-        /// Enable skill test
+        /// 初始化技能测试
+        /// </summary>
+        public static void Initialize(this ETBattleSkillTestComponent self, int actorId, int skillSlot = 0)
+        {
+            self.Initialize(actorId, skillSlot);
+            Log.Info($"[ETBattleSkillTest] Initialized for ActorId={actorId}, SkillSlot={skillSlot}");
+        }
+
+        /// <summary>
+        /// 每帧更新 - 检查是否需要释放技能
+        /// </summary>
+        public static void OnUpdate(this ETBattleSkillTestComponent self, int frame)
+        {
+            if (!self.IsEnabled)
+                return;
+
+            // 每隔指定帧数释放技能
+            if (frame - self.LastCastFrame >= self.SkillIntervalFrames)
+            {
+                CastSkill(self, frame);
+                self.LastCastFrame = frame;
+            }
+        }
+
+        /// <summary>
+        /// 释放技能
+        /// </summary>
+        private static void CastSkill(ETBattleSkillTestComponent self, int currentFrame)
+        {
+            var inputComponent = self.Scene().GetComponent<ETInputComponent>();
+            if (inputComponent == null)
+            {
+                Log.Warning("[ETBattleSkillTest] ETInputComponent not found!");
+                return;
+            }
+
+            // 获取单位位置作为技能目标
+            float targetX = 0f;
+            float targetY = 0f;
+
+            var unitComponent = self.Scene().GetComponent<ETUnitComponent>();
+            if (unitComponent != null)
+            {
+                var unit = ETUnitComponentSystem.GetUnit(unitComponent, self.TestActorId);
+                if (unit != null)
+                {
+                    targetX = unit.X + 5f; // 在单位前方释放
+                    targetY = unit.Y;
+                }
+            }
+
+            // 添加技能命令
+            inputComponent.AddSkillCommand(currentFrame, self.TestActorId, self.SkillSlot, targetX, targetY);
+            self.SkillCastCount++;
+
+            Log.Info($"[ETBattleSkillTest] Skill cast: Frame={currentFrame}, ActorId={self.TestActorId}, Slot={self.SkillSlot}, Target=({targetX:F2}, {targetY:F2})");
+        }
+
+        /// <summary>
+        /// 启用技能测试
         /// </summary>
         public static void Enable(this ETBattleSkillTestComponent self)
         {
@@ -40,7 +98,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Disable skill test
+        /// 禁用技能测试
         /// </summary>
         public static void Disable(this ETBattleSkillTestComponent self)
         {

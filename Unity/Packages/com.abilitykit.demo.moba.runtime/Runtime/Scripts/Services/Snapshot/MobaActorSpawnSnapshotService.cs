@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaActorSpawnSnapshotService))]
     public sealed class MobaActorSpawnSnapshotService : IWorldStateSnapshotProvider
     {
         private bool _hasSnapshot;

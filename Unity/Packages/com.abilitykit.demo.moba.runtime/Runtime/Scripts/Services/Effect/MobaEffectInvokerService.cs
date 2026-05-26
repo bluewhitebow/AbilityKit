@@ -3,12 +3,14 @@ using AbilityKit.Core.Generic;
 using AbilityKit.Effect;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Pipeline;
 
 namespace AbilityKit.Demo.Moba.Services
 {
     using AbilityKit.Demo.Moba;
     using AbilityKit.Ability;
+    [WorldService(typeof(MobaEffectInvokerService))]
     public sealed class MobaEffectInvokerService : IService
     {
         private readonly MobaEffectExecutionService _effects;

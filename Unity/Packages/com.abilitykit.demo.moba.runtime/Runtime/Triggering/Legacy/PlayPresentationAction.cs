@@ -11,6 +11,7 @@ using AbilityKit.Ability.World.Services;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Pipeline;
+using AbilityKit.Demo.Moba.Services.Search;
 
 namespace AbilityKit.Demo.Moba.Triggering
 {
@@ -248,7 +249,7 @@ namespace AbilityKit.Demo.Moba.Triggering
                 var qid = ReadInt(args, "queryTemplateId", 0);
                 if (qid <= 0) return false;
 
-                var search = context.Services != null ? context.Services.GetService(typeof(AbilityKit.Demo.Moba.Services.SearchTargetService)) as AbilityKit.Demo.Moba.Services.SearchTargetService : null;
+                var search = context.Services != null ? context.Services.GetService(typeof(AbilityKit.Demo.Moba.Services.Search.SearchTargetService)) as AbilityKit.Demo.Moba.Services.Search.SearchTargetService : null;
                 if (search == null) return false;
 
                 // Caster/AimPos come from pipeline payload if possible

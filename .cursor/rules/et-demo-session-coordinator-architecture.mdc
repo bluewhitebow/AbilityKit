@@ -12,12 +12,15 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 ### 1.1 核心定位
 
 **关键理解**：
-- **ET.Logic** = 逻辑层的**表现层**（数据缓存）
+- **ET.Logic** = 逻辑层的**表现层**（数据缓存 + 入口协调）
 - **ET.View** = 表现层的**渲染层**（读取缓存渲染）
+- **moba.runtime** = 真正的**战斗逻辑世界层**（所有业务逻辑）
+
+### 1.2 完整架构分层图
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         ET Demo 架构分层图                                   │
+│                           完整架构分层图                                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -35,6 +38,7 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 │  │   ETBattleSessionComponent ─── 持有 Coordinator 句柄                    │   │
 │  │   ETInputComponent ─── 输入缓冲                                       │   │
 │  │   ETUnitComponent ─── 单位管理                                        │   │
+│  │   ETMobaBattleDriver ─── 入口协调器（通过 MobaEnterGameFlowService） │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    ▲                                        │
 │                                    │ 接收快照                                │
@@ -48,9 +52,15 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 │                                    ▲                                        │
 │                                    │                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │              Moba.Session (com.abilitykit.demo.moba.runtime)          │   │
+│  │              moba.runtime (战斗逻辑世界层) ⭐                         │   │
+│  │              (com.abilitykit.demo.moba.runtime)                     │   │
 │  │                                                                       │   │
-│  │   MobaBattleDriverHost ────────────── MOBA 战斗驱动宿主               │   │
+│  │   MobaBattleDriverHost ────────────── 驱动宿主                        │   │
+│  │   MobaEnterGameFlowService ───────── 入口服务（实体创建）              │   │
+│  │   MobaLobbyInputSink ─────────────── 输入处理                         │   │
+│  │   SkillExecutor ─────────────────── 技能执行                          │   │
+│  │   DamagePipelineService ──────────── 伤害计算                          │   │
+│  │   MobaSnapshotRouter ────────────── 快照聚合                          │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    ▲                                        │
 │                                    │                                        │
@@ -62,10 +72,12 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 │                                    ▲                                        │
 │                                    │                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │              moba.core (com.abilitykit.demo.moba.runtime)            │   │
+│  │              moba.core (ECS 世界层)                                 │   │
+│  │              (com.abilitykit.demo.moba.runtime)                     │   │
 │  │                                                                       │   │
-│  │   ECS World ───────────────────────── 逻辑世界（实体/移动/战斗）      │   │
+│  │   ActorContext ───────────────────── 实体上下文                       │   │
 │  │   MobaEntityManager ───────────────── 实体管理                        │   │
+│  │   MobaActorRegistry ───────────────── ActorId 注册                    │   │
 │  │   IWorldStateSnapshotProvider ──────── 快照提供者                     │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
@@ -82,26 +94,65 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 
 | 交互方向 | 入口接口 | 说明 |
 |---------|---------|------|
-| **输入** | `IWorldInputSink.Submit()` | 提交玩家输入 |
-| **状态查询** | `IWorldStateSnapshotProvider` | 获取快照数据 |
+| **输入提交** | `IWorldInputSink.Submit()` | 提交玩家输入（移动、技能等） |
+| **实体创建** | `MobaEnterGameFlowService.ApplyGameStartSpec()` | 创建游戏实体 |
+| **状态查询** | `IWorldStateSnapshotProvider` | 获取快照数据（通过回调） |
 
 **禁止**：
-- ❌ 直接访问 `MobaEntityManager` 或实体
-- ❌ 通过服务解析获取 `MobaEntityManager` 并操作实体
-- ❌ 在 ET.Logic 层创建 moba.core 实体
+- ❌ 直接访问 `MobaEntityManager` 或实体进行操作
+- ❌ 直接调用 `ActorArchetypeFactory.Create()` 创建实体
+- ❌ 直接调用 `MobaEntityManager.Register()` 注册实体
+- ❌ 直接查询实体位置或属性
 
 ### 2.2 表现层职责分离
 
 | 层 | 职责 | 禁止 |
 |---|------|------|
-| **ET.Logic** | - 缓存 moba.core 快照数据<br>- 管理输入缓冲<br>- 驱动 SessionCoordinator | - 渲染逻辑<br>- 访问 moba.core 实体 |
+| **ET.Logic** | - 缓存 moba.core 快照数据<br>- 管理输入缓冲<br>- 通过 `MobaEnterGameFlowService` 协调实体创建<br>- 驱动 SessionCoordinator | - 直接操作 moba.core 实体<br>- 渲染逻辑 |
 | **ET.View** | - 读取缓存渲染<br>- 仅日志输出 | - 业务逻辑<br>- 修改缓存数据 |
 
 ---
 
 ## 三、核心组件
 
-### 3.1 ETBattleEntityCacheComponent
+### 3.1 ETMobaBattleDriver（入口协调器）
+
+**职责**：ET.Logic 层的入口协调器，通过 moba.core 服务与战斗逻辑世界交互。
+
+```csharp
+// ETMobaBattleDriver.cs - 入口协调器
+public sealed class ETMobaBattleDriver : Entity, IBattleDriver
+{
+    // ✅ 正确：通过服务委托
+    private void TriggerEnterGameSnapshot()
+    {
+        // 获取 MobaEnterGameFlowService
+        if (!TryResolve<MobaEnterGameFlowService>(out var enterGameService))
+            return;
+
+        // 构建 MobaGameStartSpec
+        var spec = new MobaGameStartSpec(in enterReq);
+
+        // 委托给 moba.core 服务
+        enterGameService.ApplyGameStartSpec(actorContext, in spec);
+
+        // 从 MobaActorRegistry 获取创建的实体信息
+        // 不直接操作实体，只查询
+    }
+
+    // ✅ 正确：通过 IWorldInputSink 提交输入
+    public void SubmitMoveInput(int actorId, float x, float z)
+    {
+        _inputSink.Submit(frame, commands);
+    }
+
+    // ❌ 错误：直接创建实体
+    // var built = ActorArchetypeFactory.Create(actorContext, info);  // ❌
+    // entityManager.Register(actorId, entity, ...);  // ❌
+}
+```
+
+### 3.2 ETBattleEntityCacheComponent
 
 **职责**：缓存 moba.core 快照数据，供 ET.View 渲染使用。
 
@@ -109,58 +160,37 @@ ET Demo 采用 **SessionCoordinator 架构**，将 AbilityKit 的通用会话协
 [ComponentOf(typeof(Scene))]
 public class ETBattleEntityCacheComponent : Entity, IAwake, IDestroy
 {
-    // 实体缓存字典
     private readonly Dictionary<int, EntityCacheData> _entityCache = new();
-    
-    // 当前缓存的帧号
     public int CachedFrame { get; private set; }
-    
-    // 更新缓存
+
     public void UpdateCache(int frame, IReadOnlyList<ActorTransformData> transforms);
-    
-    // 查询位置
     public bool TryGetPosition(int actorId, out float x, out float y, out float z);
 }
 ```
 
-### 3.2 EntityCacheData
+### 3.3 MobaEnterGameFlowService（moba.core 入口服务）
 
-**职责**：单个实体的缓存数据。
-
-```csharp
-public sealed class EntityCacheData
-{
-    public int ActorId { get; }
-    public float X { get; private set; }
-    public float Y { get; private set; }
-    public float Z { get; private set; }
-    public float PrevX { get; private set; }  // 上一帧位置（用于插值）
-    public float PrevY { get; private set; }
-    public float PrevZ { get; private set; }
-    public bool IsDead { get; private set; }
-    public int LastUpdateFrame { get; private set; }
-    
-    public bool HasMoved();  // 位置是否变化
-}
-```
-
-### 3.3 MobaBattleDriverHost
-
-**职责**：MOBA 战斗驱动宿主，通过服务接口与 moba.core 交互。
+**职责**：moba.core 内部的入口服务，负责创建实体和发布初始快照。
 
 ```csharp
-public sealed class MobaBattleDriverHost : IBattleDriverHost
+// moba.runtime - MobaEnterGameFlowService.cs
+public sealed class MobaEnterGameFlowService : IService
 {
-    // 通过 IWorldInputSink 提交输入（唯一入口）
-    public void SubmitInputs(PlayerInput[] inputs);
-    
-    // 设置位置快照回调
-    public void SetTransformSnapshotCallback(Action<int, MobaActorTransformSnapshotEntry[]> callback);
-    
-    // 帧推进（驱动 moba.core Tick）
-    public void AdvanceFrame(float deltaTime);
-    
-    // 禁止：GetAllEntityStates() 不再直接返回实体状态
+    public bool ApplyGameStartSpec(ActorContext actorContext, in MobaGameStartSpec spec)
+    {
+        // 内部调用 ActorSpawnPipeline 创建实体
+        var built = ActorSpawnPipeline.BuildActorsFromEnterGameReqAndInitialize(
+            actorContext, actorIds, registry, entities,
+            effectiveReq,
+            initializer: (entity, loadout) => { /* 初始化属性 */ },
+            onActorBuilt: (entity, loadout) => { /* 发布 spawn 快照 */ });
+
+        // 发布 EnterGameSnapshot 到视图层
+        _snapshot.PublishEnterGameResPayload(...);
+        _spawn.PublishSpawnPayload(...);
+
+        return true;
+    }
 }
 ```
 
@@ -168,7 +198,42 @@ public sealed class MobaBattleDriverHost : IBattleDriverHost
 
 ## 四、数据流
 
-### 4.1 快照同步流程
+### 4.1 实体创建流程（单一入口）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          实体创建流程（单一入口）                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. ETMobaBattleDriver.OnAllPlayersReady()                                │
+│     └─▶ TriggerEnterGameSnapshot()                                        │
+│                                                                             │
+│  2. 构建 MobaGameStartSpec                                               │
+│     └─▶ 创建 EnterMobaGameReq                                            │
+│     └─▶ 创建 MobaPlayerLoadout[]                                        │
+│                                                                             │
+│  3. 调用 MobaEnterGameFlowService.ApplyGameStartSpec()  ← 唯一入口     │
+│     └─▶ ActorSpawnPipeline.BuildActorsFromEnterGameReqAndInitialize()    │
+│     └─▶ 创建 ActorEntity（moba.core 内部）                               │
+│     └─▶ 发布 ActorSpawnSnapshot                                          │
+│                                                                             │
+│  4. ETMobaBattleDriver 查询实体信息                                       │
+│     └─▶ MobaActorRegistry.TryGet() → 获取 ActorId                       │
+│     └─▶ MobaPlayerActorMapService → 获取 PlayerId -> ActorId 映射        │
+│                                                                             │
+│  5. 创建 ETUnit（ET 表现层单位）                                          │
+│     └─▶ unitComponent.CreateUnit(actorId, ...)                           │
+│                                                                             │
+│  6. 发送 EnterGameSnapshot 到视图层                                        │
+│     └─▶ ViewSink.OnEnterGameSnapshot()                                   │
+│                                                                             │
+│  ❌ 禁止：ET.Logic 直接调用 ActorArchetypeFactory.Create()              │
+│  ❌ 禁止：ET.Logic 直接调用 MobaEntityManager.Register()               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 快照同步流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -197,7 +262,7 @@ public sealed class MobaBattleDriverHost : IBattleDriverHost
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 输入处理流程
+### 4.3 输入处理流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -225,7 +290,7 @@ public sealed class MobaBattleDriverHost : IBattleDriverHost
 │                                                                             │
 │  7. moba.core (IWorldInputSink 实现)                                     │
 │     └─▶ MobaLobbyInputSink.HandleMove()                                  │
-│     └─▶ entity.AddMoveInput(x, z)                                        │
+│     └─▶ entity.AddMoveInput(x, z)  ← moba.core 内部操作               │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -281,9 +346,10 @@ public class ActorMoveEventHandler : AEvent<Scene, ActorMoveEvent>
 
 | 禁止 | 说明 | 正确做法 |
 |-----|------|---------|
-| ❌ 直接访问 `MobaEntityManager` | 违反单一入口原则 | 通过 `IWorldInputSink` 提交输入 |
+| ❌ 直接访问 `MobaEntityManager` | 违反单一入口原则 | 通过服务接口查询 |
+| ❌ 直接调用 `ActorArchetypeFactory.Create()` | 直接操作 moba.core | 通过 `MobaEnterGameFlowService` |
+| ❌ 直接调用 `MobaEntityManager.Register()` | 直接操作 moba.core | 通过 `MobaEnterGameFlowService` |
 | ❌ 直接查询实体位置 | 违反单一入口原则 | 通过快照回调更新缓存 |
-| ❌ 在 ET.Logic 创建 moba.core 实体 | 应该在 moba.core 内部创建 | 通过输入触发实体生成 |
 
 ### 6.2 层级禁止
 
@@ -301,20 +367,31 @@ public class ActorMoveEventHandler : AEvent<Scene, ActorMoveEvent>
 
 | 文件 | 职责 |
 |-----|------|
+| `Model/Driver/ETMobaBattleDriver.cs` | 入口协调器（通过服务与 moba.core 交互） |
 | `Model/Battle/ETBattleEntityCacheComponent.cs` | 实体状态缓存 |
 | `Model/Battle/ETBattleSessionComponent.cs` | 会话组件 |
 | `Hotfix/Battle/ETBattleDriverBridge.cs` | 驱动桥接（快照回调） |
 | `Hotfix/Battle/ETInputComponentSystem.cs` | 输入处理 |
-| `Hotfix/Battle/ETBattleSessionComponentSystem.cs` | 会话生命周期 |
 
-### 7.2 Unity Packages
+### 7.2 moba.runtime 层
 
 | 文件 | 职责 |
 |-----|------|
-| `MobaBattleDriverHost.cs` | 驱动宿主（服务接口封装） |
-| `SessionCoordinator.cs` | 会话协调器 |
-| `MobaLobbyInputSink.cs` | 输入处理（moba.core） |
-| `MobaActorTransformSnapshotService.cs` | 快照服务 |
+| `Services/EnterGame/MobaEnterGameFlowService.cs` | 实体创建入口服务 |
+| `Services/Input/MobaLobbyInputSink.cs` | 输入处理（IWorldInputSink 实现） |
+| `Services/Snapshot/MobaSnapshotRouter.cs` | 快照聚合 |
+| `Services/Skill/Cast/SkillExecutor.cs` | 技能执行 |
+| `Services/Combat/Damage/DamagePipelineService.cs` | 伤害计算 |
+| `Services/EntityManager/MobaEntityManager.cs` | 实体管理 |
+| `Util/Generator/ActorSpawnPipeline.cs` | 实体生成管线 |
+
+### 7.3 ET.View 层
+
+| 文件 | 职责 |
+|-----|------|
+| `Hotfix/Battle/ActorSpawnEventHandler.cs` | 单位创建事件处理 |
+| `Hotfix/Battle/ActorMoveEventHandler.cs` | 单位移动事件处理 |
+| `Model/Unit/ViewComponents/ETUnitViewComponent.cs` | 单位视图组件 |
 
 ---
 
@@ -323,9 +400,10 @@ public class ActorMoveEventHandler : AEvent<Scene, ActorMoveEvent>
 开发时检查以下问题：
 
 ```
+□ 实体创建是否通过 MobaEnterGameFlowService.ApplyGameStartSpec()？
 □ 输入是否通过 IWorldInputSink.Submit() 提交？
 □ 快照是否通过回调更新到 ETBattleEntityCacheComponent？
 □ ET.View 是否只读取缓存，不访问 moba.core？
-□ 是否有代码直接访问 MobaEntityManager？
-□ 是否有代码在 ET.Logic 创建 moba.core 实体？
+□ 是否有代码直接调用 ActorArchetypeFactory.Create()？
+□ 是否有代码直接调用 MobaEntityManager.Register()？
 ```

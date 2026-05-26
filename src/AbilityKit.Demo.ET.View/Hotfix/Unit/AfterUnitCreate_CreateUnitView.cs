@@ -1,6 +1,6 @@
 using System;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// 实体创建后创建视图

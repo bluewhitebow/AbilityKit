@@ -11,7 +11,7 @@ namespace ET.AbilityKit.Demo.ET.Share
         public Type Type => typeof(ActorMoveEvent);
 
         /// <summary>
-        /// 逻辑层（MobaCore）的 ActorId
+        /// 运行时自增的 ActorId（唯一标识）
         /// </summary>
         public int ActorId;
 
@@ -24,5 +24,15 @@ namespace ET.AbilityKit.Demo.ET.Share
         /// Y 坐标
         /// </summary>
         public float Y;
+
+        /// <summary>
+        /// Z 坐标（高度）
+        /// </summary>
+        public float Z;
+
+        /// <summary>
+        /// 旋转角度（Y 轴旋转）
+        /// </summary>
+        public float Rotation;
     }
 }

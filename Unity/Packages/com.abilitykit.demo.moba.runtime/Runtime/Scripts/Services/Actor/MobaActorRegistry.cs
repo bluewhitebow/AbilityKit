@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaActorRegistry))]
     public sealed class MobaActorRegistry : IService
     {
         private readonly Dictionary<int, global::ActorEntity> _byId = new Dictionary<int, global::ActorEntity>();

@@ -1,9 +1,12 @@
 ﻿using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaEnterGameSnapshotService))]
     public sealed class MobaEnterGameSnapshotService : IWorldStateSnapshotProvider
     {
         private bool _hasSnapshot;

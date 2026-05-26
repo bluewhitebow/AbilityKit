@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaSkillLoadoutService))]
     public sealed class MobaSkillLoadoutService : IService
     {
         private readonly MobaActorLookupService _actors;

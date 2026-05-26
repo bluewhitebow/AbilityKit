@@ -7,6 +7,7 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Math;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Demo.Moba.Config.BattleDemo;
 using AbilityKit.Demo.Moba.Config.Core;
@@ -16,6 +17,8 @@ using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(IWorldInputSink))]
+    [WorldService(typeof(MobaLobbyInputSink))]
     public sealed class MobaLobbyInputSink : IWorldInputSink, IWorldInitializable
     {
         private readonly MobaGamePhaseService _phase;

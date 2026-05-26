@@ -294,7 +294,16 @@ namespace AbilityKit.Demo.Moba.Share
     /// </summary>
     public readonly struct ActorSpawnData
     {
+        /// <summary>
+        /// 运行时自增的 ActorId（唯一标识，从1开始）
+        /// </summary>
         public int ActorId { get; }
+
+        /// <summary>
+        /// 配置表的模板ID（用于表现层读取配置）
+        /// </summary>
+        public int EntityCode { get; }
+
         public int CharacterId { get; }
         public string Name { get; }
         public float PositionX { get; }
@@ -307,12 +316,13 @@ namespace AbilityKit.Demo.Moba.Share
         public float Hp { get; }
 
         public ActorSpawnData(
-            int actorId, int characterId, string name,
+            int actorId, int entityCode, int characterId, string name,
             float x, float y, float z,
             float rotationY, float scale,
             int teamId, float maxHp, float hp)
         {
             ActorId = actorId;
+            EntityCode = entityCode;
             CharacterId = characterId;
             Name = name;
             PositionX = x;

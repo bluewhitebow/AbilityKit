@@ -3,9 +3,11 @@ using AbilityKit.Ability.FrameSync;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaComponentTemplateService))]
     public sealed class MobaComponentTemplateService : IService
     {
         private readonly MobaConfigDatabase _config;

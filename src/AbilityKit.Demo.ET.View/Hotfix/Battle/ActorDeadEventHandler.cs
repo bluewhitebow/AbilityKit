@@ -1,7 +1,7 @@
 using System;
 using ET.AbilityKit.Demo.ET.Share;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// ActorDeadEvent 事件处理器
@@ -15,7 +15,7 @@ namespace ET.AbilityKit.Demo.ET.View
             var listener = scene.GetComponent<ETViewEventListener>();
             if (listener != null)
             {
-                var view = listener.GetUnitView(args.ActorId);
+                var view = listener.GetUnitView((int)args.ActorId);
                 if (view != null)
                 {
                     view.OnDead();
@@ -23,7 +23,7 @@ namespace ET.AbilityKit.Demo.ET.View
                 }
             }
 
-            Log.Debug($"[ActorDeadEventHandler] View not found for MobaActorId={args.ActorId}");
+            Log.Debug($"[ActorDeadEventHandler] View not found for ActorId={args.ActorId}");
         }
     }
 }

@@ -5,10 +5,12 @@ using AbilityKit.Ability.Host;
 using AbilityKit.Core.Common.Projectile;
 using AbilityKit.Demo.Moba.Services.Projectile;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
+    [WorldService(typeof(MobaProjectileEventSnapshotService))]
     public sealed class MobaProjectileEventSnapshotService : IService
     {
         private readonly AbilityKit.Demo.Moba.Services.MobaGamePhaseService _phase;

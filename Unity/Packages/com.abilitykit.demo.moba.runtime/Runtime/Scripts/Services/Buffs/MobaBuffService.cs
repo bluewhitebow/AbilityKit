@@ -14,11 +14,13 @@ using AbilityKit.Ability.World;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Triggering.Eventing;
 using EffectSourceRegistry = AbilityKit.Demo.Moba.EffectSource.MobaTraceRegistry;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaBuffService))]
     public sealed class MobaBuffService : IService
     {
         private enum BuffCommandKind

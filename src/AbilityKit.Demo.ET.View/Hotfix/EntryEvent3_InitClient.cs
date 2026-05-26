@@ -1,6 +1,6 @@
 using System;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// 客户端入口事件处理

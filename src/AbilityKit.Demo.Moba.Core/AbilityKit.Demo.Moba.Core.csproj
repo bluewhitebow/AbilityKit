@@ -57,6 +57,7 @@
     <ProjectReference Include="..\AbilityKit.Coordinator\AbilityKit.Coordinator.csproj" />
     <ProjectReference Include="..\AbilityKit.World.DI\AbilityKit.World.DI.csproj" />
     <ProjectReference Include="..\AbilityKit.World.Entitas\AbilityKit.World.Entitas.csproj" />
+    <ProjectReference Include="..\AbilityKit.Flow\AbilityKit.Flow.csproj" />
   </ItemGroup>
 
   <!-- NuGet Dependencies -->

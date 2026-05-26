@@ -8,6 +8,7 @@ using AbilityKit.Ability.Triggering;
 using AbilityKit.Demo.Moba.EffectSource;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Ability.Share.Impl.Moba.Struct;
 using AbilityKit.Triggering.Eventing;
@@ -15,6 +16,7 @@ using EffectSourceRegistry = AbilityKit.Demo.Moba.EffectSource.MobaTraceRegistry
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(SkillExecutor))]
     public sealed class SkillExecutor : IService
     {
         private readonly IWorldResolver _services;

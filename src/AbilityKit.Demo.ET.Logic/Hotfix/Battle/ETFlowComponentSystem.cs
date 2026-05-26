@@ -4,8 +4,8 @@ using ET.AbilityKit.Demo.ET.Share;
 namespace ET.Logic
 {
     /// <summary>
-    /// 流程组件 System
-    /// 对应 Moba.Console �?PhaseHost + InMatchPhase
+    /// ???? System
+    /// ?? Moba.Console ??PhaseHost + InMatchPhase
     /// </summary>
     [EntitySystemOf(typeof(ETFlowComponent))]
     [FriendOf(typeof(ETFlowComponent))]
@@ -19,7 +19,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 开始流�?
+        /// ?????
         /// </summary>
         public static void StartFlow(this ETFlowComponent self, FlowPhase initialPhase)
         {
@@ -33,7 +33,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 转换到新阶段
+        /// ??????
         /// </summary>
         public static void TransitionTo(this ETFlowComponent self, FlowPhase phase, FlowStep step)
         {
@@ -46,7 +46,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Tick 流程
+        /// Tick ??
         /// </summary>
         public static void Tick(this ETFlowComponent self, float deltaTime)
         {
@@ -96,7 +96,7 @@ namespace ET.Logic
                     break;
 
                 case FlowStep.Prepare_Initialize:
-                    // 初始化完成，进入连接阶段
+                    // ????????????
                     if (self.PhaseTimer > 0.5f)
                     {
                         self.TransitionTo(FlowPhase.Connect, FlowStep.Connect_Connect);
@@ -117,7 +117,7 @@ namespace ET.Logic
             switch (self.CurrentStep)
             {
                 case FlowStep.Connect_WaitPlayers:
-                    // 等待玩家连接完成
+                    // ????????
                     break;
             }
         }
@@ -131,7 +131,7 @@ namespace ET.Logic
                     break;
 
                 case FlowStep.CreateWorld_CreateEntities:
-                    // 创建实体
+                    // ????
                     if (self.PhaseTimer > 0.5f)
                     {
                         self.TransitionTo(FlowPhase.CreateWorld, FlowStep.CreateWorld_RegisterPlayers);
@@ -180,14 +180,14 @@ namespace ET.Logic
                     break;
 
                 case FlowStep.InMatch_StartBattle:
-                    // 通知战斗开�?
+                    // ???????
                     var battleComponent = self.Scene().GetComponent<ETBattleComponent>();
                     battleComponent?.StartBattle();
                     self.TransitionTo(FlowPhase.InMatch, FlowStep.InMatch_BattleLoop);
                     break;
 
                 case FlowStep.InMatch_BattleLoop:
-                    // 战斗循环�?BattleComponent.Update 驱动
+                    // ??????BattleComponent.Update ??
                     break;
 
                 case FlowStep.InMatch_CheckEnd:

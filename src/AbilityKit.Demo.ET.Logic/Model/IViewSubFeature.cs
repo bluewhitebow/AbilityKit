@@ -1,4 +1,5 @@
 using System;
+using ET.AbilityKit.Demo.ET.Share;
 
 namespace ET.Logic
 {
@@ -10,7 +11,7 @@ namespace ET.Logic
     /// - Each SubFeature handles a specific aspect of the view (binding, interpolation, VFX, etc.)
     /// - SubFeatures receive events and can modify how entities are displayed
     ///
-    /// Note: Event types are defined in ET.AbilityKit.Demo.ET.Share namespace
+    /// Note: Event types are defined in ET.AbilityKit.Demo.Share namespace
     /// </summary>
     public interface IViewSubFeature
     {
@@ -35,7 +36,7 @@ namespace ET.Logic
         /// <summary>
         /// Called when an actor spawns
         /// </summary>
-        void OnActorSpawn(ET.AbilityKit.Demo.ET.Share.ActorSpawnEvent evt);
+        void OnActorSpawn(ActorSpawnEvent evt);
 
         /// <summary>
         /// Called when an actor despawns
@@ -53,7 +54,7 @@ namespace ET.Logic
         /// <summary>
         /// Called when an actor moves
         /// </summary>
-        void OnActorMove(ET.AbilityKit.Demo.ET.Share.ActorMoveEvent evt);
+        void OnActorMove(ActorMoveEvent evt);
     }
 
     /// <summary>
@@ -66,17 +67,17 @@ namespace ET.Logic
         /// <summary>
         /// Called when an actor takes damage
         /// </summary>
-        void OnActorDamage(ET.AbilityKit.Demo.ET.Share.ActorDamageEvent evt);
+        void OnActorDamage(ActorDamageEvent evt);
 
         /// <summary>
         /// Called when an actor dies
         /// </summary>
-        void OnActorDead(ET.AbilityKit.Demo.ET.Share.ActorDeadEvent evt);
+        void OnActorDead(ActorDeadEvent evt);
 
         /// <summary>
         /// Called when an actor's attribute changes
         /// </summary>
-        void OnActorAttributeChange(ET.AbilityKit.Demo.ET.Share.ActorAttributeChangeEvent evt);
+        void OnActorAttributeChange(ActorAttributeChangeEvent evt);
     }
 
     /// <summary>
@@ -89,12 +90,12 @@ namespace ET.Logic
         /// <summary>
         /// Called when a skill is cast
         /// </summary>
-        void OnSkillCast(ET.AbilityKit.Demo.ET.Share.SkillCastEvent evt);
+        void OnSkillCast(SkillCastEvent evt);
 
         /// <summary>
         /// Called when a skill hits a target
         /// </summary>
-        void OnSkillHit(ET.AbilityKit.Demo.ET.Share.SkillHitEvent evt);
+        void OnSkillHit(SkillHitEvent evt);
     }
 
     /// <summary>
@@ -107,11 +108,11 @@ namespace ET.Logic
         /// <summary>
         /// Called when a VFX spawns
         /// </summary>
-        void OnVfxSpawn(ET.AbilityKit.Demo.ET.Share.VfxSpawnEvent evt);
+        void OnVfxSpawn(VfxSpawnEvent evt);
 
         /// <summary>
         /// Called when floating text should be displayed
         /// </summary>
-        void OnFloatingText(ET.AbilityKit.Demo.ET.Share.FloatingTextEvent evt);
+        void OnFloatingText(FloatingTextEvent evt);
     }
 }

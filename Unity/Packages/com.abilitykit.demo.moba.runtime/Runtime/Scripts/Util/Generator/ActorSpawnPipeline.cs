@@ -10,12 +10,12 @@ using AbilityKit.Ability.Share.Impl.Moba.Struct;
 namespace AbilityKit.Demo.Moba.Util.Generator
 {
     /*
-     * Spawn 绠＄嚎锛氭牴鎹閮ㄦ彁渚涚殑 Loadout 鎵归噺鐢熸垚 ActorEntity锛堥鏋讹級骞舵敞鍐屽埌 ActorRegistry銆?
+     * Spawn 管线：根据外部提供的 Loadout 批量生成 ActorEntity（骨架）并注册到 ActorRegistry。
      *
-     * 鑱岃矗杈圭晫锛?
-     * 1) 浠呰礋璐ｂ€滃垱寤洪鏋?+ 娉ㄥ唽 + 浜у嚭鏈湴鐜╁鐨?LocalActorId鈥濄€?
-     * 2) 楠ㄦ灦缁勪欢鐨勬寕杞界敱 ActorArchetypeFactory 璐熻矗銆?
-     * 3) 璇昏〃鍒濆鍖栵紙灞炴€?鎶€鑳界瓑锛変笉鍦ㄨ繖閲屽仛锛岄€氳繃 initializer 鍥炶皟鎸傛帴锛圓ctorEntityInitPipeline锛夈€?
+     * 职责边界：
+     * 1) 只负责创建骨架 + 注册 + 产出本地的 LocalActorId。
+     * 2) 骨架组件的挂载由 ActorArchetypeFactory 负责。
+     * 3) 表初始化（属性/技能等）不在这里做，通过 initializer 回调接入（ActorEntityInitPipeline）。
      */
     public static class ActorSpawnPipeline
     {
@@ -85,12 +85,21 @@ namespace AbilityKit.Demo.Moba.Util.Generator
                     ownerPlayer: p.PlayerId,
                     templateId: p.AttributeTemplateId);
 
-                /* 鍒涘缓楠ㄦ灦瀹炰綋锛堝熀纭€缁勪欢鎸傝浇 + meta 鍐欏叆锛?*/
+                /* 创建骨架实体（基础组件挂载 + meta 写入） */
                 var built = ActorArchetypeFactory.Create(actorContext, in info);
                 onActorBuilt?.Invoke(built, p);
 
-                /* 娉ㄥ唽锛坅ctorId -> entity锛夛紝鐢ㄤ簬鍚庣画鏌ユ壘/鍚屾 */
+                /* 注册：（actorId -> entity），用于后续查找/同步 */
                 registry.Register(actorId, built);
+
+                /* 注册到 MobaEntityManager，用于 MobaLobbyInputSink 查找实体 */
+                entities.Register(
+                    actorId: actorId,
+                    entity: built,
+                    team: (Team)p.TeamId,
+                    mainType: (EntityMainType)p.MainType,
+                    unitSubType: (UnitSubType)p.UnitSubType,
+                    ownerPlayer: p.PlayerId);
 
                 players[i] = new MobaPlayerEntry(p.PlayerId, p.TeamId, p.HeroId, p.SpawnIndex);
 

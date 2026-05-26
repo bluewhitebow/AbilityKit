@@ -4,12 +4,15 @@ using AbilityKit.Ability.Battle.EntityManager;
 using AbilityKit.Ability.Host;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Events.Unit;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
 using StableStringId = AbilityKit.Triggering.Eventing.StableStringId;
 
 namespace AbilityKit.Demo.Moba.Services.EntityManager
 {
+    [WorldService(typeof(MobaEntityManager))]
     public sealed class MobaEntityManager : IService
     {
         private readonly Dictionary<int, global::ActorEntity> _byActorId = new Dictionary<int, global::ActorEntity>();

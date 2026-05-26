@@ -1,7 +1,7 @@
 using System;
 using ET.AbilityKit.Demo.ET.Share;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// ActorDamageEvent 事件处理器
@@ -15,16 +15,17 @@ namespace ET.AbilityKit.Demo.ET.View
             var listener = scene.GetComponent<ETViewEventListener>();
             if (listener != null)
             {
-                var view = listener.GetUnitView(args.ActorId);
+                var view = listener.GetUnitView((int)args.ActorId);
                 if (view != null)
                 {
                     view.UpdateHp(args.CurrentHp, args.MaxHp);
                     view.ShowDamage(args.Damage);
+                    Log.Debug($"[ActorDamageEventHandler] Unit {view.Name} took {args.Damage} damage, HP: {args.CurrentHp}/{args.MaxHp}");
                     return;
                 }
             }
 
-            Log.Debug($"[ActorDamageEventHandler] View not found for MobaActorId={args.ActorId}");
+            Log.Debug($"[ActorDamageEventHandler] View not found for ActorId={args.ActorId}");
         }
     }
 }

@@ -1,18 +1,25 @@
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// 单位视图组件
     /// 负责渲染单个单位的表现
+    ///
+    /// Design:
+    /// - 纯数据类，只存储渲染所需的状态
+    /// - UnitId: ET 框架的 Entity.Id（由 ET 框架自动生成）
+    /// - MobaActorId: moba.core 逻辑层的 ActorId（运行时自增 ID）
+    /// - 不包含任何日志调用，日志应在 Handlers 中输出
     /// </summary>
     public class ETUnitViewComponent
     {
         /// <summary>
-        /// ET 实体 ID
+        /// ET 框架实体 ID（由 ET 框架自动生成）
+        /// 用于 ET 内部操作
         /// </summary>
         public long UnitId { get; set; }
 
         /// <summary>
-        /// 逻辑层（MobaCore）的 ActorId
+        /// moba.core 逻辑层的 ActorId（运行时自增 ID）
         /// 用于与逻辑层交互
         /// </summary>
         public int MobaActorId { get; set; }
@@ -68,84 +75,75 @@ namespace ET.AbilityKit.Demo.ET.View
         public int EntityCode { get; set; }
 
         /// <summary>
-        /// 更新位置
+        /// 更新位置（不含日志）
         /// </summary>
         public void UpdatePosition(float x, float y)
         {
             X = x;
             Y = y;
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) position updated to ({X}, {Y})");
         }
 
         /// <summary>
-        /// 更新旋转
+        /// 更新旋转（不含日志）
         /// </summary>
         public void UpdateRotation(float rotation)
         {
             Rotation = rotation;
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) rotation updated to {Rotation}");
         }
 
         /// <summary>
-        /// 更新 HP
+        /// 更新 HP（不含日志）
         /// </summary>
         public void UpdateHp(float currentHp, float maxHp)
         {
             CurrentHp = currentHp;
             MaxHp = maxHp;
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) HP updated to {CurrentHp}/{MaxHp}");
         }
 
         /// <summary>
-        /// 单位死亡
+        /// 单位死亡（不含日志）
         /// </summary>
         public void OnDead()
         {
             IsDead = true;
             IsVisible = false;
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) is dead, hiding view");
         }
 
         /// <summary>
-        /// 单位复活
+        /// 单位复活（不含日志）
         /// </summary>
         public void OnRevive()
         {
             IsDead = false;
             IsVisible = true;
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) revived");
         }
 
         /// <summary>
-        /// 显示伤害飘字
+        /// 显示伤害飘字（不含日志）
         /// </summary>
         public void ShowDamage(float damage)
         {
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) shows damage: -{damage}");
         }
 
         /// <summary>
-        /// 显示治疗飘字
+        /// 显示治疗飘字（不含日志）
         /// </summary>
         public void ShowHeal(float healAmount)
         {
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) shows heal: +{healAmount}");
         }
 
         /// <summary>
-        /// 播放特效
+        /// 播放特效（不含日志）
         /// </summary>
         public void PlayVfx(string vfxId, float duration)
         {
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) plays VFX: {vfxId} for {duration}s");
         }
 
         /// <summary>
-        /// 播放音效
+        /// 播放音效（不含日志）
         /// </summary>
         public void PlaySfx(string sfxId)
         {
-            Log.Info($"[ETUnitView] Unit {Name} ({UnitId}) plays SFX: {sfxId}");
         }
     }
 }

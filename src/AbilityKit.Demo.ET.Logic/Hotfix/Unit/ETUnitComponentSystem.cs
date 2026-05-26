@@ -12,32 +12,23 @@ namespace ET.Logic
     /// - 作为状态同步客户端，只管理单位数据
     /// - 数据由快照更新，不自己做计算
     /// - 不包含任何游戏业务逻辑（伤害、Buff、移动等）
+    /// - 使用 Component 实例字段存储单位字典（不使用静态字典）
     /// </summary>
     [EntitySystemOf(typeof(ETUnitComponent))]
     [FriendOf(typeof(ETUnitComponent))]
     [FriendOf(typeof(ETUnit))]
     public static partial class ETUnitComponentSystem
     {
-        // Unit dictionary (static storage)
-        private static readonly Dictionary<long, ETUnit> _units = new();
-        private static ETUnitComponent? _current;
-
         [EntitySystem]
         private static void Awake(this ETUnitComponent self)
         {
-            _units.Clear();
-            _current = self;
+            // Instance field is initialized in Component constructor
         }
 
         [EntitySystem]
         private static void Destroy(this ETUnitComponent self)
         {
-            foreach (var unit in _units.Values)
-            {
-                unit.Dispose();
-            }
-            _units.Clear();
-            _current = null;
+            // Units are disposed in Component.Destroy()
         }
 
         #region Basic CRUD
@@ -47,7 +38,7 @@ namespace ET.Logic
         /// </summary>
         public static ETUnit CreateUnit(
             this ETUnitComponent self,
-            long actorId,
+            int actorId,
             int entityCode,
             ActorKind kind,
             string name,
@@ -75,9 +66,10 @@ namespace ET.Logic
             unit.RenderX = x;
             unit.RenderY = y;
 
-            _units[actorId] = unit;
+            // 使用 ActorId 作为 key
+            self.Units[actorId] = unit;
 
-            Log.Info($"[ETUnit] Unit created: {name} ({actorId}) at ({x}, {y})");
+            Log.Info($"[ETUnit] Unit created: {name} (ActorId={actorId}, EntityCode={entityCode}) at ({x}, {y})");
 
             return unit;
         }
@@ -85,9 +77,9 @@ namespace ET.Logic
         /// <summary>
         /// 获取单位
         /// </summary>
-        public static ETUnit? GetUnit(this ETUnitComponent self, long actorId)
+        public static ETUnit? GetUnit(this ETUnitComponent self, int actorId)
         {
-            return _units.TryGetValue(actorId, out var unit) ? unit : null;
+            return self.Units.TryGetValue(actorId, out var unit) ? unit : null;
         }
 
         /// <summary>
@@ -95,7 +87,7 @@ namespace ET.Logic
         /// </summary>
         public static IEnumerable<ETUnit> GetAllUnits(this ETUnitComponent self)
         {
-            return _units.Values;
+            return self.Units.Values;
         }
 
         /// <summary>
@@ -103,7 +95,7 @@ namespace ET.Logic
         /// </summary>
         public static IEnumerable<ETUnit> GetUnitsByKind(this ETUnitComponent self, ActorKind kind)
         {
-            foreach (var unit in _units.Values)
+            foreach (var unit in self.Units.Values)
             {
                 if (unit.Kind == kind)
                     yield return unit;
@@ -115,7 +107,7 @@ namespace ET.Logic
         /// </summary>
         public static ETUnit? GetLocalPlayerUnit(this ETUnitComponent self)
         {
-            foreach (var unit in _units.Values)
+            foreach (var unit in self.Units.Values)
             {
                 if (unit.IsLocalPlayer)
                     return unit;
@@ -128,7 +120,7 @@ namespace ET.Logic
         /// </summary>
         public static ETUnit? GetFirstUnit(this ETUnitComponent self)
         {
-            foreach (var unit in _units.Values)
+            foreach (var unit in self.Units.Values)
             {
                 return unit;
             }
@@ -138,13 +130,13 @@ namespace ET.Logic
         /// <summary>
         /// 移除单位
         /// </summary>
-        public static void RemoveUnit(this ETUnitComponent self, long actorId)
+        public static void RemoveUnit(this ETUnitComponent self, int actorId)
         {
-            if (_units.TryGetValue(actorId, out var unit))
+            if (self.Units.TryGetValue(actorId, out var unit))
             {
-                _units.Remove(actorId);
+                self.Units.Remove(actorId);
                 unit.Dispose();
-                Log.Info($"[ETUnit] Unit removed: {actorId}");
+                Log.Info($"[ETUnit] Unit removed: ActorId={actorId}");
             }
         }
 
@@ -157,7 +149,7 @@ namespace ET.Logic
         /// </summary>
         public static int UnitCount(this ETUnitComponent self)
         {
-            return _units.Count;
+            return self.Units.Count;
         }
 
         /// <summary>
@@ -166,7 +158,7 @@ namespace ET.Logic
         public static int AliveUnitCount(this ETUnitComponent self)
         {
             int count = 0;
-            foreach (var unit in _units.Values)
+            foreach (var unit in self.Units.Values)
             {
                 if (!unit.IsDead)
                     count++;

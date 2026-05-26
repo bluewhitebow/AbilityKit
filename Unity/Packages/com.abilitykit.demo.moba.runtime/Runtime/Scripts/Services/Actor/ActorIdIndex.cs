@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using Entitas;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
-    // ECS 鍐?ActorId 鍞竴绱㈠紩锛氱淮鎶?actorId -> ActorEntity 鐨勫揩閫熸槧灏?
+    [WorldService(typeof(ActorIdIndex))]
     public sealed class ActorIdIndex : IService
     {
         private readonly Dictionary<int, global::ActorEntity> _map = new Dictionary<int, global::ActorEntity>();

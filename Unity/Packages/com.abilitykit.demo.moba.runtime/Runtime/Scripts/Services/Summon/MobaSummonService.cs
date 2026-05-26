@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba;
+using AbilityKit.Demo.Moba.Events.Summon;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Math;
 using AbilityKit.Demo.Moba.Util.Generator;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Effect;
 using AbilityKit.Core.Common.Event;
@@ -15,6 +17,7 @@ using StableStringId = AbilityKit.Triggering.Eventing.StableStringId;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaSummonService))]
     public sealed class MobaSummonService : IService
     {
         private readonly IWorldResolver _services;

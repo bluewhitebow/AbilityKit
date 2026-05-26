@@ -4,8 +4,8 @@ using ET.AbilityKit.Demo.ET.Share;
 namespace ET.Logic
 {
     /// <summary>
-    /// 会话组件 System
-    /// 对应 Moba.Console �?ConsoleSessionOrchestrator
+    /// ???? System
+    /// ?? Moba.Console ??ConsoleSessionOrchestrator
     /// </summary>
     [EntitySystemOf(typeof(ETSessionComponent))]
     [FriendOf(typeof(ETSessionComponent))]
@@ -20,7 +20,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 开始会�?
+        /// ?????
         /// </summary>
         public static void StartSession(this ETSessionComponent self)
         {
@@ -34,7 +34,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 停止会话
+        /// ????
         /// </summary>
         public static void StopSession(this ETSessionComponent self)
         {
@@ -43,7 +43,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 标记首帧已接�?
+        /// ????????
         /// </summary>
         public static void MarkFirstFrameReceived(this ETSessionComponent self)
         {
@@ -55,7 +55,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// Tick - 帧同步循�?
+        /// Tick - ??????
         /// </summary>
         public static void Tick(this ETSessionComponent self, float deltaTime)
         {
@@ -72,7 +72,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 推进一�?
+        /// ?????
         /// </summary>
         private static void AdvanceFrame(this ETSessionComponent self)
         {
@@ -81,10 +81,10 @@ namespace ET.Logic
             var battleComponent = self.Scene().GetComponent<ETBattleComponent>();
             var flowComponent = self.Scene().GetComponent<ETFlowComponent>();
 
-            // 处理流程
+            // ????
             flowComponent?.Tick(self.FrameInterval);
 
-            // 处理战斗�?
+            // ??????
             if (battleComponent?.State == BattleState.InProgress)
             {
                 battleComponent.AdvanceFrame();
@@ -92,7 +92,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 暂停
+        /// ??
         /// </summary>
         public static void Pause(this ETSessionComponent self)
         {
@@ -101,7 +101,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 恢复
+        /// ??
         /// </summary>
         public static void Resume(this ETSessionComponent self)
         {
@@ -110,7 +110,7 @@ namespace ET.Logic
         }
 
         /// <summary>
-        /// 设置帧率
+        /// ????
         /// </summary>
         public static void SetFrameRate(this ETSessionComponent self, float fps)
         {

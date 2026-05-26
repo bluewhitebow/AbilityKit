@@ -1,12 +1,12 @@
 ﻿using System;
 using AbilityKit.Demo.Moba;
-using AbilityKit.Demo.Moba;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
-using StableStringId = AbilityKit.Triggering.Eventing.StableStringId;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(DamagePipelineService))]
     public sealed class DamagePipelineService : IService
     {
         private readonly MobaActorLookupService _actors;

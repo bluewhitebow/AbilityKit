@@ -110,6 +110,7 @@ namespace ET.Logic
             var unit = unitComponent.GetUnit(cmd.ActorId);
             if (unit == null || unit.IsDead)
             {
+                Log.Warning($"[ETInput] Move: Unit not found or dead, ActorId={cmd.ActorId}");
                 return;
             }
 
@@ -118,7 +119,18 @@ namespace ET.Logic
             unit.TargetX = cmd.X;
             unit.TargetY = cmd.Y;
 
-            Log.Debug($"[ETInput] Move command forwarded: Actor {cmd.ActorId} -> ({cmd.X}, {cmd.Y})");
+            // 转发到 BattleDriver（通过 BattleComponent）
+            var scene = self.Scene();
+            var battleComponent = scene?.GetComponent<ETBattleComponent>();
+            if (battleComponent != null)
+            {
+                ETBattleDriverBridge.SubmitMoveInput(battleComponent, cmd.ActorId, cmd.X, cmd.Y);
+                Log.Info($"[ETInput] Move forwarded to Driver: Actor {cmd.ActorId} -> ({cmd.X}, {cmd.Y})");
+            }
+            else
+            {
+                Log.Warning("[ETInput] BattleComponent not found, cannot forward move!");
+            }
         }
 
         /// <summary>

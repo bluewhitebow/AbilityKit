@@ -1,10 +1,12 @@
 ﻿using System;
 using AbilityKit.Demo.Moba.Attributes;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
     using AbilityKit.Demo.Moba;
+    [WorldService(typeof(MobaDamageService))]
     public sealed class MobaDamageService : IService
     {
         private readonly MobaActorLookupService _actors;

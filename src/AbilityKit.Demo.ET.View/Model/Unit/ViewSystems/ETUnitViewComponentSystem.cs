@@ -1,6 +1,6 @@
 using ET.AbilityKit.Demo.ET.Share;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// 单位视图组件系统

@@ -3,9 +3,11 @@ using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaAuthorityFrameService))]
     public sealed class MobaAuthorityFrameService : IService
     {
         private readonly IWorldResolver _services;

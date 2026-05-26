@@ -9,10 +9,13 @@ using AbilityKit.Demo.Moba;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Demo.Moba.Services.Projectile;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaSnapshotRouter))]
+    [WorldService(typeof(IWorldStateSnapshotProvider))]
     public sealed class MobaSnapshotRouter : IWorldStateSnapshotProvider
     {
         private readonly MobaEnterGameSnapshotService _enter;
@@ -55,6 +58,7 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    [WorldService(typeof(MobaProjectileEventSnapshotService))]
     public sealed class MobaProjectileEventSnapshotService : IService
     {
         private readonly MobaGamePhaseService _phase;
@@ -212,6 +216,7 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    [WorldService(typeof(MobaAreaEventSnapshotService))]
     public sealed class MobaAreaEventSnapshotService : IService
     {
         private readonly MobaGamePhaseService _phase;
@@ -315,6 +320,7 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    [WorldService(typeof(MobaActorDespawnSnapshotService))]
     public sealed class MobaActorDespawnSnapshotService : IService
     {
         private readonly MobaGamePhaseService _phase;

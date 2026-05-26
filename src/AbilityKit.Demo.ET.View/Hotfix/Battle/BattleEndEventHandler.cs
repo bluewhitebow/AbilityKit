@@ -1,7 +1,7 @@
 using System;
 using ET.AbilityKit.Demo.ET.Share;
 
-namespace ET.AbilityKit.Demo.ET.View
+namespace ET.AbilityKit.Demo.View
 {
     /// <summary>
     /// BattleEndEvent 事件处理器

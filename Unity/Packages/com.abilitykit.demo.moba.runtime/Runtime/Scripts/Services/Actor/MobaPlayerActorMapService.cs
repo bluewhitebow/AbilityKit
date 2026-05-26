@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaPlayerActorMapService))]
     public sealed class MobaPlayerActorMapService : IService
     {
         private readonly Dictionary<string, int> _map = new Dictionary<string, int>();

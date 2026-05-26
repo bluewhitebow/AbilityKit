@@ -8,8 +8,12 @@ namespace ET.Logic
     /// ET Battle View Event Sink
     /// Bridges IBattleViewEventSink events to ET event system
     /// Also updates the entity cache component for ET.View queries
+    ///
+    /// Design:
+    /// - Uses virtual methods to allow extension in subclasses
+    /// - Empty stubs indicate reserved functionality for future use
     /// </summary>
-    public sealed class ETBattleViewEventSink : IBattleViewEventSink
+    public class ETBattleViewEventSink : IBattleViewEventSink
     {
         private readonly ETBattleComponent _battleComponent;
         private ETBattleEntityCacheComponent _cacheComponent;
@@ -17,7 +21,7 @@ namespace ET.Logic
 
         public ETBattleViewEventSink(ETBattleComponent battleComponent)
         {
-            _battleComponent = battleComponent;
+            _battleComponent = battleComponent ?? throw new ArgumentNullException(nameof(battleComponent));
         }
 
         #region Cache Setup
@@ -60,8 +64,9 @@ namespace ET.Logic
             {
                 var evt = new ActorSpawnEvent()
                 {
-                    ActorId = spawn.ActorId,
-                    EntityCode = spawn.CharacterId,
+                    ActorId = spawn.ActorId,  // 运行时自增 ID
+                    MobaActorId = spawn.ActorId,
+                    EntityCode = spawn.EntityCode,  // 配置表 ID
                     Kind = spawn.TeamId == 1 ? ActorKind.Character : ActorKind.Monster,
                     Name = spawn.Name,
                     X = spawn.PositionX,
@@ -70,7 +75,7 @@ namespace ET.Logic
                     IsLocalPlayer = spawn.ActorId == _battleComponent.PlayerActorId
                 };
 
-                Log.Info($"[ETBattleViewEventSink] >>> Publishing ActorSpawnEvent: {spawn.Name} ({spawn.ActorId}), Team={spawn.TeamId}");
+                Log.Info($"[ETBattleViewEventSink] >>> Publishing ActorSpawnEvent: {spawn.Name} (ActorId={spawn.ActorId}, EntityCode={spawn.EntityCode}), Team={spawn.TeamId}");
                 EventSystem.Instance.Publish<Scene, ActorSpawnEvent>(scene, evt);
             }
 
@@ -90,26 +95,35 @@ namespace ET.Logic
             if (autoTest == null && skillTest == null)
                 return;
 
-            long actorIdToUse = 0;
+            int actorIdToUse = 0;
+            int entityCodeToUse = 0;
             float startX = 0f;
             float startY = 0f;
 
+            // 优先使用 ActorSpawns 中的数据
             if (snapshot.ActorSpawns != null && snapshot.ActorSpawns.Count > 0)
             {
                 var firstSpawn = snapshot.ActorSpawns[0];
-                actorIdToUse = firstSpawn.ActorId;
+                actorIdToUse = firstSpawn.ActorId;  // 运行时自增 ID
+                entityCodeToUse = firstSpawn.EntityCode;  // 配置表 ID
                 startX = firstSpawn.PositionX;
                 startY = firstSpawn.PositionY;
+                Log.Info($"[ETBattleViewEventSink] Using ActorId={actorIdToUse}, EntityCode={entityCodeToUse} from spawn");
+            }
+            else if (_battleComponent.PlayerActorId > 0)
+            {
+                actorIdToUse = (int)_battleComponent.PlayerActorId;
+                Log.Info($"[ETBattleViewEventSink] Using PlayerActorId: {actorIdToUse}");
             }
             else
             {
-                actorIdToUse = _battleComponent.PlayerActorId;
+                Log.Warning($"[ETBattleViewEventSink] No valid ActorId found!");
             }
 
             if (autoTest != null)
             {
-                autoTest.Initialize(actorIdToUse, startX, startY);
-                Log.Info($"[ETBattleViewEventSink] AutoTest initialized with ActorId={actorIdToUse}");
+                autoTest.Initialize(actorIdToUse, startX, startY);  // 使用 ActorId
+                Log.Info($"[ETBattleViewEventSink] AutoTest initialized with ActorId={actorIdToUse}, StartPos=({startX}, {startY})");
             }
 
             if (skillTest != null)
@@ -125,6 +139,9 @@ namespace ET.Logic
             if (scene == null)
                 return;
 
+            // 记录快照
+            Log.Info($"[ETBattleViewEventSink] OnActorTransformSnapshot: Frame={snapshot.FrameIndex}, Count={snapshot.ActorTransforms?.Count ?? 0}");
+
             // 更新缓存
             if (_cacheComponent != null)
             {
@@ -132,16 +149,23 @@ namespace ET.Logic
             }
 
             // 发布 ActorMoveEvent 事件
-            foreach (var transform in snapshot.ActorTransforms)
+            if (snapshot.ActorTransforms != null)
             {
-                EventSystem.Instance.Publish<Scene, ActorMoveEvent>(
-                    scene,
-                    new ActorMoveEvent
-                    {
-                        ActorId = transform.ActorId,
-                        X = transform.PositionX,
-                        Y = transform.PositionY
-                    });
+                foreach (var transform in snapshot.ActorTransforms)
+                {
+                    Log.Info($"[ETBattleViewEventSink] Transform: ActorId={transform.ActorId}, Pos=({transform.PositionX:F2}, {transform.PositionY:F2}, {transform.PositionZ:F2}), Rot={transform.RotationY:F2}");
+
+                    EventSystem.Instance.Publish<Scene, ActorMoveEvent>(
+                        scene,
+                        new ActorMoveEvent
+                        {
+                            ActorId = transform.ActorId,  // 运行时自增 ID
+                            X = transform.PositionX,
+                            Y = transform.PositionY,
+                            Z = transform.PositionZ,
+                            Rotation = transform.RotationY
+                        });
+                }
             }
         }
 
@@ -211,25 +235,44 @@ namespace ET.Logic
 
         public void OnFrameSyncComplete(int frameIndex)
         {
+            // 此方法已被 OnActorTransformSnapshot 替代
+            // 变换数据应通过 moba.core 快照系统生成并通过 OnActorTransformSnapshot 传递
+            // 而不是直接从 ET.Logic 层访问 ETUnitComponent 构建
+            Log.Debug($"[ETBattleViewEventSink] OnFrameSyncComplete called for frame {frameIndex} (deprecated)");
         }
 
         #endregion
 
         #region Extended Events (Reserved)
 
-        public void OnProjectileEventSnapshot(in FrameSnapshotData snapshot)
+        /// <summary>
+        /// 投射物事件快照（预留，暂未实现）
+        /// </summary>
+        public virtual void OnProjectileEventSnapshot(in FrameSnapshotData snapshot)
         {
+            Log.Debug($"[ETBattleViewEventSink] OnProjectileEventSnapshot not implemented for frame {snapshot.FrameIndex}");
+            // TODO: Implement projectile rendering when moba.core adds projectile system
         }
 
-        public void OnAreaEventSnapshot(in FrameSnapshotData snapshot)
+        /// <summary>
+        /// 范围事件快照（预留，暂未实现）
+        /// </summary>
+        public virtual void OnAreaEventSnapshot(in FrameSnapshotData snapshot)
         {
+            Log.Debug($"[ETBattleViewEventSink] OnAreaEventSnapshot not implemented for frame {snapshot.FrameIndex}");
+            // TODO: Implement area effect rendering when moba.core adds area effect system
         }
 
-        public void OnStateHashSnapshot(in FrameSnapshotData snapshot)
+        /// <summary>
+        /// 状态哈希快照（预留，暂未实现）
+        /// </summary>
+        public virtual void OnStateHashSnapshot(in FrameSnapshotData snapshot)
         {
+            Log.Debug($"[ETBattleViewEventSink] OnStateHashSnapshot not implemented for frame {snapshot.FrameIndex}");
+            // TODO: Implement state hash verification when needed
         }
 
-        public void OnTriggerEvent(in TriggerEventData evt)
+        public virtual void OnTriggerEvent(in TriggerEventData evt)
         {
             Log.Debug($"[ETBattleViewEventSink] Trigger: type={evt.EventType}, caster={evt.CasterId}, target={evt.TargetId}");
         }

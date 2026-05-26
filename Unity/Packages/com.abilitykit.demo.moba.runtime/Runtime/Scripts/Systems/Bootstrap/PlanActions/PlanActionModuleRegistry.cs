@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Reflection;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using IPlanActionModule = AbilityKit.Triggering.Runtime.Plan.IPlanActionModule;
 
 namespace AbilityKit.Demo.Moba.Systems
 {
+    [WorldService(typeof(PlanActionModuleRegistry), isDefault: false)]
     public sealed class PlanActionModuleRegistry : IService
     {
         public IPlanActionModule[] Modules { get; }

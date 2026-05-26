@@ -1,5 +1,4 @@
 using System;
-using AbilityKit.Ability.World.Abstractions;
 using ET.AbilityKit.Demo.ET.Share;
 
 namespace ET.Logic
@@ -7,6 +6,11 @@ namespace ET.Logic
     /// <summary>
     /// Battle driver bridge
     /// Encapsulates interaction logic with BattleDriver
+    ///
+    /// Design:
+    /// - Only exposes input submission and lifecycle methods
+    /// - Does NOT expose World access (violates single-entry principle)
+    /// - All World interaction is encapsulated within ETMobaBattleDriver
     /// </summary>
     public static class ETBattleDriverBridge
     {
@@ -30,31 +34,6 @@ namespace ET.Logic
             {
                 driver.SubmitSkillInput((int)actorId, slot, targetX, targetZ);
             }
-        }
-
-        /// <summary>
-        /// Get World
-        /// </summary>
-        public static IWorld GetWorld(ETBattleComponent self)
-        {
-            if (self.BattleDriver is ETMobaBattleDriver driver)
-            {
-                return driver.World;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Try resolve service
-        /// </summary>
-        public static bool TryResolve<T>(ETBattleComponent self, out T service) where T : class
-        {
-            service = null;
-            if (self.BattleDriver is ETMobaBattleDriver driver)
-            {
-                return driver.TryResolve(out service);
-            }
-            return false;
         }
 
         /// <summary>
@@ -126,7 +105,7 @@ namespace ET.Logic
             var inputComponent = scene?.GetComponent<ETInputComponent>();
             if (inputComponent != null)
             {
-                Log.Info($"[ETBattleDriverBridge] Processing input at frame {currentFrame}");
+                Log.Debug($"[ETBattleDriverBridge] Processing input at frame {currentFrame}");
                 ETInputComponentSystem.ProcessInput(inputComponent, currentFrame);
             }
         }

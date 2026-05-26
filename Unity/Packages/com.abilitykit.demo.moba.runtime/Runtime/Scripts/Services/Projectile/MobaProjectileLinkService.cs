@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using AbilityKit.Core.Common.Projectile;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
+    [WorldService(typeof(MobaProjectileLinkService))]
     public sealed class MobaProjectileLinkService : IService
     {
         private readonly Dictionary<int, ProjectileId> _projectileByActorId = new Dictionary<int, ProjectileId>();

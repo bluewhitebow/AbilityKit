@@ -60,7 +60,14 @@ AbilityKit/
 │
 └── MOBA 示例
     ├── com.abilitykit.demo.moba.share     # 跨平台共享接口
-    ├── com.abilitykit.demo.moba.runtime   # MOBA 运行时
+    ├── com.abilitykit.demo.moba.runtime   # 战斗逻辑世界层 ⭐
+    │   ├── Session/MobaBattleDriverHost    # 战斗驱动宿主
+    │   ├── Services/EnterGame/MobaEnterGameFlowService  # 实体创建入口
+    │   ├── Services/Input/MobaLobbyInputSink          # 输入处理
+    │   ├── Services/Skill/                              # 技能执行
+    │   ├── Services/Combat/Damage/                      # 伤害计算
+    │   ├── Services/Snapshot/                           # 快照服务
+    │   └── Util/Generator/ActorSpawnPipeline           # 实体生成
     └── com.abilitykit.demo.moba.view.*    # 视图层实现
 ```
 

@@ -9,6 +9,7 @@ using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Protocol.Moba.StateSync;
 using AbilityKit.Ability.Share.Impl.Moba.Struct;
@@ -16,6 +17,7 @@ using AbilityKit.Ability.Share.Impl.Moba.CreateWorld;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaEnterGameFlowService))]
     public sealed class MobaEnterGameFlowService : IService
     {
         private readonly MobaEnterGameSnapshotService _snapshot;

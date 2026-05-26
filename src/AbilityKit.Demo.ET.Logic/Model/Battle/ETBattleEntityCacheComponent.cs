@@ -1,31 +1,35 @@
-using System;
 using System.Collections.Generic;
-using AbilityKit.Demo.Moba.Share;
 
 namespace ET.Logic
 {
     /// <summary>
-    /// 实体状态缓存组件
+    /// 实体状态缓存组件（纯数据）
     ///
     /// 职责：
     /// - 缓存 moba.core 快照数据
-    /// - 提供帧间差分
-    /// - 支持插值计算
-    /// - 供 ET.View 渲染使用
+    /// - 业务逻辑由 ETBattleEntityCacheComponentSystem 处理
     /// </summary>
     [ComponentOf(typeof(Scene))]
     public class ETBattleEntityCacheComponent : Entity, IAwake, IDestroy
     {
-        // 实体缓存：ActorId -> ETUnit
-        private readonly Dictionary<int, ETUnit> _entityCache = new();
+        /// <summary>
+        /// 实体缓存字典（internal 供 System 访问）
+        /// </summary>
+        internal readonly Dictionary<int, ETUnit> _entityCache = new();
 
-        // 缓存的帧号
-        public int CachedFrame { get; private set; }
+        /// <summary>
+        /// 缓存的帧号
+        /// </summary>
+        public int CachedFrame { get; internal set; }
 
-        // 缓存时间戳
-        public long CacheTimestamp { get; private set; }
+        /// <summary>
+        /// 缓存时间戳
+        /// </summary>
+        public long CacheTimestamp { get; internal set; }
 
-        // 实体数量
+        /// <summary>
+        /// 实体数量
+        /// </summary>
         public int EntityCount => _entityCache.Count;
 
         public void Awake()
@@ -40,43 +44,6 @@ namespace ET.Logic
         }
 
         #region Cache Operations
-
-        /// <summary>
-        /// 更新缓存
-        /// </summary>
-        public void UpdateCache(int frame, in FrameSnapshotData snapshot)
-        {
-            CachedFrame = frame;
-            CacheTimestamp = Environment.TickCount64;
-
-            // 更新变换数据
-            if (snapshot.ActorTransforms != null)
-            {
-                foreach (var transform in snapshot.ActorTransforms)
-                {
-                    if (_entityCache.TryGetValue(transform.ActorId, out var unit))
-                    {
-                        unit.UpdateFromSnapshot(transform.PositionX, transform.PositionY, transform.RotationY);
-                    }
-                }
-            }
-
-            // 处理伤害事件
-            if (snapshot.DamageEvents != null)
-            {
-                foreach (var damage in snapshot.DamageEvents)
-                {
-                    if (_entityCache.TryGetValue(damage.TargetId, out var unit))
-                    {
-                        unit.Hp = damage.TargetHpAfter;
-                        if (damage.IsKill)
-                        {
-                            unit.Hp = 0;
-                        }
-                    }
-                }
-            }
-        }
 
         /// <summary>
         /// 添加实体到缓存
@@ -152,21 +119,6 @@ namespace ET.Logic
                 return true;
             }
             return false;
-        }
-
-        #endregion
-
-        #region Interpolation
-
-        /// <summary>
-        /// 更新渲染位置（插值）
-        /// </summary>
-        public void UpdateRenderPositions(float interpolationSpeed, float deltaTime)
-        {
-            foreach (var unit in _entityCache.Values)
-            {
-                unit.UpdateRenderPosition(interpolationSpeed, deltaTime);
-            }
         }
 
         #endregion

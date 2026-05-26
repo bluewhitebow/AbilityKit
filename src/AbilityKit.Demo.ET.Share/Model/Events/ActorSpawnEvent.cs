@@ -11,17 +11,24 @@ namespace ET.AbilityKit.Demo.ET.Share
         public Type Type => typeof(ActorSpawnEvent);
 
         /// <summary>
-        /// ET 框架实体 ID
+        /// moba.core 运行时自增的 ActorId（唯一标识，与 ET.EntityId 无关）
+        /// 用于在逻辑层内唯一标识单位
         /// </summary>
-        public long ActorId;
+        public int ActorId;
 
         /// <summary>
-        /// 逻辑层（MobaCore）的 ActorId
+        /// 逻辑层（MobaCore）的 ActorId（同 ActorId）
         /// </summary>
         public int MobaActorId;
 
         /// <summary>
-        /// 实体代码
+        /// ET 框架的 Entity.Id（用于 ET 内部操作）
+        /// 由 View 层在创建 ET.Entity 时分配
+        /// </summary>
+        public long EntityId;
+
+        /// <summary>
+        /// 实体代码（配置表 ID）
         /// </summary>
         public int EntityCode;
 

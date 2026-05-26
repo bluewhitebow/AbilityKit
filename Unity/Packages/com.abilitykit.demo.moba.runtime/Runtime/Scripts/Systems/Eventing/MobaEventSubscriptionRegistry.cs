@@ -4,9 +4,11 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Systems
 {
+    [WorldService(typeof(MobaEventSubscriptionRegistry))]
     public sealed class MobaEventSubscriptionRegistry : IService
     {
         private readonly Dictionary<string, Type> _exact = new Dictionary<string, Type>(StringComparer.Ordinal);

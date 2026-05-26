@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
+    [WorldService(typeof(MobaAreaTriggerRegistry))]
     public sealed class MobaAreaTriggerRegistry : IService
     {
         private readonly Dictionary<int, Entry> _entries = new Dictionary<int, Entry>();

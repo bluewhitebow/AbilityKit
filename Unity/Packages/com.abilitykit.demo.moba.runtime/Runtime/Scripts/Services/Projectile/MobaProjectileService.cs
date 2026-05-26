@@ -11,10 +11,12 @@ using AbilityKit.Core.Math;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
+    [WorldService(typeof(MobaProjectileService))]
     public sealed class MobaProjectileService : IService
     {
         private const int CollisionLayer_Unit = 1 << 0;

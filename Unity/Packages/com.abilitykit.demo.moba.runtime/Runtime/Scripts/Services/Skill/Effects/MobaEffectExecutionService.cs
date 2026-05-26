@@ -6,6 +6,7 @@ using AbilityKit.Core.Common.Log;
 using AbilityKit.Effect;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Triggering.Registry;
@@ -17,6 +18,7 @@ using AbilityKit.Trace;
 namespace AbilityKit.Demo.Moba.Services
 {
     using AbilityKit.Ability;
+    [WorldService(typeof(MobaEffectExecutionService))]
     public sealed class MobaEffectExecutionService : IService
     {
         private readonly IWorldResolver _services;

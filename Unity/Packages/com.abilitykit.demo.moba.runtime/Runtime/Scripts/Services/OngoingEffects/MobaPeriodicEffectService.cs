@@ -5,9 +5,11 @@ using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Ability.Triggering.Runtime;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 
 namespace AbilityKit.Demo.Moba.Services
 {
+    [WorldService(typeof(MobaPeriodicEffectService))]
     public class MobaPeriodicEffectService : IService
     {
         private readonly MobaConfigDatabase _config;

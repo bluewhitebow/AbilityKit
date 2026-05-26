@@ -92,6 +92,7 @@
     <ProjectReference Include="..\AbilityKit.Demo.Moba.Core\AbilityKit.Demo.Moba.Core.csproj" />
     <ProjectReference Include="..\AbilityKit.Demo.Moba.Share\AbilityKit.Demo.Moba.Share.csproj" />
     <ProjectReference Include="..\AbilityKit.Host.Extension\AbilityKit.Host.Extension.csproj" />
+    <ProjectReference Include="..\AbilityKit.Protocol.Moba\AbilityKit.Protocol.Moba.csproj" />
 
     <!-- ET SourceGenerator - 只作为 Analyzer 使用，不引用程序集以避免类型冲突 -->
     <!-- Share 项目已包含 Runtime 中的 Attribute 定义 -->

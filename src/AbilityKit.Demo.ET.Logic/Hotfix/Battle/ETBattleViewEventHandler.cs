@@ -8,9 +8,11 @@ namespace ET.Logic
     /// Battle view event handler
     /// Subscribes to logic layer events and creates Logic layer units
     ///
-    /// Note: View layer events (ActorMove, ActorDamage, ActorDead) are published
-    /// to the ET event system for ET.View to handle. This handler only manages
-    /// Logic layer unit creation.
+    /// Design:
+    /// - These handlers receive events that were published by ETBattleViewEventSink
+    /// - Handlers should ONLY update Logic layer data, NOT re-publish events
+    /// - View layer receives events directly from ETBattleViewEventSink
+    /// - Re-publishing events would cause View layer to receive duplicates
     /// </summary>
     [Event(SceneType.DemoBattle)]
     public class ETBattleView_EventHandler: AEvent<Scene, ActorSpawnEvent>
@@ -22,14 +24,14 @@ namespace ET.Logic
             if (unitComponent != null)
             {
                 unitComponent.CreateUnit(
-                    args.ActorId,
+                    (int)args.ActorId,  // ActorId is long in ActorSpawnEvent, cast to int
                     args.EntityCode,
                     args.Kind,
                     args.Name,
                     args.X,
                     args.Y,
                     args.MaxHp);
-                Log.Info($"[ETBattleView] Logic unit created: {args.Name} ({args.ActorId})");
+                Log.Info($"[ETBattleView] Logic unit created: {args.Name} (ActorId={args.ActorId}, EntityCode={args.EntityCode})");
             }
             else
             {
@@ -40,56 +42,76 @@ namespace ET.Logic
         }
     }
 
-        /// <summary>
-        /// Unit move event handler - publishes to ET event system for ET.View
-        /// </summary>
-        [Event(SceneType.DemoBattle)]
-        public class ETBattleView_ActorMove_Handler: AEvent<Scene, ActorMoveEvent>
+    /// <summary>
+    /// Unit move event handler
+    /// Updates Logic layer unit position (DO NOT re-publish - View receives from Sink directly)
+    /// </summary>
+    [Event(SceneType.DemoBattle)]
+    public class ETBattleView_ActorMove_Handler: AEvent<Scene, ActorMoveEvent>
+    {
+        protected override async ETTask Run(Scene scene, ActorMoveEvent args)
         {
-            protected override async ETTask Run(Scene scene, ActorMoveEvent args)
+            // Update Logic layer unit position only
+            // DO NOT re-publish - View layer receives ActorMoveEvent from ETBattleViewEventSink directly
+            var unitComponent = scene.GetComponent<ETUnitComponent>();
+            if (unitComponent != null)
             {
-                // Update Logic layer unit position directly
-                var unitComponent = scene.GetComponent<ETUnitComponent>();
-                if (unitComponent != null)
+                var unit = unitComponent.GetUnit(args.ActorId);
+                if (unit != null)
                 {
-                    var unit = unitComponent.GetUnit(args.ActorId);
-                    if (unit != null)
-                    {
-                        unit.X = args.X;
-                        unit.Y = args.Y;
-                    }
+                    unit.X = args.X;
+                    unit.Y = args.Y;
                 }
-
-                // Publish to ET event system for ET.View to handle rendering
-                EventSystem.Instance.Publish(scene, args);
-                await ETTask.CompletedTask;
             }
+            await ETTask.CompletedTask;
         }
+    }
 
     /// <summary>
-    /// Unit damage event handler - publishes to ET event system for ET.View
+    /// Unit damage event handler
+    /// DO NOT re-publish - View receives from Sink directly
     /// </summary>
     [Event(SceneType.DemoBattle)]
     public class ETBattleView_ActorDamage_Handler: AEvent<Scene, ActorDamageEvent>
     {
         protected override async ETTask Run(Scene scene, ActorDamageEvent args)
         {
-            // Publish to ET event system for ET.View to handle rendering
-            EventSystem.Instance.Publish(scene, args);
+            // Update Logic layer unit HP
+            var unitComponent = scene.GetComponent<ETUnitComponent>();
+            if (unitComponent != null)
+            {
+                var unit = unitComponent.GetUnit(args.ActorId);
+                if (unit != null)
+                {
+                    unit.Hp = args.CurrentHp;
+                    unit.MaxHp = args.MaxHp;
+                }
+            }
+            // DO NOT re-publish - View layer receives ActorDamageEvent from ETBattleViewEventSink directly
             await ETTask.CompletedTask;
         }
     }
 
     /// <summary>
-    /// Unit dead event handler - publishes to ET event system for ET.View
+    /// Unit dead event handler
+    /// DO NOT re-publish - View receives from Sink directly
     /// </summary>
     [Event(SceneType.DemoBattle)]
     public class ETBattleView_ActorDead_Handler: AEvent<Scene, ActorDeadEvent>
     {
         protected override async ETTask Run(Scene scene, ActorDeadEvent args)
         {
-            // Publish to ET event system for ET.View to handle rendering
-            EventSystem.Instance.Publish(scene, args);
+            // Update Logic layer unit state
+            var unitComponent = scene.GetComponent<ETUnitComponent>();
+            if (unitComponent != null)
+            {
+                var unit = unitComponent.GetUnit(args.ActorId);
+                if (unit != null)
+                {
+                    unit.Hp = 0;
+                }
+            }
+            // DO NOT re-publish - View layer receives ActorDeadEvent from ETBattleViewEventSink directly
             await ETTask.CompletedTask;
         }
     }
