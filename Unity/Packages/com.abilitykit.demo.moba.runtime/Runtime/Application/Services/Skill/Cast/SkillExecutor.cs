@@ -10,6 +10,7 @@ using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Demo.Moba;
+using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Trace;

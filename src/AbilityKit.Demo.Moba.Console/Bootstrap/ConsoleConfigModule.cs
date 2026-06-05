@@ -78,77 +78,19 @@ namespace AbilityKit.Demo.Moba.Console.Bootstrap
                 try
                 {
                     var adapter = new TextAssetLoaderAdapter(textAssetLoader);
-                    var files = adapter.GetFiles(_triggerPlansDir, "*.json").ToList();
-                    var converter = new TriggerPlanSourceConverter();
-                    var records = new List<TriggerPlanJsonDatabase.Record>();
-                    var strings = new Dictionary<int, string>();
+                    var directoryLoader = new TriggerPlanDirectoryLoader(adapter);
+                    var directories = new[] { _triggerPlansDir, "ability/rules" }
+                        .Where(d => !string.IsNullOrEmpty(d))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
 
-                    foreach (var file in files)
+                    var loadedDb = directoryLoader.LoadDirectories(directories, "**/*.json");
+                    if (loadedDb?.Records != null)
                     {
-                        if (!adapter.TryLoad(file, out var content) || string.IsNullOrEmpty(content))
-                            continue;
-
-                        try
-                        {
-                            var trimmed = content.TrimStart();
-                            bool needsConversion = trimmed.StartsWith("{\"$schema\"") ||
-                                trimmed.StartsWith("{\"version\"") ||
-                                trimmed.StartsWith("{\"triggers\":");
-
-                            string runtimeJson = needsConversion
-                                ? converter.ConvertSourceToRuntimeJson(content)
-                                : content;
-
-                            var runtimeDto = JObject.Parse(runtimeJson);
-                            var triggers = runtimeDto["triggers"] as JArray;
-
-                            if (triggers != null)
-                            {
-                                foreach (var trigger in triggers)
-                                {
-                                    var triggerId = trigger["id"]?.Value<int>() ?? 0;
-                                    if (triggerId <= 0) continue;
-
-                                    var eventName = trigger["event"]?.Value<string>() ?? "";
-                                    var eventId = trigger["eventId"]?.Value<int>() ?? 0;
-                                    if (eventId == 0 && !string.IsNullOrEmpty(eventName))
-                                    {
-                                        eventId = StableStringId.Get("event:" + eventName);
-                                    }
-
-                                    var phaseStr = trigger["phase"]?.Value<string>();
-                                    var phase = ParsePhase(phaseStr);
-                                    var priority = trigger["priority"]?.Value<int>() ?? 0;
-
-                                    var actionsArray = trigger["actions"] as JArray;
-                                    var actions = BuildActionCallPlans(actionsArray);
-
-                                    var plan = new TriggerPlan<object>(
-                                        phase: phase,
-                                        priority: priority,
-                                        triggerId: triggerId,
-                                        actions: actions,
-                                        interruptPriority: 0,
-                                        cue: null,
-                                        schedule: default);
-
-                                    records.Add(new TriggerPlanJsonDatabase.Record(triggerId, eventName, eventId, TriggerPlanScope.Global, in plan));
-                                }
-                            }
-                        }
-                        catch { }
+                        db.MergeFrom(loadedDb, replaceExisting: true);
                     }
 
-                    foreach (var record in records)
-                    {
-                        db.AddRecord(in record);
-                    }
-
-                    foreach (var pair in strings)
-                    {
-                        db.AddString(pair.Key, pair.Value);
-                    }
-                    Platform.Log.System($"[ConsoleConfigModule] Loaded {records.Count} triggers from directory");
+                    Platform.Log.System($"[ConsoleConfigModule] Loaded {db.Records?.Count ?? 0} trigger plans from configured directories");
                 }
                 catch (Exception ex)
                 {

@@ -219,25 +219,63 @@ namespace AbilityKit.Samples.Logic.Samples.Demo.ProgressiveSkill
             return true;
         }
 
+        public bool TryPause(IContinuous continuous)
+        {
+            if (continuous == null || !continuous.IsActive || continuous.IsTerminated)
+                return false;
+
+            continuous.Pause();
+            return continuous.IsPaused;
+        }
+
+        public bool TryResume(IContinuous continuous)
+        {
+            if (continuous == null || !continuous.IsPaused || continuous.IsTerminated)
+                return false;
+
+            continuous.Resume();
+            return continuous.IsActive;
+        }
+
+        public bool TryEnd(IContinuous continuous, ContinuousEndReason reason = ContinuousEndReason.Completed)
+        {
+            if (continuous == null || continuous.IsTerminated)
+                return false;
+
+            continuous.End(reason);
+            if (!continuous.IsTerminated)
+                return false;
+
+            _continuous.Remove(continuous);
+            return true;
+        }
+
+        public bool TryInterrupt(IContinuous continuous, string reason)
+        {
+            if (continuous == null || continuous.IsTerminated || !continuous.Config.CanBeInterrupted)
+                return false;
+
+            continuous.Abort(reason);
+            if (!continuous.IsTerminated)
+                return false;
+
+            _continuous.Remove(continuous);
+            return true;
+        }
+
         public void Pause(IContinuous continuous)
         {
-            if (continuous.State == ContinuousState.Active)
-                continuous.Pause();
+            TryPause(continuous);
         }
 
         public void Resume(IContinuous continuous)
         {
-            if (continuous.State == ContinuousState.Paused)
-                continuous.Resume();
+            TryResume(continuous);
         }
 
         public void Abort(IContinuous continuous, string reason)
         {
-            if (!continuous.IsTerminated)
-            {
-                continuous.Abort(reason);
-                _continuous.Remove(continuous);
-            }
+            TryInterrupt(continuous, reason);
         }
 
         public IReadOnlyList<IContinuous> GetOwnerContinuous(long ownerId)
@@ -359,9 +397,19 @@ namespace AbilityKit.Samples.Logic.Samples.Demo.ProgressiveSkill
 
         public void Abort(string reason)
         {
-            State = ContinuousState.Aborted;
-            _onEnd?.Invoke(reason);
-            OnEnded?.Invoke(this, ContinuousEndReason.Interrupted);
+            End(ContinuousEndReason.Interrupted);
+        }
+
+        public void End(ContinuousEndReason reason)
+        {
+            if (IsTerminated)
+                return;
+
+            State = reason == ContinuousEndReason.Completed
+                ? ContinuousState.Expired
+                : ContinuousState.Aborted;
+            _onEnd?.Invoke(reason.ToString());
+            OnEnded?.Invoke(this, reason);
         }
 
         public void InternalTick(float deltaTime)
@@ -380,9 +428,7 @@ namespace AbilityKit.Samples.Logic.Samples.Demo.ProgressiveSkill
 
             if (_elapsed >= _config.DurationSeconds)
             {
-                State = ContinuousState.Expired;
-                _onEnd?.Invoke("completed");
-                OnEnded?.Invoke(this, ContinuousEndReason.Completed);
+                End(ContinuousEndReason.Completed);
             }
         }
     }
@@ -434,9 +480,19 @@ namespace AbilityKit.Samples.Logic.Samples.Demo.ProgressiveSkill
 
         public void Abort(string reason)
         {
-            State = ContinuousState.Aborted;
-            _onEnd?.Invoke(reason);
-            OnEnded?.Invoke(this, ContinuousEndReason.Interrupted);
+            End(ContinuousEndReason.Interrupted);
+        }
+
+        public void End(ContinuousEndReason reason)
+        {
+            if (IsTerminated)
+                return;
+
+            State = reason == ContinuousEndReason.Completed
+                ? ContinuousState.Expired
+                : ContinuousState.Aborted;
+            _onEnd?.Invoke(reason.ToString());
+            OnEnded?.Invoke(this, reason);
         }
 
         public void InternalTick(float deltaTime)
@@ -455,9 +511,7 @@ namespace AbilityKit.Samples.Logic.Samples.Demo.ProgressiveSkill
 
             if (_elapsed >= _config.DurationSeconds)
             {
-                State = ContinuousState.Expired;
-                _onEnd?.Invoke("completed");
-                OnEnded?.Invoke(this, ContinuousEndReason.Completed);
+                End(ContinuousEndReason.Completed);
             }
         }
     }

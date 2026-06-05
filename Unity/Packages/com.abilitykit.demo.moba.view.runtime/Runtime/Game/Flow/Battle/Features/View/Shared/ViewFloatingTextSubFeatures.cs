@@ -3,59 +3,29 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleViewFeature
+    internal sealed class ViewFloatingTextSubFeature<TFeature> : IViewSubFeature<TFeature>
+        where TFeature : class, IViewFeatureRuntime
     {
-        private sealed class FloatingTextSubFeature : IViewSubFeature<BattleViewFeature>
+        public void OnAttach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<BattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
 
-                f._floatingTexts?.Clear();
-                f._floatingTexts = new BattleFloatingTextSystem();
-            }
-
-            public void OnDetach(in FeatureModuleContext<BattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._floatingTexts?.Clear();
-                f._floatingTexts = null;
-            }
-
-            public void Tick(in FeatureModuleContext<BattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleViewFeature> ctx) { }
+            runtime.FloatingTexts?.Clear();
+            runtime.FloatingTexts = new BattleFloatingTextSystem();
         }
-    }
 
-    public sealed partial class ConfirmedBattleViewFeature
-    {
-        private sealed class FloatingTextSubFeature : IViewSubFeature<ConfirmedBattleViewFeature>
+        public void OnDetach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
 
-                f._floatingTexts?.Clear();
-                f._floatingTexts = new BattleFloatingTextSystem();
-            }
-
-            public void OnDetach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._floatingTexts?.Clear();
-                f._floatingTexts = null;
-            }
-
-            public void Tick(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx) { }
+            runtime.FloatingTexts?.Clear();
+            runtime.FloatingTexts = null;
         }
+
+        public void Tick(in FeatureModuleContext<TFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<TFeature> ctx) { }
     }
 }

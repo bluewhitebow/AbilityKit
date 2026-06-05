@@ -1,0 +1,340 @@
+using System;
+using AbilityKit.Ability.FrameSync;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Demo.Moba.Attributes;
+using AbilityKit.Demo.Moba.Components;
+using AbilityKit.Demo.Moba.Config.Core;
+using AbilityKit.Demo.Moba.Share.Config;
+using AbilityKit.Triggering.Eventing;
+using AbilityKit.Triggering.Payload;
+
+namespace AbilityKit.Demo.Moba.Services
+{
+    public static class SkillRulePayloadFields
+    {
+        private const string Prefix = "payload:";
+
+        public const string SkillId = "skill.id";
+        public const string SkillSlot = "skill.slot";
+        public const string SkillLevel = "skill.level";
+        public const string SkillCost = "skill.cost";
+        public const string SkillCooldownMs = "skill.cooldown_ms";
+        public const string SkillCooldownRemainingMs = "skill.cooldown_remaining_ms";
+        public const string CasterActorId = "caster.actor_id";
+        public const string TargetActorId = "target.actor_id";
+        public const string CasterMana = "caster.mana";
+        public const string CasterManaMax = "caster.mana.max";
+        public const string CasterManaPercent = "caster.mana.percent";
+        public const string CasterResourceMana = "caster.resource.2";
+        public const string CasterResourceManaMax = "caster.resource.2.max";
+
+        public static int FieldId(string name)
+        {
+            return string.IsNullOrEmpty(name) ? 0 : StableStringId.Get(Prefix + name);
+        }
+    }
+
+    public sealed class SkillPipelineContextPayloadAccessor : IPayloadIntAccessor<SkillPipelineContext>, IPayloadDoubleAccessor<SkillPipelineContext>
+    {
+        private static readonly int SkillIdId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillId);
+        private static readonly int SkillSlotId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillSlot);
+        private static readonly int SkillLevelId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillLevel);
+        private static readonly int SkillCostId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillCost);
+        private static readonly int SkillCooldownMsId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillCooldownMs);
+        private static readonly int SkillCooldownRemainingMsId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.SkillCooldownRemainingMs);
+        private static readonly int CasterActorIdId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterActorId);
+        private static readonly int TargetActorIdId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.TargetActorId);
+        private static readonly int CasterManaId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterMana);
+        private static readonly int CasterManaMaxId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterManaMax);
+        private static readonly int CasterManaPercentId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterManaPercent);
+        private static readonly int CasterResourceManaId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterResourceMana);
+        private static readonly int CasterResourceManaMaxId = SkillRulePayloadFields.FieldId(SkillRulePayloadFields.CasterResourceManaMax);
+
+        private readonly IWorldResolver _services;
+        private MobaConfigDatabase _configs;
+        private MobaActorLookupService _actors;
+        private IFrameTime _time;
+
+        public SkillPipelineContextPayloadAccessor(MobaConfigDatabase configs, MobaActorLookupService actors, IFrameTime time = null)
+        {
+            _configs = configs;
+            _actors = actors;
+            _time = time;
+        }
+
+        public SkillPipelineContextPayloadAccessor(IWorldResolver services)
+        {
+            _services = services;
+        }
+
+        public bool TryGet(in SkillPipelineContext args, int fieldId, out int value)
+        {
+            value = 0;
+            if (args == null) return false;
+
+            if (fieldId == SkillIdId)
+            {
+                value = args.SkillId;
+                return true;
+            }
+
+            if (fieldId == SkillSlotId)
+            {
+                value = args.SkillSlot;
+                return true;
+            }
+
+            if (fieldId == SkillLevelId)
+            {
+                value = Math.Max(1, args.GetSkillLevel());
+                return true;
+            }
+
+            if (fieldId == CasterActorIdId)
+            {
+                value = args.CasterActorId;
+                return true;
+            }
+
+            if (fieldId == TargetActorIdId)
+            {
+                value = args.TargetActorId;
+                return true;
+            }
+
+            if (fieldId == SkillCostId || fieldId == SkillCooldownMsId || fieldId == SkillCooldownRemainingMsId || fieldId == CasterManaId || fieldId == CasterManaMaxId || fieldId == CasterManaPercentId || fieldId == CasterResourceManaId || fieldId == CasterResourceManaMaxId)
+            {
+                double doubleValue;
+                if (!TryGet(in args, fieldId, out doubleValue)) return false;
+                value = (int)Math.Round(doubleValue);
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool TryGet(in SkillPipelineContext args, int fieldId, out double value)
+        {
+            value = 0d;
+            if (args == null) return false;
+
+            if (fieldId == SkillCostId)
+            {
+                if (!TryGetSkillLevel(args, out var level)) return false;
+                value = level.Cost;
+                return true;
+            }
+
+            if (fieldId == SkillCooldownMsId)
+            {
+                if (TryGetSkillLevel(args, out var level))
+                {
+                    value = level.CooldownMs;
+                    return true;
+                }
+
+                value = args.SkillCooldownMs;
+                return true;
+            }
+
+            if (fieldId == SkillCooldownRemainingMsId)
+            {
+                value = GetCooldownRemainingMs(args);
+                return true;
+            }
+
+            if (fieldId == CasterManaId || fieldId == CasterResourceManaId)
+            {
+                return TryGetResource(args, args.CasterActorId, ResourceType.Mana, out value, out _);
+            }
+
+            if (fieldId == CasterManaMaxId || fieldId == CasterResourceManaMaxId)
+            {
+                return TryGetResource(args, args.CasterActorId, ResourceType.Mana, out _, out value);
+            }
+
+            if (fieldId == CasterManaPercentId)
+            {
+                if (!TryGetResource(args, args.CasterActorId, ResourceType.Mana, out var current, out var max) || max <= 0d) return false;
+                value = current / max;
+                return true;
+            }
+
+            if (fieldId == SkillIdId)
+            {
+                value = args.SkillId;
+                return true;
+            }
+
+            if (fieldId == SkillSlotId)
+            {
+                value = args.SkillSlot;
+                return true;
+            }
+
+            if (fieldId == SkillLevelId)
+            {
+                value = Math.Max(1, args.GetSkillLevel());
+                return true;
+            }
+
+            if (fieldId == CasterActorIdId)
+            {
+                value = args.CasterActorId;
+                return true;
+            }
+
+            if (fieldId == TargetActorIdId)
+            {
+                value = args.TargetActorId;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryGetSkillLevel(SkillPipelineContext context, out SkillLevelDTO level)
+        {
+            level = null;
+            var configs = ResolveConfigs(context);
+            if (context == null || configs == null || context.SkillId <= 0) return false;
+            if (!configs.TryGetSkill(context.SkillId, out var skill) || skill == null || skill.LevelTableId <= 0) return false;
+            if (!configs.TryGetSkillLevelTable(skill.LevelTableId, out var table) || table == null) return false;
+
+            var skillLevel = context.GetSkillLevel();
+            if (skillLevel <= 0) skillLevel = 1;
+
+            try
+            {
+                level = table.GetLevel(skillLevel);
+                return level != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryGetResource(SkillPipelineContext context, int actorId, ResourceType resourceType, out double current, out double max)
+        {
+            current = 0d;
+            max = 0d;
+            var actors = ResolveActors(context);
+            if (actorId <= 0 || resourceType == ResourceType.None || actors == null) return false;
+            if (!actors.TryGetActorEntity(actorId, out var actor) || actor == null) return false;
+            if (!actor.hasResourceContainer || actor.resourceContainer.Value == null || actor.resourceContainer.Value.Map == null) return false;
+            if (!actor.resourceContainer.Value.Map.TryGetValue(resourceType, out var state) || state == null) return false;
+
+            current = state.Current;
+            max = ResolveResourceMax(actor, state, resourceType);
+            return true;
+        }
+
+        private double GetCooldownRemainingMs(SkillPipelineContext context)
+        {
+            var actors = ResolveActors(context);
+            if (context == null || actors == null) return 0d;
+            if (!SkillHandlerRuntimeAccess.TryGetActiveSkill(actors, context.CasterActorId, context.SkillSlot, context.SkillId, out var runtime) || runtime == null) return 0d;
+
+            var now = SkillHandlerRuntimeAccess.GetCurrentTimeMs(ResolveTime(context));
+            return Math.Max(0d, runtime.CooldownEndTimeMs - now);
+        }
+
+        private MobaConfigDatabase ResolveConfigs(SkillPipelineContext context)
+        {
+            if (context != null && context.WorldServices != null && context.WorldServices.TryResolve<MobaConfigDatabase>(out var configs) && configs != null)
+            {
+                _configs = configs;
+                return configs;
+            }
+
+            if (_configs == null && _services != null)
+            {
+                _services.TryResolve(out _configs);
+            }
+
+            return _configs;
+        }
+
+        private MobaActorLookupService ResolveActors(SkillPipelineContext context)
+        {
+            if (context != null && context.WorldServices != null && context.WorldServices.TryResolve<MobaActorLookupService>(out var actors) && actors != null)
+            {
+                _actors = actors;
+                return actors;
+            }
+
+            if (_actors == null && _services != null)
+            {
+                _services.TryResolve(out _actors);
+            }
+
+            return _actors;
+        }
+
+        private IFrameTime ResolveTime(SkillPipelineContext context)
+        {
+            if (context != null && context.WorldServices != null && context.WorldServices.TryResolve<IFrameTime>(out var time) && time != null)
+            {
+                _time = time;
+                return time;
+            }
+
+            if (_time == null && _services != null)
+            {
+                _services.TryResolve(out _time);
+            }
+
+            return _time;
+        }
+
+        private static double ResolveResourceMax(global::ActorEntity actor, ResourceState state, ResourceType resourceType)
+        {
+            if (state != null && state.LastMax > 0f) return state.LastMax;
+            if (actor == null || !actor.hasAttributeGroup || actor.attributeGroup.Group == null) return 0d;
+
+            var attr = resourceType switch
+            {
+                ResourceType.Hp => BattleAttributeType.MAX_HP,
+                ResourceType.Mana => BattleAttributeType.MAX_MANA,
+                _ => BattleAttributeType.None
+            };
+
+            return attr != BattleAttributeType.None
+                ? actor.attributeGroup.Group.GetValue(MobaAttributeIds.Get(attr))
+                : 0d;
+        }
+    }
+
+    public sealed class SkillPipelineContextObjectPayloadAccessor : IPayloadIntAccessor<object>, IPayloadDoubleAccessor<object>
+    {
+        private readonly SkillPipelineContextPayloadAccessor _inner;
+
+        public SkillPipelineContextObjectPayloadAccessor(SkillPipelineContextPayloadAccessor inner)
+        {
+            _inner = inner;
+        }
+
+        public bool TryGet(in object args, int fieldId, out int value)
+        {
+            if (_inner != null && args is SkillPipelineContext context)
+            {
+                return _inner.TryGet(in context, fieldId, out value);
+            }
+
+            value = default;
+            return false;
+        }
+
+        public bool TryGet(in object args, int fieldId, out double value)
+        {
+            if (_inner != null && args is SkillPipelineContext context)
+            {
+                return _inner.TryGet(in context, fieldId, out value);
+            }
+
+            value = default;
+            return false;
+        }
+    }
+}

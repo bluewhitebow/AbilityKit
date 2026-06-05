@@ -61,6 +61,11 @@ namespace AbilityKit.Combat
         public static readonly DataflowSlot<float> CritMultiplier = new DataflowSlot<float>("Damage_CritMultiplier", 1.5f);
 
         /// <summary>
+        /// 暴击判定随机值，范围建议为 0..1。默认 1 表示不触发暴击。
+        /// </summary>
+        public static readonly DataflowSlot<float> CritRoll = new DataflowSlot<float>("Damage_CritRoll", 1f);
+
+        /// <summary>
         /// 伤害加成百分比
         /// </summary>
         public static readonly DataflowSlot<float> DamageBonusPercent = new DataflowSlot<float>("Damage_BonusPercent");
@@ -175,9 +180,10 @@ namespace AbilityKit.Combat
             // 使用强类型槽位获取暴击数据
             var critChance = context.GetData(DamageSlots.CritChance);
             var critMultiplier = context.GetData(DamageSlots.CritMultiplier);
+            var critRoll = context.GetData(DamageSlots.CritRoll);
 
-            // 暴击计算（实际项目中应该从属性系统获取暴击率）
-            if (critChance > 0 && UnityEngine.Random.value < critChance)
+            // 暴击计算：随机值由上层注入，便于纯逻辑测试、回放和确定性 sample。
+            if (critChance > 0 && critRoll < critChance)
             {
                 _result.Request.Flags |= DamageFlags.Critical;
                 _result.CriticalMultiplier = critMultiplier;

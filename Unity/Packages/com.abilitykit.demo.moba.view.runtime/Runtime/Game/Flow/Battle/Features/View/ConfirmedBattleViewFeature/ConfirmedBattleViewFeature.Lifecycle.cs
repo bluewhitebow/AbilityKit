@@ -8,8 +8,8 @@ namespace AbilityKit.Game.Flow
     {
         public void OnAttach(in GamePhaseContext ctx)
         {
-            EnsureModulesCreated();
-            _moduleHost?.Attach(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this));
+            EnsureSubFeaturesCreated();
+            _subFeatureHost?.Attach(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this));
             OnAllSubFeaturesAttached(ctx);
         }
 
@@ -22,35 +22,35 @@ namespace AbilityKit.Game.Flow
 
         public void OnDetach(in GamePhaseContext ctx)
         {
-            _moduleHost?.Detach(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this));
+            _subFeatureHost?.Detach(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this));
         }
 
         public void Tick(in GamePhaseContext ctx, float deltaTime)
         {
             if (_confirmedCtx?.EntityWorld == null) return;
-            _moduleHost?.Tick(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this), deltaTime);
+            _subFeatureHost?.Tick(new FeatureModuleContext<ConfirmedBattleViewFeature>(ctx, this), deltaTime);
         }
 
         public void RebindAll()
         {
             if (_confirmedCtx?.EntityWorld == null) return;
-            _moduleHost?.RebindAll(new FeatureModuleContext<ConfirmedBattleViewFeature>(default, this));
+            _subFeatureHost?.RebindAll(new FeatureModuleContext<ConfirmedBattleViewFeature>(default, this));
 
             var frame = _confirmedCtx != null ? _confirmedCtx.LastFrame : 0;
             var worldId = _confirmedCtx != null ? _confirmedCtx.RuntimeWorldId : default;
             _confirmedCtx?.Hooks?.ViewsRebound.Invoke(new ViewsReboundEvent(isConfirmed: true, worldId: worldId, frame: frame));
         }
 
-        private void EnsureModulesCreated()
+        private void EnsureSubFeaturesCreated()
         {
-            if (_moduleHost != null && _subFeatures.Count > 0) return;
+            if (_subFeatureHost != null && _subFeatures.Count > 0) return;
 
             _subFeatures.Clear();
-            AddFeatureSubFeatures(_subFeatures);
+            ViewFeatureSubFeatureBuilder.AddConfirmedViewSubFeatures(_subFeatures);
 
-            ViewSubFeaturePipeline.AddStandardViewModules(_subFeatures);
+            ViewSubFeaturePipeline.AddStandardViewSubFeatures(_subFeatures);
 
-            _moduleHost = ViewSubFeaturePipeline.CreateModuleHost(_subFeatures);
+            _subFeatureHost = ViewSubFeaturePipeline.CreateHost(_subFeatures);
         }
     }
 }

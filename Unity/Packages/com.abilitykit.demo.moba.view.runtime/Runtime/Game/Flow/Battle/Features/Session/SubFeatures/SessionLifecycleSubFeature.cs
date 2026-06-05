@@ -3,41 +3,36 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class SessionLifecycleSubFeature :
+        ISessionSubFeature<BattleSessionFeature>,
+        ISessionLifecycleNotifySubFeature<BattleSessionFeature>,
+        IGameModuleId,
+        IGameModuleDependencies
     {
-        private sealed class SessionLifecycleSubFeature :
-            ISessionSubFeature<BattleSessionFeature>,
-            ISessionLifecycleNotifySubFeature<BattleSessionFeature>,
-            IGameModuleId,
-            IGameModuleDependencies
+        public string Id => "session_lifecycle";
+
+        public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
+
+        public void NotifySessionStarting(in FeatureModuleContext<BattleSessionFeature> ctx)
         {
-            public string Id => "session_lifecycle";
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionLifecycleRuntime>(ctx, out var runtime)) return;
 
-            public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
-
-            public void NotifySessionStarting(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f.Hooks?.SessionStarting.Invoke();
-            }
-
-            public void NotifySessionStopping(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f.Hooks?.SessionStopping.Invoke();
-            }
-
-            public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx) { }
-
-            public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx) { }
-
-            public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+            runtime.Hooks?.SessionStarting.Invoke();
         }
+
+        public void NotifySessionStopping(in FeatureModuleContext<BattleSessionFeature> ctx)
+        {
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionLifecycleRuntime>(ctx, out var runtime)) return;
+
+            runtime.Hooks?.SessionStopping.Invoke();
+        }
+
+        public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+
+        public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+
+        public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
     }
 }

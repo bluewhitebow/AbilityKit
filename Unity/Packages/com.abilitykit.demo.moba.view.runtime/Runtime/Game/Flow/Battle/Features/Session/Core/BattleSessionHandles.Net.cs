@@ -5,7 +5,7 @@ namespace AbilityKit.Game.Flow
 {
     internal sealed partial class BattleSessionHandles
     {
-        internal sealed class NetHandles_Deprecated
+        internal sealed class NetHandles
         {
             internal BattleSessionNetAdapter Adapter;
             internal IBattleSessionNetAdapterContext Ctx;

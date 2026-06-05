@@ -286,10 +286,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 writer.WritePropertyName("Nodes");
                 writer.WriteStartArray();
 
-                foreach (var cond in conditions)
-                {
-                    WriteCondition(writer, cond);
-                }
+                WriteConditionList(writer, conditions, "And");
 
                 writer.WriteEndArray();
             }
@@ -297,74 +294,129 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             writer.WriteEndObject();
         }
 
+        private void WriteConditionList(JsonTextWriter writer, IReadOnlyList<JObject> conditions, string logicalOp)
+        {
+            if (conditions == null || conditions.Count == 0)
+            {
+                WriteBoolConst(writer, true);
+                return;
+            }
+
+            for (var i = 0; i < conditions.Count; i++)
+            {
+                WriteCondition(writer, conditions[i]);
+                if (i > 0)
+                {
+                    WriteBoolOperator(writer, logicalOp);
+                }
+            }
+        }
+
         private void WriteCondition(JsonTextWriter writer, JObject cond)
         {
+            if (cond == null)
+            {
+                WriteBoolConst(writer, true);
+                return;
+            }
+
             var type = cond["type"]?.ToString();
             if (string.IsNullOrEmpty(type))
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Const");
-                writer.WritePropertyName("ConstValue");
-                writer.WriteValue(true);
-                writer.WriteEndObject();
+                WriteBoolConst(writer, true);
                 return;
             }
 
             switch (type)
             {
                 case "all":
-                case "any":
-                case "not":
-                    var inner = cond["items"] ?? cond["item"];
-                    if (inner is JArray arr)
-                    {
-                        foreach (var item in arr)
-                        {
-                            WriteCondition(writer, (JObject)item);
-                        }
-                    }
-                    else if (inner is JObject obj)
-                    {
-                        WriteCondition(writer, obj);
-                    }
+                case "and":
+                    WriteConditionList(writer, ReadConditionItems(cond), "And");
+                    break;
 
-                    if (type == "not")
-                    {
-                        writer.WriteStartObject();
-                        writer.WritePropertyName("Kind");
-                        writer.WriteValue("Not");
-                        writer.WriteEndObject();
-                    }
+                case "any":
+                case "or":
+                    WriteConditionList(writer, ReadConditionItems(cond), "Or");
+                    break;
+
+                case "not":
+                    WriteConditionList(writer, ReadConditionItems(cond), "And");
+                    WriteBoolOperator(writer, "Not");
+                    break;
+
+                case "compare":
+                case "compare_numeric":
+                    WriteCompareNode(writer, cond, cond["op"]?.ToString() ?? cond["compare_op"]?.ToString() ?? cond["compareOp"]?.ToString());
                     break;
 
                 case "arg_eq":
-                    WriteCompareNode(writer, cond, "Eq");
+                    WriteCompareNode(writer, cond, "Equal");
                     break;
 
                 case "arg_gt":
-                    WriteCompareNode(writer, cond, "Gt");
+                    WriteCompareNode(writer, cond, "GreaterThan");
                     break;
 
                 case "arg_gte":
-                    WriteCompareNode(writer, cond, "Ge");
+                    WriteCompareNode(writer, cond, "GreaterThanOrEqual");
                     break;
 
                 case "arg_lt":
-                    WriteCompareNode(writer, cond, "Lt");
+                    WriteCompareNode(writer, cond, "LessThan");
                     break;
 
                 case "arg_lte":
-                    WriteCompareNode(writer, cond, "Le");
+                    WriteCompareNode(writer, cond, "LessThanOrEqual");
                     break;
 
                 case "arg_neq":
-                    WriteCompareNode(writer, cond, "Ne");
+                    WriteCompareNode(writer, cond, "NotEqual");
                     break;
 
                 default:
+                    WriteBoolConst(writer, true);
                     break;
             }
+        }
+
+        private static List<JObject> ReadConditionItems(JObject cond)
+        {
+            var items = new List<JObject>();
+            var inner = cond["items"] ?? cond["item"] ?? cond["conditions"] ?? cond["condition"];
+            if (inner is JArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (item is JObject obj)
+                    {
+                        items.Add(obj);
+                    }
+                }
+            }
+            else if (inner is JObject obj)
+            {
+                items.Add(obj);
+            }
+
+            return items;
+        }
+
+        private static void WriteBoolConst(JsonTextWriter writer, bool value)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Kind");
+            writer.WriteValue("Const");
+            writer.WritePropertyName("ConstValue");
+            writer.WriteValue(value);
+            writer.WriteEndObject();
+        }
+
+        private static void WriteBoolOperator(JsonTextWriter writer, string kind)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Kind");
+            writer.WriteValue(kind);
+            writer.WriteEndObject();
         }
 
         private void WriteCompareNode(JsonTextWriter writer, JObject cond, string op)
@@ -372,40 +424,28 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             var argName = cond["arg_name"]?.ToString();
             var leftVarDomain = (cond["left_var_domain"] ?? cond["var_domain"])?.ToString();
             var leftVarKey = (cond["left_var_key"] ?? cond["var_key"])?.ToString();
-            var value = cond["value"]?.Value<double>() ?? 0;
-            var argFieldId = string.IsNullOrEmpty(argName) ? 0 : StableStringId.Get("payload:" + argName);
 
             writer.WriteStartObject();
             writer.WritePropertyName("Kind");
             writer.WriteValue("CompareNumeric");
             writer.WritePropertyName("CompareOp");
-            writer.WriteValue(op);
+            writer.WriteValue(NormalizeCompareOp(op));
             writer.WritePropertyName("Left");
-            writer.WriteStartObject();
-            if (!string.IsNullOrEmpty(leftVarDomain) && !string.IsNullOrEmpty(leftVarKey))
+            if (cond["left"] != null)
             {
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Var");
-                writer.WritePropertyName("DomainId");
-                writer.WriteValue(leftVarDomain);
-                writer.WritePropertyName("Key");
-                writer.WriteValue(leftVarKey);
+                WriteParamValue(writer, cond["left"]);
+            }
+            else if (!string.IsNullOrEmpty(leftVarDomain) && !string.IsNullOrEmpty(leftVarKey))
+            {
+                WriteVarValue(writer, leftVarDomain, leftVarKey);
             }
             else
             {
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("PayloadField");
-                writer.WritePropertyName("FieldId");
-                writer.WriteValue(argFieldId);
+                WritePayloadFieldValue(writer, argName);
             }
-            writer.WriteEndObject();
+
             writer.WritePropertyName("Right");
-            writer.WriteStartObject();
-            writer.WritePropertyName("Kind");
-            writer.WriteValue("Const");
-            writer.WritePropertyName("ConstValue");
-            writer.WriteValue(value);
-            writer.WriteEndObject();
+            WriteParamValue(writer, cond["right"] ?? cond["value"]);
             writer.WriteEndObject();
         }
 
@@ -877,14 +917,9 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         private void WriteParamValue(JsonTextWriter writer, JToken value)
         {
-            if (value == null)
+            if (value == null || value.Type == JTokenType.Null)
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Const");
-                writer.WritePropertyName("ConstValue");
-                writer.WriteValue(0);
-                writer.WriteEndObject();
+                WriteConstValue(writer, 0);
                 return;
             }
 
@@ -892,106 +927,216 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             {
                 case JTokenType.Integer:
                 case JTokenType.Float:
-                    writer.WriteStartObject();
-                    writer.WritePropertyName("Kind");
-                    writer.WriteValue("Const");
-                    writer.WritePropertyName("ConstValue");
-                    writer.WriteValue(value.Value<double>());
-                    writer.WriteEndObject();
+                    WriteConstValue(writer, value.Value<double>());
                     break;
 
                 case JTokenType.String:
-                    var strValue = value.ToString();
-                    WriteStringValue(writer, strValue);
+                    WriteStringValue(writer, value.ToString());
                     break;
 
                 case JTokenType.Boolean:
-                    writer.WriteStartObject();
-                    writer.WritePropertyName("Kind");
-                    writer.WriteValue("Const");
-                    writer.WritePropertyName("ConstValue");
-                    writer.WriteValue(value.Value<bool>() ? 1.0 : 0.0);
-                    writer.WriteEndObject();
+                    WriteConstValue(writer, value.Value<bool>() ? 1.0 : 0.0);
+                    break;
+
+                case JTokenType.Object:
+                    WriteObjectValue(writer, (JObject)value);
                     break;
 
                 default:
-                    writer.WriteStartObject();
-                    writer.WritePropertyName("Kind");
-                    writer.WriteValue("Const");
-                    writer.WritePropertyName("ConstValue");
-                    writer.WriteValue(0);
-                    writer.WriteEndObject();
+                    WriteConstValue(writer, 0);
                     break;
             }
+        }
+
+        private void WriteObjectValue(JsonTextWriter writer, JObject value)
+        {
+            if (value == null)
+            {
+                WriteConstValue(writer, 0);
+                return;
+            }
+
+            var kind = ReadString(value, "kind", "type");
+            var payload = ReadString(value, "payload", "payload_field", "payloadField", "field");
+            if (!string.IsNullOrEmpty(payload) || IsKind(kind, "payload", "payload_field", "payloadField"))
+            {
+                WritePayloadFieldValue(writer, payload ?? ReadString(value, "name", "key"));
+                return;
+            }
+
+            var constToken = value["const"] ?? value["value"] ?? value["constValue"] ?? value["ConstValue"];
+            if (constToken != null && constToken.Type != JTokenType.Object && constToken.Type != JTokenType.Array)
+            {
+                WriteParamValue(writer, constToken);
+                return;
+            }
+
+            var varDomain = ReadString(value, "var_domain", "varDomain", "domain", "domainId", "DomainId");
+            var varKey = ReadString(value, "var_key", "varKey", "key", "Key");
+            if (!string.IsNullOrEmpty(varDomain) && !string.IsNullOrEmpty(varKey) || IsKind(kind, "var", "variable"))
+            {
+                WriteVarValue(writer, string.IsNullOrEmpty(varDomain) ? "trigger" : varDomain, varKey);
+                return;
+            }
+
+            var expr = ReadString(value, "expr", "expression", "exprText", "ExprText");
+            if (!string.IsNullOrEmpty(expr) || IsKind(kind, "expr", "expression"))
+            {
+                WriteExprValue(writer, expr ?? string.Empty);
+                return;
+            }
+
+            WriteConstValue(writer, 0);
         }
 
         private void WriteStringValue(JsonTextWriter writer, string value)
         {
             if (string.IsNullOrEmpty(value))
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Const");
-                writer.WritePropertyName("ConstValue");
-                writer.WriteValue(0);
-                writer.WriteEndObject();
+                WriteConstValue(writer, 0);
+                return;
+            }
+
+            if (value.StartsWith("payload:", StringComparison.OrdinalIgnoreCase))
+            {
+                WritePayloadFieldValue(writer, value.Substring("payload:".Length));
+                return;
+            }
+
+            if (value.StartsWith("@"))
+            {
+                WritePayloadFieldValue(writer, value.Substring(1));
                 return;
             }
 
             if (value.StartsWith("$"))
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Var");
-                writer.WritePropertyName("DomainId");
-                writer.WriteValue("trigger");
-                writer.WritePropertyName("Key");
-                writer.WriteValue(value.TrimStart('$'));
-                writer.WriteEndObject();
+                WriteVarValue(writer, "trigger", value.TrimStart('$'));
                 return;
             }
 
             if (value.StartsWith("="))
             {
-                var expr = value.Substring(1).Trim();
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Expr");
-                writer.WritePropertyName("ExprText");
-                writer.WriteValue(expr);
-                writer.WriteEndObject();
+                WriteExprValue(writer, value.Substring(1).Trim());
                 return;
             }
 
             if (double.TryParse(value, out var numValue))
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Const");
-                writer.WritePropertyName("ConstValue");
-                writer.WriteValue(numValue);
-                writer.WriteEndObject();
+                WriteConstValue(writer, numValue);
                 return;
             }
 
             if (value.StartsWith("%"))
             {
-                writer.WriteStartObject();
-                writer.WritePropertyName("Kind");
-                writer.WriteValue("Var");
-                writer.WritePropertyName("DomainId");
-                writer.WriteValue("trigger");
-                writer.WritePropertyName("Key");
-                writer.WriteValue(value.TrimStart('%'));
-                writer.WriteEndObject();
+                WriteVarValue(writer, "trigger", value.TrimStart('%'));
                 return;
             }
 
+            WriteConstValue(writer, 0);
+        }
+
+        private static bool IsKind(string kind, params string[] values)
+        {
+            if (string.IsNullOrEmpty(kind) || values == null) return false;
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (string.Equals(kind, values[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string NormalizeCompareOp(string op)
+        {
+            if (string.IsNullOrEmpty(op)) return "Equal";
+            switch (op.Trim().ToLowerInvariant())
+            {
+                case "eq":
+                case "=":
+                case "==":
+                case "equal":
+                    return "Equal";
+                case "ne":
+                case "neq":
+                case "!=":
+                case "not_equal":
+                case "not-equal":
+                case "notequal":
+                    return "NotEqual";
+                case "gt":
+                case ">":
+                case "greater_than":
+                case "greater-than":
+                case "greaterthan":
+                    return "GreaterThan";
+                case "ge":
+                case "gte":
+                case ">=":
+                case "greater_than_or_equal":
+                case "greater-than-or-equal":
+                case "greaterthanorequal":
+                    return "GreaterThanOrEqual";
+                case "lt":
+                case "<":
+                case "less_than":
+                case "less-than":
+                case "lessthan":
+                    return "LessThan";
+                case "le":
+                case "lte":
+                case "<=":
+                case "less_than_or_equal":
+                case "less-than-or-equal":
+                case "lessthanorequal":
+                    return "LessThanOrEqual";
+                default:
+                    return op;
+            }
+        }
+
+        private static void WriteConstValue(JsonTextWriter writer, double value)
+        {
             writer.WriteStartObject();
             writer.WritePropertyName("Kind");
             writer.WriteValue("Const");
             writer.WritePropertyName("ConstValue");
-            writer.WriteValue(0);
+            writer.WriteValue(value);
+            writer.WriteEndObject();
+        }
+
+        private static void WritePayloadFieldValue(JsonTextWriter writer, string payloadField)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Kind");
+            writer.WriteValue("PayloadField");
+            writer.WritePropertyName("FieldId");
+            writer.WriteValue(string.IsNullOrEmpty(payloadField) ? 0 : StableStringId.Get("payload:" + payloadField));
+            writer.WriteEndObject();
+        }
+
+        private static void WriteVarValue(JsonTextWriter writer, string domain, string key)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Kind");
+            writer.WriteValue("Var");
+            writer.WritePropertyName("DomainId");
+            writer.WriteValue(domain ?? string.Empty);
+            writer.WritePropertyName("Key");
+            writer.WriteValue(key ?? string.Empty);
+            writer.WriteEndObject();
+        }
+
+        private static void WriteExprValue(JsonTextWriter writer, string expr)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("Kind");
+            writer.WriteValue("Expr");
+            writer.WritePropertyName("ExprText");
+            writer.WriteValue(expr ?? string.Empty);
             writer.WriteEndObject();
         }
 

@@ -130,7 +130,7 @@ namespace AbilityKit.Game.Flow
             if (_confirmedWorld != null) return;
 
             CreateConfirmedAuthorityRuntimeAndWorld(out var authWorldId);
-            SetupConfirmedAuthorityInputAndBootstrap(authWorldId);
+            SetupConfirmedAuthorityInputAndBootstrap();
 
             EnsureConfirmedAuthorityViewEventPipeline();
 

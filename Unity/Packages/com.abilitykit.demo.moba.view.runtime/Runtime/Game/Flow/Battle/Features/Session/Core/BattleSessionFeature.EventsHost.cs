@@ -29,12 +29,10 @@ namespace AbilityKit.Game.Flow
             Hooks?.FirstFrameReceived.Invoke();
         }
 
-        BattleContext ISessionEventsHost.Context => _ctx;
-
-        Exception ISessionEventsHost.PendingModuleValidationFailure
+        Exception ISessionEventsHost.PendingSubFeatureValidationFailure
         {
-            get => _pendingModuleValidationFailure;
-            set => _pendingModuleValidationFailure = value;
+            get => _pendingSubFeatureValidationFailure;
+            set => _pendingSubFeatureValidationFailure = value;
         }
 
         BattleSessionHooks ISessionEventsHost.Hooks

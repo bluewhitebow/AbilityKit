@@ -38,26 +38,33 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot)
         {
-            if (frame.Value == _lastFrame.Value)
-            {
-                snapshot = default;
-                return false;
-            }
-            _lastFrame = frame;
-
             if (_hasSnapshot && !_sent)
             {
+                if (frame.Value == _lastFrame.Value)
+                {
+                    snapshot = default;
+                    return false;
+                }
+
                 snapshot = new WorldStateSnapshot(AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.ActorSpawn, _snapshotPayload);
                 _sent = true;
+                _lastFrame = frame;
                 return true;
             }
 
             if (_pending.Count > 0)
             {
+                if (frame.Value == _lastFrame.Value)
+                {
+                    snapshot = default;
+                    return false;
+                }
+
                 try
                 {
                     var payload = MobaActorSpawnSnapshotCodec.Serialize(_pending.ToArrayClearAndTrim());
                     snapshot = new WorldStateSnapshot(AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.ActorSpawn, payload);
+                    _lastFrame = frame;
                     return true;
                 }
                 catch

@@ -1,6 +1,7 @@
 ﻿using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Demo.Moba.Components;
+using AbilityKit.Demo.Moba.Share.Config;
 using AbilityKit.GameplayTags;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -40,12 +41,14 @@ namespace AbilityKit.Demo.Moba.Services
     public sealed class CheckResourceHandler : ISkillHandler
     {
         private readonly MobaActorLookupService _actors;
+        private readonly MobaSkillNumericRefResolver _numericRefs;
 
         public int HandlerType => (int)EHandlerType.CheckResource;
 
-        public CheckResourceHandler(MobaActorLookupService actors)
+        public CheckResourceHandler(MobaActorLookupService actors, MobaSkillNumericRefResolver numericRefs = null)
         {
             _actors = actors;
+            _numericRefs = numericRefs;
         }
 
         public HandlerResult Execute(in HandlerContext context)
@@ -54,8 +57,10 @@ namespace AbilityKit.Demo.Moba.Services
             if (dto == null) return HandlerResult.Ok;
 
             var resourceType = (ResourceType)dto.ResourceType;
-            var requiredAmount = dto.MinAmount?.ConstValue ?? 0;
-            if (requiredAmount <= 0f) return HandlerResult.Ok;
+            var requiredAmount = _numericRefs != null
+                ? _numericRefs.Resolve(dto.MinAmount, in context)
+                : dto.MinAmount?.ConstValue ?? 0d;
+            if (requiredAmount <= 0d) return HandlerResult.Ok;
 
             if (!SkillHandlerRuntimeAccess.TryGetResourceAmount(_actors, context.CasterActorId, resourceType, out var currentAmount))
             {
@@ -74,12 +79,14 @@ namespace AbilityKit.Demo.Moba.Services
     public sealed class ConsumeResourceHandler : ISkillHandler
     {
         private readonly MobaActorLookupService _actors;
+        private readonly MobaSkillNumericRefResolver _numericRefs;
 
         public int HandlerType => (int)EHandlerType.ConsumeResource;
 
-        public ConsumeResourceHandler(MobaActorLookupService actors)
+        public ConsumeResourceHandler(MobaActorLookupService actors, MobaSkillNumericRefResolver numericRefs = null)
         {
             _actors = actors;
+            _numericRefs = numericRefs;
         }
 
         public HandlerResult Execute(in HandlerContext context)
@@ -88,7 +95,9 @@ namespace AbilityKit.Demo.Moba.Services
             if (dto == null) return HandlerResult.Ok;
 
             var resourceType = (ResourceType)dto.ResourceType;
-            var amount = (float)(dto.Amount?.ConstValue ?? 0);
+            var amount = (float)(_numericRefs != null
+                ? _numericRefs.Resolve(dto.Amount, in context)
+                : dto.Amount?.ConstValue ?? 0d);
             if (amount <= 0f) return HandlerResult.Ok;
 
             if (!SkillHandlerRuntimeAccess.TryConsumeResource(_actors, context.CasterActorId, resourceType, amount, out var currentAmount))
@@ -104,13 +113,15 @@ namespace AbilityKit.Demo.Moba.Services
     {
         private readonly MobaActorLookupService _actors;
         private readonly IFrameTime _time;
+        private readonly MobaSkillNumericRefResolver _numericRefs;
 
         public int HandlerType => (int)EHandlerType.StartCooldown;
 
-        public StartCooldownHandler(MobaActorLookupService actors, IFrameTime time)
+        public StartCooldownHandler(MobaActorLookupService actors, IFrameTime time, MobaSkillNumericRefResolver numericRefs = null)
         {
             _actors = actors;
             _time = time;
+            _numericRefs = numericRefs;
         }
 
         public HandlerResult Execute(in HandlerContext context)
@@ -118,7 +129,10 @@ namespace AbilityKit.Demo.Moba.Services
             var dto = context.CurrentDto as StartCooldownDTO;
             if (dto == null) return HandlerResult.Ok;
 
-            var cooldownMs = (long)MathF.Round((float)(dto.CooldownMs?.ConstValue ?? context.PipelineContext.SkillCooldownMs));
+            var rawCooldownMs = _numericRefs != null
+                ? _numericRefs.Resolve(dto.CooldownMs, in context, context.PipelineContext?.SkillCooldownMs ?? 0d)
+                : dto.CooldownMs?.ConstValue ?? context.PipelineContext?.SkillCooldownMs ?? 0d;
+            var cooldownMs = (long)MathF.Round((float)rawCooldownMs);
             if (cooldownMs <= 0L) return HandlerResult.Ok;
 
             var endTimeMs = SkillHandlerRuntimeAccess.GetCurrentTimeMs(_time) + cooldownMs;

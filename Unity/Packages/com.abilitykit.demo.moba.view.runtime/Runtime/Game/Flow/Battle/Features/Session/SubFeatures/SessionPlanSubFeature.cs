@@ -5,38 +5,34 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class SessionPlanSubFeature :
+        ISessionSubFeature<BattleSessionFeature>,
+        IGameModuleId,
+        IGameModuleDependencies
     {
-        private sealed class SessionPlanSubFeature :
-            ISessionSubFeature<BattleSessionFeature>,
-            IGameModuleId,
-            IGameModuleDependencies
+        public string Id => "session_plan";
+
+        public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
+
+        public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
         {
-            public string Id => "session_plan";
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionPlanRuntime>(ctx, out var runtime)) return;
 
-            public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
-
-            public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._planCtrl.OnAttach(
-                    host: (ISessionPlanHost)f,
-                    bootstrapper: f._bootstrapper,
-                    state: f._state,
-                    handles: f._handles,
-                    hooks: f.Hooks,
-                    ctx: f._ctx);
-            }
-
-            public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-            }
-
-            public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+            runtime.PlanController.OnAttach(
+                host: (ISessionPlanHost)ctx.Feature,
+                bootstrapper: runtime.Bootstrapper,
+                state: runtime.State,
+                handles: runtime.Handles,
+                hooks: runtime.Hooks,
+                ctx: runtime.Context);
         }
+
+        public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
+        {
+        }
+
+        public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
     }
 }

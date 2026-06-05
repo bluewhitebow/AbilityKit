@@ -1,0 +1,12 @@
+{
+  "SmokeFrames": 600,
+  "MinBattleFrames": 30,
+  "TimeoutMilliseconds": 15000,
+  "SleepMilliseconds": 16,
+  "DrainFrames": 5,
+  "ConsistencyRuns": 2,
+  "SmokeCasePath": "tools/et-battle-smoke.case.damage.json",
+  "NoBuild": false,
+  "SkipConfigValidation": false,
+  "KeepOutput": false
+}

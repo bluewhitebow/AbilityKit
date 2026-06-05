@@ -50,16 +50,10 @@ namespace AbilityKit.Game.Flow
         internal sealed class RemoteDrivenSimState
         {
             public int LastTickedFrame;
-            public int LastLoggedFrame;
-            public bool FirstSnapshotLogged;
-            public bool FirstSpawnLogged;
 
             public void Reset()
             {
                 LastTickedFrame = 0;
-                LastLoggedFrame = 0;
-                FirstSnapshotLogged = false;
-                FirstSpawnLogged = false;
             }
         }
 
@@ -75,12 +69,10 @@ namespace AbilityKit.Game.Flow
 
         internal sealed class FlagsState
         {
-            public bool TickEnteredLogged;
             public bool AutoPlanLogged;
 
             public void Reset()
             {
-                TickEnteredLogged = false;
                 AutoPlanLogged = false;
             }
         }
@@ -98,7 +90,7 @@ namespace AbilityKit.Game.Flow
         public readonly EditorHooksState EditorHooks = new EditorHooksState();
 #endif
 
-        public Exception PendingModuleValidationFailure;
+        public Exception PendingSubFeatureValidationFailure;
 
         public void ResetSessionFlags()
         {

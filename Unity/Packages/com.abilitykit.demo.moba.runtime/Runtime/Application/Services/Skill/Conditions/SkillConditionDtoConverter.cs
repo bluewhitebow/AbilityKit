@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AbilityKit.Core.Common.Log;
+using AbilityKit.Demo.Moba.Share.Config;
 using AbilityKit.Triggering.Runtime.Config;
 using AbilityKit.Triggering.Runtime.Executable;
 using AbilityKit.Triggering.Runtime.Plan;

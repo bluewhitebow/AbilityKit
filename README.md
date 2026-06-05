@@ -1,8 +1,44 @@
 # Ability-Kit
 
-> 通用游戏战斗框架 | Logic-Presentation Separation | Ability-System
+> 通用游戏战斗工具集合源码 | Logic-Presentation Separation | Ability System | 按需组合
 
 **Ability-Kit** 是一个基于 Unity UPM 的通用游戏战斗框架，专注于**技能系统、战斗逻辑**。框架采用模块化设计，提供数据驱动的技能编排、事件触发系统、流程引擎等核心能力，支持按需组合以适配不同类型的游戏（MOBA、MMO、ARPG、RTS 等）。核心战斗逻辑以纯 C# runtime 形式实现，可脱离 Unity 环境运行（例如服务器/工具链/单元测试）；与 Unity 强相关的部分主要集中在表现层与少量适配层。
+
+Ability-Kit 目前处于**开发期**。这个仓库保存的是 AbilityKit 相关模块包、示例工程、工具链和第三方适配的**完整源码集合**，方便统一开发、编译验证、示例演示和设计文档维护。
+
+真实项目使用时不需要，也不建议把仓库内所有包一次性整体引入。更推荐按项目需求选择组合：
+
+- 只做技能/触发：组合 `core`、`pipeline`、`triggering`、`ability` 等包。
+- 只做逻辑流程：组合 `flow`、`hfsm`、`timer`、`context` 等包。
+- 做帧同步/状态同步：组合 `world.framesync`、`world.snapshot`、`world.statesync`、`record`、`network` 等包。
+- 做 Unity 表现和编辑器工具：按需加入 `unity.pool`、`base.editor`、`demo.moba.editor` 等包。
+- 参考完整落地方式：阅读 `demo.moba.*` 最佳实践示例，但不要把示例包误认为所有项目的必选依赖。
+
+---
+
+## 仓库定位
+
+这个仓库更接近一个“工具箱源码仓库”，而不是单一框架产品包。
+
+| 目录 | 定位 |
+|------|------|
+| `Unity/Packages/` | Unity UPM 包源码。各 `com.abilitykit.*` 包是主要模块边界。 |
+| `src/` | .NET 解决方案和样例工程，复用 `Unity/Packages/` 中的源码，用于纯 C# 编译、控制台运行和示例验证。 |
+| `Server/` | 服务端、Orleans、网关等实验和集成代码。 |
+| `Docs/` | 跨模块设计记录、规则说明和集成备忘。 |
+| `LubanConfig/` | 配置表与生成相关素材。 |
+| `tools/` | 本地开发、验证、smoke test 辅助脚本。 |
+
+`Unity/Packages/` 中包目录较多，是因为这里集中存放了工具集合的全部源码，包括一个较完整的 MOBA 最佳实践示例。后续给其他项目使用时，应按需获取和组合，而不是默认全量使用。
+
+---
+
+## 当前状态
+
+- 项目仍在开发期，部分包的 API、目录结构和依赖声明还会继续收敛。
+- 许多模块已经具备独立包边界，但 `package.json`、`asmdef`、示例工程和服务端工程之间仍有一些历史依赖需要持续整理。
+- `demo.moba` 是参考工程，用来展示框架组合方式、配置组织、协议同步、编辑器工具和运行时流程。
+- 第三方包位于 `com.abilitykit.thirdparty.*`，主要作为源码/依赖承载，不建议直接放入 AbilityKit 业务扩展。
 
 ---
 
@@ -336,9 +372,7 @@ src/
 
 ### 安装
 
-1. 打开 Unity Package Manager
-2. 点击 `+` → `Add package from git URL`
-3. 添加所需的包 URL（参见各模块的 README）
+1.  按需选择所需的包进行复制即可，暂时没拆分对应的package url（参见各模块的 README）
 
 ### 运行 Console Demo
 

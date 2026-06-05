@@ -6,6 +6,7 @@ using AbilityKit.ECS;
 using AbilityKit.Core.Math;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
+using AbilityKit.Demo.Moba.Share.Config;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Pipeline;
 

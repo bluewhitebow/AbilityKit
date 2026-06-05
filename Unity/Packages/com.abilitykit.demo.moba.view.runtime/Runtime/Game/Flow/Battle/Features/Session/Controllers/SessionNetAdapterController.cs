@@ -3,25 +3,22 @@ using AbilityKit.Game.Battle;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class SessionNetAdapterController
     {
-        private sealed class SessionNetAdapterController
+        public FramePacket TransformFramePacket(BattleLogicSession session, BattleSessionNetAdapter adapter, FramePacket packet)
         {
-            public FramePacket TransformFramePacket(BattleLogicSession session, BattleSessionNetAdapter adapter, FramePacket packet)
+            if (adapter == null || session == null) return packet;
+
+            var frame = packet.Frame.Value;
+            if (session.RemoteInputFrames != null
+                && session.RemoteSnapshotFrames != null
+                && session.RemoteInputFrames.TryGet(frame, out var inputFrame)
+                && session.RemoteSnapshotFrames.TryGet(frame, out var snapshotFrame))
             {
-                if (adapter == null || session == null) return packet;
-
-                var frame = packet.Frame.Value;
-                if (session.RemoteInputFrames != null
-                    && session.RemoteSnapshotFrames != null
-                    && session.RemoteInputFrames.TryGet(frame, out var inputFrame)
-                    && session.RemoteSnapshotFrames.TryGet(frame, out var snapshotFrame))
-                {
-                    return adapter.ProcessAndFeed(packet.WorldId, inputFrame, snapshotFrame);
-                }
-
-                return adapter.ProcessAndFeed(packet);
+                return adapter.ProcessAndFeed(packet.WorldId, inputFrame, snapshotFrame);
             }
+
+            return adapter.ProcessAndFeed(packet);
         }
     }
 }

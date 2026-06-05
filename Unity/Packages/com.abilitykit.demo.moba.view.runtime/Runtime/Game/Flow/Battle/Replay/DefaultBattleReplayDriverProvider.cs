@@ -6,7 +6,7 @@ using AbilityKit.Ability.World.Abstractions;
 
 namespace AbilityKit.Game.Flow.Battle.Replay
 {
-    internal sealed class DefaultBattleReplayDriverProvider : BattleSessionFeature.IBattleReplayDriverProvider
+    internal sealed class DefaultBattleReplayDriverProvider : IBattleReplayDriverProvider
     {
         public bool TryCreate(in BattleStartPlan plan, out LockstepReplayDriver driver)
         {

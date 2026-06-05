@@ -17,7 +17,7 @@ using EC = AbilityKit.World.ECS;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleViewFeature : IGamePhaseFeature, IViewFeatureModulesHost
+    public sealed partial class BattleViewFeature : IGamePhaseFeature
     {
         private BattleContext _ctx;
         private IBattleEntityQuery _query;
@@ -28,7 +28,7 @@ namespace AbilityKit.Game.Flow
         private ViewTimeline _timeline;
 
         private readonly List<IViewSubFeature<BattleViewFeature>> _subFeatures = new List<IViewSubFeature<BattleViewFeature>>(8);
-        private ModuleHost<FeatureModuleContext<BattleViewFeature>, IViewSubFeature<BattleViewFeature>> _moduleHost;
+        private ModuleHost<FeatureModuleContext<BattleViewFeature>, IViewSubFeature<BattleViewFeature>> _subFeatureHost;
 
         private BattleFloatingTextSystem _floatingTexts;
         private BattleAreaViewSystem _areaViews;

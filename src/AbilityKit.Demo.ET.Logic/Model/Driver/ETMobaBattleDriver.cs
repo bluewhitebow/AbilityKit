@@ -74,6 +74,9 @@ namespace ET.Logic
         // ============== Snapshot Dispatcher ==============
 
         public FrameSnapshotDispatcher SnapshotDispatcher { get; set; }
+        public ActorSpawnData[] LastActorSpawnSnapshot { get; private set; } = Array.Empty<ActorSpawnData>();
+        public ActorTransformData[] LastActorTransformSnapshot { get; private set; } = Array.Empty<ActorTransformData>();
+        public StateHashData LastStateHashSnapshot { get; private set; }
 
         // ============== Entity Registry (moba.core integration) ==============
 
@@ -177,9 +180,16 @@ namespace ET.Logic
                 return;
             }
 
+            if (snapshot.EnterGame.HasValue)
+            {
+                dispatcher.DispatchEnterGame(snapshot.FrameIndex, snapshot.EnterGame);
+            }
+
             if (snapshot.ActorTransforms != null && snapshot.ActorTransforms.Count > 0)
             {
-                dispatcher.DispatchActorTransform(snapshot.FrameIndex, ToArray(snapshot.ActorTransforms));
+                var actorTransforms = ToArray(snapshot.ActorTransforms);
+                LastActorTransformSnapshot = actorTransforms;
+                dispatcher.DispatchActorTransform(snapshot.FrameIndex, actorTransforms);
             }
 
             if (snapshot.ProjectileEvents != null && snapshot.ProjectileEvents.Count > 0)
@@ -199,12 +209,15 @@ namespace ET.Logic
 
             if (snapshot.StateHash.HasValue)
             {
+                LastStateHashSnapshot = snapshot.StateHash;
                 dispatcher.DispatchStateHash(snapshot.FrameIndex, snapshot.StateHash);
             }
 
             if (snapshot.ActorSpawns != null && snapshot.ActorSpawns.Count > 0)
             {
-                dispatcher.DispatchActorSpawn(snapshot.FrameIndex, ToArray(snapshot.ActorSpawns));
+                var actorSpawns = ToArray(snapshot.ActorSpawns);
+                LastActorSpawnSnapshot = actorSpawns;
+                dispatcher.DispatchActorSpawn(snapshot.FrameIndex, actorSpawns);
             }
         }
 

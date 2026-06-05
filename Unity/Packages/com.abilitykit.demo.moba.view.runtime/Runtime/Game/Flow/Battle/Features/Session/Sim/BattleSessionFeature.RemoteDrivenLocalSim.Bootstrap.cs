@@ -27,16 +27,7 @@ namespace AbilityKit.Game.Flow
     {
         private void CreateRemoteDrivenRuntimeAndWorld()
         {
-            var typeRegistry = new WorldTypeRegistry()
-                .RegisterEntitasWorld(AbilityKit.Demo.Moba.Worlds.Blueprints.MobaLobbyWorldBlueprint.Type)
-                .RegisterEntitasWorld(AbilityKit.Demo.Moba.Worlds.Blueprints.MobaBattleWorldBlueprint.Type);
-
-            var blueprints = new AbilityKit.Ability.Host.WorldBlueprints.WorldBlueprintRegistry();
-            AbilityKit.Demo.Moba.Worlds.Blueprints.MobaWorldBlueprintsRegistration.RegisterAll(blueprints);
-
-            var baseFactory = new RegistryWorldFactory(typeRegistry);
-            var factory = new AbilityKit.Ability.Host.WorldBlueprints.WorldBlueprintWorldFactory(baseFactory, blueprints);
-            _remoteDrivenWorlds = new WorldManager(factory);
+            _remoteDrivenWorlds = SessionMobaWorldBootstrapFactory.CreateWorldManager();
 
             var serverOptions = new AbilityKit.Ability.Host.Framework.HostRuntimeOptions();
             _remoteDrivenRuntime = new AbilityKit.Ability.Host.Framework.HostRuntime(_remoteDrivenWorlds, serverOptions);
@@ -61,32 +52,13 @@ namespace AbilityKit.Game.Flow
                 stats = null;
             }
 
-            var builder = WorldServiceContainerFactory.CreateWithAttributes(
-                AbilityKit.Ability.World.Services.Attributes.WorldServiceProfile.All,
-                new[]
-                {
-                    typeof(WorldServiceContainerFactory).Assembly,
-                    typeof(BattleLogicSession).Assembly,
-                    typeof(AbilityKit.Demo.Moba.Systems.MobaWorldBootstrapModule).Assembly,
-                    typeof(BattleSessionFeature).Assembly
-                },
-                new[] { "AbilityKit" }
-            );
-            builder.AddModule(new MobaConfigWorldModule());
-            builder.RegisterInstance(new WorldInitData(_plan.CreateWorldOpCode, _plan.CreateWorldPayload));
-            builder.TryRegister<IFrameTime>(WorldLifetime.Singleton, _ => new AbilityKit.Ability.FrameSync.FrameTime());
-
-            if (stats != null)
-            {
-                builder.RegisterInstance<AbilityKit.Demo.Moba.Services.IWorldAuthorityFramesSource>(new ClientPredictionDriverStatsFramesSource(stats));
-            }
-
-            var options = new WorldCreateOptions(new WorldId(_plan.WorldId), _plan.WorldType)
-            {
-                ServiceBuilder = builder,
-            };
-            options.SetEntitasContextsFactory(new MobaEntitasContextsFactory());
-
+            var authorityFramesSource = stats != null
+                ? new ClientPredictionDriverStatsFramesSource(stats)
+                : null;
+            var options = SessionMobaWorldBootstrapFactory.CreateWorldOptions(
+                _plan,
+                new WorldId(_plan.WorldId),
+                authorityFramesSource);
             _remoteDrivenWorld = _remoteDrivenRuntime.CreateWorld(options);
 
             try
@@ -106,10 +78,6 @@ namespace AbilityKit.Game.Flow
                 if (_remoteDrivenWorld?.Services == null)
                 {
                     Log.Error("[BattleSessionFeature] RemoteDrivenLocalWorld bootstrap failed: world.Services is null");
-                }
-                else
-                {
-                    var p = new PlayerId(_plan.PlayerId);
                 }
             }
             catch (Exception ex)
@@ -193,95 +161,104 @@ namespace AbilityKit.Game.Flow
         private void BindRemoteDrivenPredictionFeaturesToBattleContext()
         {
             if (_ctx == null) return;
+            if (!ShouldExposeRemoteDrivenPredictionFeatures()) return;
 
-            // Only bind prediction stats/control from this runtime in GatewayRemote mode.
-            // The confirmed-authority compare world should not override the primary session's prediction modules.
-            if (!(_plan.HostMode == BattleStartConfig.BattleHostMode.GatewayRemote && _plan.UseGatewayTransport)) return;
+            BindRemoteDrivenPredictionStats();
 
             if (!_plan.EnableClientPrediction)
             {
-                if (_remoteDrivenRuntime.Features.TryGetFeature<AbilityKit.Ability.Host.Extensions.FrameSync.IClientPredictionDriverStats>(out var stats) && stats != null)
-                {
-                    // Still expose stats so you can compare confirmed/predicted (predicted==confirmed in this mode).
-                    _ctx.PredictionStats = stats;
-                }
-                else
-                {
-                    _ctx.PredictionStats = null;
-                }
-                _ctx.PredictionReconcileTarget = null;
-                _ctx.PredictionReconcileControl = null;
-                _ctx.PredictionTuningControl = null;
-                // Prediction disabled: still create/drive remote world, but do not expose prediction interfaces.
+                ClearRemoteDrivenPredictionControls();
                 return;
             }
 
-            if (_remoteDrivenRuntime.Features.TryGetFeature<AbilityKit.Ability.Host.Extensions.FrameSync.IClientPredictionDriverStats>(out var st) && st != null)
-            {
-                _ctx.PredictionStats = st;
-            }
-            else
-            {
-                _ctx.PredictionStats = null;
-            }
+            BindRemoteDrivenPredictionControls();
+        }
 
-            if (_remoteDrivenRuntime.Features.TryGetFeature<AbilityKit.Ability.Host.Extensions.FrameSync.IClientPredictionReconcileTarget>(out var target) && target != null)
-            {
-                _ctx.PredictionReconcileTarget = target;
-            }
-            else
-            {
-                _ctx.PredictionReconcileTarget = null;
-            }
+        private bool ShouldExposeRemoteDrivenPredictionFeatures()
+        {
+            return _plan.HostMode == BattleStartConfig.BattleHostMode.GatewayRemote && _plan.UseGatewayTransport;
+        }
 
-            if (_remoteDrivenRuntime.Features.TryGetFeature<AbilityKit.Ability.Host.Extensions.FrameSync.IClientPredictionReconcileControl>(out var control) && control != null)
-            {
-                _ctx.PredictionReconcileControl = control;
-            }
-            else
-            {
-                _ctx.PredictionReconcileControl = null;
-            }
+        private void BindRemoteDrivenPredictionStats()
+        {
+            _ctx.PredictionStats = TryGetRemoteDrivenFeature<IClientPredictionDriverStats>();
+        }
 
-            if (_remoteDrivenRuntime.Features.TryGetFeature<AbilityKit.Ability.Host.Extensions.FrameSync.IClientPredictionTuningControl>(out var tuning) && tuning != null)
+        private void BindRemoteDrivenPredictionControls()
+        {
+            _ctx.PredictionReconcileTarget = TryGetRemoteDrivenFeature<IClientPredictionReconcileTarget>();
+            _ctx.PredictionReconcileControl = TryGetRemoteDrivenFeature<IClientPredictionReconcileControl>();
+            _ctx.PredictionTuningControl = TryGetRemoteDrivenFeature<IClientPredictionTuningControl>();
+        }
+
+        private void ClearRemoteDrivenPredictionControls()
+        {
+            _ctx.PredictionReconcileTarget = null;
+            _ctx.PredictionReconcileControl = null;
+            _ctx.PredictionTuningControl = null;
+        }
+
+        private T TryGetRemoteDrivenFeature<T>()
+            where T : class
+        {
+            try
             {
-                _ctx.PredictionTuningControl = tuning;
+                return _remoteDrivenRuntime.Features.TryGetFeature<T>(out var feature) ? feature : null;
             }
-            else
+            catch (Exception ex)
             {
-                _ctx.PredictionTuningControl = null;
+                Log.Exception(ex, $"[BattleSessionFeature] TryGetRemoteDrivenFeature failed: {typeof(T).Name}");
+                return null;
             }
         }
 
         private void SetupRemoteDrivenInputAndDebugStats()
         {
             _remoteDrivenLastTickedFrame = 0;
-            _remoteDrivenLastLoggedFrame = -1;
-            _remoteDrivenFirstSnapshotLogged = false;
-            _remoteDrivenFirstSpawnLogged = false;
 
-            var delay = _plan.InputDelayFrames;
-            if (delay < 0) delay = 0;
-            var buf = new FrameJitterBuffer<PlayerInputCommand[]>(delayFrames: delay, missingMode: MissingFrameMode.FillDefault, missingFrameFactory: Array.Empty<PlayerInputCommand>, initialCapacity: 256);
-            _remoteDrivenInputSource = buf;
-            _remoteDrivenConsumable = buf;
-            _remoteDrivenSink = buf;
+            var buffer = CreateRemoteDrivenInputBuffer();
+            BindRemoteDrivenInputBuffer(buffer);
+            PublishRemoteDrivenInputStats(buffer);
+        }
 
+        private FrameJitterBuffer<PlayerInputCommand[]> CreateRemoteDrivenInputBuffer()
+        {
+            return new FrameJitterBuffer<PlayerInputCommand[]>(
+                delayFrames: ResolveRemoteDrivenInputDelay(),
+                missingMode: MissingFrameMode.FillDefault,
+                missingFrameFactory: Array.Empty<PlayerInputCommand>,
+                initialCapacity: 256);
+        }
+
+        private int ResolveRemoteDrivenInputDelay()
+        {
+            return _plan.InputDelayFrames < 0 ? 0 : _plan.InputDelayFrames;
+        }
+
+        private void BindRemoteDrivenInputBuffer(FrameJitterBuffer<PlayerInputCommand[]> buffer)
+        {
+            _remoteDrivenInputSource = buffer;
+            _remoteDrivenConsumable = buffer;
+            _remoteDrivenSink = buffer;
+        }
+
+        private static void PublishRemoteDrivenInputStats(FrameJitterBuffer<PlayerInputCommand[]> buffer)
+        {
             AbilityKit.Game.Flow.BattleFlowDebugProvider.JitterBufferStats = new AbilityKit.Game.Flow.JitterBufferStatsSnapshot
             {
-                DelayFrames = buf.DelayFrames,
-                MissingMode = buf.MissingMode.ToString(),
-                TargetFrame = buf.TargetFrame,
-                MaxReceivedFrame = buf.MaxReceivedFrame,
-                LastConsumedFrame = buf.LastConsumedFrame,
-                BufferedCount = buf.Count,
-                MinBufferedFrame = buf.MinBufferedFrame,
+                DelayFrames = buffer.DelayFrames,
+                MissingMode = buffer.MissingMode.ToString(),
+                TargetFrame = buffer.TargetFrame,
+                MaxReceivedFrame = buffer.MaxReceivedFrame,
+                LastConsumedFrame = buffer.LastConsumedFrame,
+                BufferedCount = buffer.Count,
+                MinBufferedFrame = buffer.MinBufferedFrame,
 
-                AddedCount = buf.AddedCount,
-                DuplicateCount = buf.DuplicateCount,
-                LateCount = buf.LateCount,
-                ConsumedCount = buf.ConsumedCount,
-                FilledDefaultCount = buf.FilledDefaultCount,
+                AddedCount = buffer.AddedCount,
+                DuplicateCount = buffer.DuplicateCount,
+                LateCount = buffer.LateCount,
+                ConsumedCount = buffer.ConsumedCount,
+                FilledDefaultCount = buffer.FilledDefaultCount,
             };
         }
     }

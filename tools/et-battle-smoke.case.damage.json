@@ -1,0 +1,47 @@
+{
+  "Name": "skill-damage-cooldown-basic",
+  "Inputs": [
+    {
+      "Type": "move",
+      "FrameOffset": 1,
+      "MoveX": 1.0,
+      "MoveZ": 0.0
+    },
+    {
+      "Type": "skill",
+      "FrameOffset": 1,
+      "SkillSlot": 1,
+      "Target": "current-target"
+    },
+    {
+      "Type": "skill",
+      "FrameOffset": 2,
+      "SkillSlot": 1,
+      "Target": "current-target"
+    }
+  ],
+  "Expected": {
+    "RequireMoveInput": true,
+    "RequireSkillInput": true,
+    "RequireSkillTarget": true,
+    "RequireTransformSnapshot": true,
+    "RequireStateHashSnapshot": true,
+    "RequireActorSpawnSnapshot": true,
+    "RequireActorSpawnCoverage": true,
+    "RequireEventSnapshot": true,
+    "MinEventSnapshots": 1,
+    "MaxEventSnapshots": 1,
+    "MinActorSpawns": 2,
+    "ExpectedTargetHpAtMost": 150.0,
+    "RequireTargetAttributeGroup": true,
+    "RequireTargetResourceContainer": true,
+    "RequireTargetSkillLoadout": true,
+    "MinTargetActiveSkillCount": 3,
+    "RequireLocalSkillCooldown": true,
+    "ExpectedCooldownSkillSlot": 1,
+    "MinLocalSkillCooldownRemainingMs": 1000,
+    "RequireLocalManaConsumed": true,
+    "MinLocalManaSpent": 50.0,
+    "MaxLocalManaAfter": 150.0
+  }
+}

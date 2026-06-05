@@ -23,18 +23,25 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly MobaConfigDatabase _configs;
         private readonly MobaEffectInvokerService _effects;
         private readonly SkillConditionRegistry _conditionRegistry;
+        private readonly SkillHandlerRegistry _handlerRegistry;
         private readonly IGameplayTagService _tags;
+        private readonly IWorldResolver _services;
+        private MobaTriggerPlanExecutor _rulePlanExecutor;
 
         public TableDrivenMobaSkillPipelineLibrary(
             MobaConfigDatabase configs,
             MobaEffectInvokerService effects,
             SkillConditionRegistry conditionRegistry = null,
-            IGameplayTagService tags = null)
+            SkillHandlerRegistry handlerRegistry = null,
+            IGameplayTagService tags = null,
+            IWorldResolver services = null)
         {
             _configs = configs;
             _effects = effects;
             _conditionRegistry = conditionRegistry;
+            _handlerRegistry = handlerRegistry;
             _tags = tags;
+            _services = services;
         }
 
         public bool TryGet(
@@ -106,6 +113,12 @@ namespace AbilityKit.Demo.Moba.Services
                     if (phase.Timeline == null) return null;
                     var events = ToArray(phase.Timeline.Events);
                     return new SkillTimelinePhase(MakePhaseId(phase, timelinePhaseId.Value), phase.Timeline.DurationMs, events, _effects);
+                case SkillPhaseType.Handlers:
+                    if (phase.Handlers == null || _handlerRegistry == null) return null;
+                    return new SkillFlowHandlersPhase(MakePhaseId(phase, fallbackPhaseId), phase.Handlers, _handlerRegistry);
+                case SkillPhaseType.RulePlan:
+                    if (phase.RulePlan == null) return null;
+                    return new SkillRulePlanPhase(MakePhaseId(phase, fallbackPhaseId), phase.RulePlan, GetOrCreateRulePlanExecutor());
                 case SkillPhaseType.Sequence:
                     return BuildSequencePhase(phase, checksPhaseId, timelinePhaseId, fallbackPhaseId);
                 case SkillPhaseType.Parallel:
@@ -190,6 +203,21 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (children == null || children.Count == 0) return null;
             return BuildPhase(children[0], checksPhaseId, timelinePhaseId, fallbackPhaseId);
+        }
+
+        private MobaTriggerPlanExecutor GetOrCreateRulePlanExecutor()
+        {
+            if (_rulePlanExecutor != null) return _rulePlanExecutor;
+            if (_services == null) return null;
+
+            _services.TryResolve<AbilityKit.Triggering.Eventing.IEventBus>(out var eventBus);
+            _services.TryResolve<AbilityKit.Triggering.Registry.FunctionRegistry>(out var functions);
+            _services.TryResolve<AbilityKit.Triggering.Registry.ActionRegistry>(out var actions);
+            _services.TryResolve<AbilityKit.Triggering.Payload.IPayloadAccessorRegistry>(out var payloads);
+            _services.TryResolve<AbilityKit.Triggering.Runtime.Plan.Json.TriggerPlanJsonDatabase>(out var planDb);
+
+            _rulePlanExecutor = new MobaTriggerPlanExecutor(_services, planDb, eventBus, functions, actions, payloads);
+            return _rulePlanExecutor;
         }
 
         private static AbilityPipelinePhaseId MakePhaseId(SkillPhaseDTO phase, string fallback)

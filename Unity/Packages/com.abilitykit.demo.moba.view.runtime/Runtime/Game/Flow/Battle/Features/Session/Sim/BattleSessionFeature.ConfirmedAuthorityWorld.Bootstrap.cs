@@ -26,24 +26,32 @@ namespace AbilityKit.Game.Flow
 
         private void CreateConfirmedAuthorityRuntimeAndWorld(out WorldId authWorldId)
         {
-            var typeRegistry = new WorldTypeRegistry()
-                .RegisterEntitasWorld(AbilityKit.Demo.Moba.Worlds.Blueprints.MobaLobbyWorldBlueprint.Type)
-                .RegisterEntitasWorld(AbilityKit.Demo.Moba.Worlds.Blueprints.MobaBattleWorldBlueprint.Type);
+            var serverOptions = CreateConfirmedAuthorityRuntime();
+            InstallConfirmedAuthorityRuntimeModules(serverOptions, GetFixedDeltaSeconds());
+            authWorldId = CreateConfirmedAuthorityWorldId();
+            _confirmedWorld = CreateConfirmedAuthorityWorld(authWorldId);
+        }
 
-            var blueprints = new AbilityKit.Ability.Host.WorldBlueprints.WorldBlueprintRegistry();
-            AbilityKit.Demo.Moba.Worlds.Blueprints.MobaWorldBlueprintsRegistration.RegisterAll(blueprints);
-
-            var baseFactory = new RegistryWorldFactory(typeRegistry);
-            var factory = new AbilityKit.Ability.Host.WorldBlueprints.WorldBlueprintWorldFactory(baseFactory, blueprints);
-            _confirmedWorlds = new WorldManager(factory);
+        private AbilityKit.Ability.Host.Framework.HostRuntimeOptions CreateConfirmedAuthorityRuntime()
+        {
+            _confirmedWorlds = SessionMobaWorldBootstrapFactory.CreateWorldManager();
 
             var serverOptions = new AbilityKit.Ability.Host.Framework.HostRuntimeOptions();
             _confirmedRuntime = new AbilityKit.Ability.Host.Framework.HostRuntime(_confirmedWorlds, serverOptions);
+            return serverOptions;
+        }
 
-            var fixedDelta = GetFixedDeltaSeconds();
+        private void InstallConfirmedAuthorityRuntimeModules(
+            AbilityKit.Ability.Host.Framework.HostRuntimeOptions serverOptions,
+            float fixedDelta)
+        {
+            var modules = CreateConfirmedAuthorityRuntimeModules(fixedDelta);
+            modules.InstallAll(_confirmedRuntime, serverOptions);
+        }
 
-            // Confirmed-authority world: only driven by remote inputs, up to ConfirmedFrame.
-            var modules = new AbilityKit.Ability.Host.Framework.HostRuntimeModuleHost()
+        private AbilityKit.Ability.Host.Framework.HostRuntimeModuleHost CreateConfirmedAuthorityRuntimeModules(float fixedDelta)
+        {
+            return new AbilityKit.Ability.Host.Framework.HostRuntimeModuleHost()
                 .Add(new AbilityKit.Ability.Host.Extensions.FrameSync.ClientPredictionDriverModule(
                     resolveRemoteInputs: _ => _confirmedConsumable,
                     resolveLocalInputs: _ => null,
@@ -57,59 +65,48 @@ namespace AbilityKit.Game.Flow
                     rollbackCaptureEveryNFrames: 0,
                     buildRollbackRegistry: _ => new AbilityKit.Ability.FrameSync.Rollback.RollbackRegistry(),
                     buildComputeHash: _ => null))
-                .Add(new AbilityKit.Ability.Host.Extensions.Time.ServerFrameTimeModule(fixedDelta));
-
-            modules.Add(new WorldAutoStartModule());
-
-            modules.InstallAll(_confirmedRuntime, serverOptions);
-
-            var builder = WorldServiceContainerFactory.CreateWithAttributes(
-                AbilityKit.Ability.World.Services.Attributes.WorldServiceProfile.All,
-                new[]
-                {
-                    typeof(WorldServiceContainerFactory).Assembly,
-                    typeof(BattleLogicSession).Assembly,
-                    typeof(AbilityKit.Demo.Moba.Systems.MobaWorldBootstrapModule).Assembly,
-                    typeof(BattleSessionFeature).Assembly
-                },
-                new[] { "AbilityKit" }
-            );
-            builder.AddModule(new MobaConfigWorldModule());
-            builder.RegisterInstance(new WorldInitData(_plan.CreateWorldOpCode, _plan.CreateWorldPayload));
-            builder.TryRegister<IFrameTime>(WorldLifetime.Singleton, _ => new AbilityKit.Ability.FrameSync.FrameTime());
-
-            authWorldId = CreateConfirmedAuthorityWorldId();
-            var options = new WorldCreateOptions(authWorldId, _plan.WorldType)
-            {
-                ServiceBuilder = builder,
-            };
-            options.SetEntitasContextsFactory(new MobaEntitasContextsFactory());
-
-            _confirmedWorld = _confirmedRuntime.CreateWorld(options);
+                .Add(new AbilityKit.Ability.Host.Extensions.Time.ServerFrameTimeModule(fixedDelta))
+                .Add(new WorldAutoStartModule());
         }
 
-        private void SetupConfirmedAuthorityInputAndBootstrap(WorldId authWorldId)
+        private AbilityKit.Ability.World.Abstractions.IWorld CreateConfirmedAuthorityWorld(WorldId authWorldId)
+        {
+            var options = SessionMobaWorldBootstrapFactory.CreateWorldOptions(_plan, authWorldId);
+            return _confirmedRuntime.CreateWorld(options);
+        }
+
+        private void SetupConfirmedAuthorityInputAndBootstrap()
         {
             _confirmedLastTickedFrame = 0;
 
-            var hub = FrameSyncInputHubFactory.CreateJitterBufferHub<PlayerInputCommand[]>(
+            var hub = CreateConfirmedAuthorityInputHub();
+            BindConfirmedAuthorityInputHub(hub);
+            ValidateConfirmedAuthorityWorldBootstrap();
+        }
+
+        private static FrameJitterBufferHub<PlayerInputCommand[]> CreateConfirmedAuthorityInputHub()
+        {
+            return FrameSyncInputHubFactory.CreateJitterBufferHub<PlayerInputCommand[]>(
                 delayFrames: 0,
                 missingMode: MissingFrameMode.FillDefault,
                 missingFrameFactory: Array.Empty<PlayerInputCommand>,
                 initialCapacity: 256);
+        }
+
+        private void BindConfirmedAuthorityInputHub(FrameJitterBufferHub<PlayerInputCommand[]> hub)
+        {
             _confirmedInputSource = hub;
             _confirmedConsumable = hub;
             _confirmedSink = hub;
+        }
 
+        private void ValidateConfirmedAuthorityWorldBootstrap()
+        {
             try
             {
                 if (_confirmedWorld?.Services == null)
                 {
                     Log.Error("[BattleSessionFeature] ConfirmedAuthorityWorld bootstrap failed: world.Services is null");
-                }
-                else
-                {
-                    var p = new PlayerId(_plan.PlayerId);
                 }
             }
             catch (Exception ex)

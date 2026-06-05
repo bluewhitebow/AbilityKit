@@ -5,10 +5,7 @@ using AbilityKit.World.ECS;
 using AbilityKit.Core.Common.Config;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Game;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using UnityHFSM;
-using static AbilityKit.Game.Flow.GameFlowDomain;
 using UnityEngine;
 
 namespace AbilityKit.Game.Flow
@@ -26,55 +23,6 @@ namespace AbilityKit.Game.Flow
             Lobby = 1,
             Battle = 2
         }
-
-    public static class RuntimeJsonSettingsCodec
-    {
-        public static Dictionary<string, object> DeserializeFlat(string json)
-        {
-            var map = JsonConvert.DeserializeObject<Dictionary<string, JToken>>(json);
-            if (map == null || map.Count == 0) return new Dictionary<string, object>(StringComparer.Ordinal);
-
-            var dict = new Dictionary<string, object>(map.Count, StringComparer.Ordinal);
-            foreach (var kv in map)
-            {
-                if (string.IsNullOrEmpty(kv.Key)) continue;
-                var t = kv.Value;
-                if (t == null) continue;
-
-                object v;
-                switch (t.Type)
-                {
-                    case JTokenType.Boolean:
-                        v = t.Value<bool>();
-                        break;
-                    case JTokenType.Integer:
-                        v = t.Value<long>();
-                        break;
-                    case JTokenType.Float:
-                        v = t.Value<double>();
-                        break;
-                    case JTokenType.String:
-                        v = t.Value<string>();
-                        break;
-                    case JTokenType.Null:
-                    case JTokenType.Undefined:
-                        continue;
-                    default:
-                        v = t.ToString(Formatting.None);
-                        break;
-                }
-
-                dict[kv.Key] = v;
-            }
-
-            return dict;
-        }
-
-        public static string SerializeFlat(IReadOnlyDictionary<string, object> dict)
-        {
-            return JsonConvert.SerializeObject(dict, Formatting.Indented);
-        }
-    }
 
         private enum RootEvent
         {
@@ -268,6 +216,11 @@ namespace AbilityKit.Game.Flow
 
         public void Detach(IGamePhaseFeature feature)
         {
+            DetachFeature(feature, removeFromList: true);
+        }
+
+        private void DetachFeature(IGamePhaseFeature feature, bool removeFromList)
+        {
             if (feature == null) return;
 
             feature.OnDetach(_ctx);
@@ -275,6 +228,11 @@ namespace AbilityKit.Game.Flow
             if (_ctx.Root.IsValid)
             {
                 _ctx.Root.RemoveComponent(feature.GetType());
+            }
+
+            if (removeFromList)
+            {
+                _features.Remove(feature);
             }
         }
 
@@ -483,7 +441,7 @@ namespace AbilityKit.Game.Flow
         {
             for (int i = _features.Count - 1; i >= 0; i--)
             {
-                Detach(_features[i]);
+                DetachFeature(_features[i], removeFromList: false);
             }
             _features.Clear();
 
@@ -491,95 +449,9 @@ namespace AbilityKit.Game.Flow
             {
                 _battleSessionFeature.SessionStarted -= OnBattleSessionStarted;
                 _battleSessionFeature.FirstFrameReceived -= OnBattleFirstFrameReceived;
+                _battleSessionFeature.SessionFailed -= OnBattleSessionFailed;
                 _battleSessionFeature = null;
             }
-        }
-    }
-
-    public readonly struct GamePhaseContext
-    {
-        public readonly GameEntry Entry;
-        public readonly IEntity Root;
-
-        public GamePhaseContext(GameEntry entry, IEntity root)
-        {
-            Entry = entry;
-            Root = root;
-        }
-    }
-
-    public interface IGamePhase
-    {
-        void Enter(in GamePhaseContext ctx);
-        void Exit(in GamePhaseContext ctx);
-        void Tick(in GamePhaseContext ctx, float deltaTime);
-    }
-
-    public interface IGamePhaseFeature
-    {
-        void OnAttach(in GamePhaseContext ctx);
-        void OnDetach(in GamePhaseContext ctx);
-        void Tick(in GamePhaseContext ctx, float deltaTime);
-    }
-
-    public interface IOnGUIFeature
-    {
-        void OnGUI(in GamePhaseContext ctx);
-    }
-
-    public sealed class BootPhase : IGamePhase
-    {
-        public void Enter(in GamePhaseContext ctx)
-        {
-            var flow = ctx.Entry.Get<GameFlowDomain>();
-            flow.Attach(new BootMenuOnGUIFeature());
-        }
-
-        public void Exit(in GamePhaseContext ctx)
-        {
-        }
-
-        public void Tick(in GamePhaseContext ctx, float deltaTime)
-        {
-        }
-    }
-
-    public sealed class BootMenuOnGUIFeature : IGamePhaseFeature, IOnGUIFeature
-    {
-        private bool _show = true;
-
-        public void OnAttach(in GamePhaseContext ctx)
-        {
-        }
-
-        public void OnDetach(in GamePhaseContext ctx)
-        {
-        }
-
-        public void Tick(in GamePhaseContext ctx, float deltaTime)
-        {
-        }
-
-        public void OnGUI(in GamePhaseContext ctx)
-        {
-#if UNITY_EDITOR
-            if (!_show) return;
-            if (!ctx.Entry.DebugEnabled) return;
-
-            var flow = ctx.Entry.Get<GameFlowDomain>();
-            if (flow != null && flow.CurrentPhase == RootState.Battle) return;
-
-            GUILayout.BeginArea(new Rect(10, 10, 320, 120), GUI.skin.window);
-            GUILayout.Label("Game Flow");
-
-            if (GUILayout.Button("Enter Battle (Test)", GUILayout.Height(28)))
-            {
-                flow = ctx.Entry.Get<GameFlowDomain>();
-                flow.EnterBattle(new TestBattleBootstrapper());
-            }
-
-            GUILayout.EndArea();
-#endif
         }
     }
 }

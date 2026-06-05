@@ -73,6 +73,11 @@ namespace AbilityKit.Triggering.Runtime.Plan
         bool TryValidateArgs(ReadOnlySpan<KeyValuePair<string, ActionArgValue>> args, out string error);
     }
 
+    public interface ITriggerArgsAwareActionSchema<TActionArgs, TCtx> : IActionSchema<TActionArgs, TCtx>
+    {
+        TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<TCtx> ctx, object triggerArgs);
+    }
+
     /// <summary>
     /// 非泛型 IActionSchema 基接口（用于注册表存储）
     /// </summary>

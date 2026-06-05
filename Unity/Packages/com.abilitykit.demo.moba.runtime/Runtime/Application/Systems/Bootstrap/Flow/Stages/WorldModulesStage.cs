@@ -3,7 +3,9 @@ using AbilityKit.Ability.Triggering.Runtime;
 using AbilityKit.Ability.World;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Core.Common.Projectile;
+using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Gameplay.Triggering;
+using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Triggering.Payload;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Variables.Numeric;
@@ -40,6 +42,14 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                 payloads.RegisterDoubleAccessor<DamageResult>(battleAccessor);
                 payloads.RegisterIntAccessor<Events.Unit.UnitDieEventPayload>(battleAccessor);
                 payloads.RegisterDoubleAccessor<Events.Unit.UnitDieEventPayload>(battleAccessor);
+
+                var skillAccessor = new SkillPipelineContextPayloadAccessor(_);
+                payloads.RegisterIntAccessor<SkillPipelineContext>(skillAccessor);
+                payloads.RegisterDoubleAccessor<SkillPipelineContext>(skillAccessor);
+
+                var skillObjectAccessor = new SkillPipelineContextObjectPayloadAccessor(skillAccessor);
+                payloads.RegisterIntAccessor<object>(skillObjectAccessor);
+                payloads.RegisterDoubleAccessor<object>(skillObjectAccessor);
                 return payloads;
             });
             builder.Register<INumericVarDomainRegistry>(WorldLifetime.Singleton, _ =>

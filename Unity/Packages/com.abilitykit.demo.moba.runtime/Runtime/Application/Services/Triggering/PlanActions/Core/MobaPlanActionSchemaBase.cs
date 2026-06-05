@@ -4,6 +4,7 @@ using AbilityKit.Ability.World.DI;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
+using AbilityKit.Triggering.Variables.Numeric;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
@@ -11,8 +12,11 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// Demo MOBA strongly typed action schema base.
     /// New schemas only need to provide their config action name and argument parsing rules.
     /// </summary>
-    public abstract class MobaPlanActionSchemaBase<TActionArgs> : IActionSchema<TActionArgs, IWorldResolver>
+    public abstract class MobaPlanActionSchemaBase<TActionArgs> : ITriggerArgsAwareActionSchema<TActionArgs, IWorldResolver>
     {
+        [ThreadStatic]
+        private static object _currentTriggerArgs;
+
         protected abstract string ActionName { get; }
 
         public ActionId ActionId => PlanActionRegisterUtil.GetActionId(ActionName);
@@ -20,6 +24,20 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         public Type ArgsType => typeof(TActionArgs);
 
         public abstract TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx);
+
+        public TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx, object triggerArgs)
+        {
+            var previous = _currentTriggerArgs;
+            _currentTriggerArgs = triggerArgs;
+            try
+            {
+                return ParseArgs(namedArgs, ctx);
+            }
+            finally
+            {
+                _currentTriggerArgs = previous;
+            }
+        }
 
         public abstract bool TryValidateArgs(ReadOnlySpan<KeyValuePair<string, ActionArgValue>> args, out string error);
 
@@ -118,9 +136,32 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
         private static double ResolveNumber(ActionArgValue arg, ExecCtx<IWorldResolver> ctx)
         {
-            return arg.Ref.Kind == ENumericValueRefKind.Const
-                ? arg.Ref.ConstValue
-                : ActionSchemaRegistry.ResolveNumericRef(arg.Ref, ctx);
+            if (arg.Ref.Kind == ENumericValueRefKind.Const)
+            {
+                return arg.Ref.ConstValue;
+            }
+
+            if (arg.Ref.Kind == ENumericValueRefKind.PayloadField
+                && TryResolvePayloadField(arg.Ref.FieldId, ctx, out var payloadValue))
+            {
+                return payloadValue;
+            }
+
+            return ActionSchemaRegistry.ResolveNumericRef(arg.Ref, ctx);
+        }
+
+        private static bool TryResolvePayloadField(int fieldId, ExecCtx<IWorldResolver> ctx, out double value)
+        {
+            if (ctx.Payloads != null && _currentTriggerArgs != null)
+            {
+                if (ctx.Payloads.TryGetDouble(in _currentTriggerArgs, fieldId, out value))
+                {
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
         }
 
         private static bool IsAlias(string key, string[] aliases)

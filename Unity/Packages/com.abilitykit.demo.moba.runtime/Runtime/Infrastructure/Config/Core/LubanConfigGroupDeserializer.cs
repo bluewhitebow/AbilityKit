@@ -512,6 +512,8 @@ namespace AbilityKit.Demo.Moba.Config.Core
                         PhaseId = obj["PhaseId"]?.Value<string>() ?? obj["Name"]?.Value<string>() ?? string.Empty,
                         Checks = DeserializeSkillChecks(obj["Checks"]),
                         Timeline = DeserializeSkillTimeline(obj["Timeline"]),
+                        Handlers = DeserializeSkillFlowHandlers(obj["Handlers"]),
+                        RulePlan = DeserializeSkillRulePlan(obj["RulePlan"]),
                         Children = DeserializeSkillPhases(obj["Children"]),
                         Repeat = DeserializeSkillRepeat(obj["Repeat"]),
                         Delay = DeserializeSkillDelay(obj["Delay"])
@@ -558,10 +560,184 @@ namespace AbilityKit.Demo.Moba.Config.Core
                 PhaseId = obj["PhaseId"]?.Value<string>() ?? obj["Name"]?.Value<string>() ?? string.Empty,
                 Checks = DeserializeSkillChecks(obj["Checks"]),
                 Timeline = DeserializeSkillTimeline(obj["Timeline"]),
+                Handlers = DeserializeSkillFlowHandlers(obj["Handlers"]),
+                RulePlan = DeserializeSkillRulePlan(obj["RulePlan"]),
                 Children = DeserializeSkillPhases(obj["Children"]),
                 Repeat = DeserializeSkillRepeat(obj["Repeat"]),
                 Delay = DeserializeSkillDelay(obj["Delay"])
             };
+        }
+
+        private static SkillRulePlanPhaseDTO DeserializeSkillRulePlan(JToken token)
+        {
+            if (token == null) return null;
+            var obj = token as JObject;
+            if (obj == null) return null;
+
+            return new SkillRulePlanPhaseDTO
+            {
+                TriggerIds = obj["TriggerIds"]?.ToObject<int[]>() ?? Array.Empty<int>(),
+                AbortOnFailure = obj["AbortOnFailure"]?.Value<bool>() ?? true,
+                FailReason = obj["FailReason"]?.Value<string>()
+            };
+        }
+
+        private static SkillFlowHandlerConfigDTO DeserializeSkillFlowHandlers(JToken token)
+        {
+            if (token == null) return null;
+            var obj = token as JObject;
+            if (obj == null) return null;
+
+            return new SkillFlowHandlerConfigDTO
+            {
+                PreCastHandlers = DeserializeSkillHandlers(obj["PreCastHandlers"]),
+                PostCastHandlers = DeserializeSkillHandlers(obj["PostCastHandlers"]),
+                OnFailHandlers = DeserializeSkillHandlers(obj["OnFailHandlers"])
+            };
+        }
+
+        private static SkillHandlerDTO[] DeserializeSkillHandlers(JToken token)
+        {
+            if (token == null || token.Type != JTokenType.Array) return Array.Empty<SkillHandlerDTO>();
+            var array = token as JArray;
+            var result = new List<SkillHandlerDTO>();
+            foreach (var item in array)
+            {
+                if (item is JObject obj)
+                {
+                    var dto = DeserializeSkillHandler(obj);
+                    if (dto != null) result.Add(dto);
+                }
+            }
+            return result.ToArray();
+        }
+
+        private static SkillHandlerDTO DeserializeSkillHandler(JObject obj)
+        {
+            if (obj == null) return null;
+            var type = ReadHandlerType(obj["Type"]);
+            SkillHandlerDTO dto = type switch
+            {
+                EHandlerType.CheckCooldown => new CheckCooldownDTO(),
+                EHandlerType.CheckResource => new CheckResourceDTO
+                {
+                    ResourceType = obj["ResourceType"]?.Value<int>() ?? 0,
+                    MinAmount = DeserializeNumericRef(obj["MinAmount"])
+                },
+                EHandlerType.CheckState => new CheckStateDTO
+                {
+                    RequiredTags = obj["RequiredTags"]?.ToObject<string[]>() ?? Array.Empty<string>(),
+                    BlockedTags = obj["BlockedTags"]?.ToObject<string[]>() ?? Array.Empty<string>(),
+                    Target = obj["Target"]?.Value<int>() ?? 0
+                },
+                EHandlerType.CheckTarget => new CheckTargetDTO
+                {
+                    RequireTarget = obj["RequireTarget"]?.Value<bool>() ?? false,
+                    MinDistance = DeserializeNumericRef(obj["MinDistance"]),
+                    MaxDistance = DeserializeNumericRef(obj["MaxDistance"]),
+                    TargetTags = obj["TargetTags"]?.ToObject<string[]>() ?? Array.Empty<string>()
+                },
+                EHandlerType.ConsumeResource => new ConsumeResourceDTO
+                {
+                    ResourceType = obj["ResourceType"]?.Value<int>() ?? 0,
+                    Amount = DeserializeNumericRef(obj["Amount"]),
+                    FailMessageKey = obj["FailMessageKey"]?.Value<string>()
+                },
+                EHandlerType.StartCooldown => new StartCooldownDTO
+                {
+                    CooldownMs = DeserializeNumericRef(obj["CooldownMs"])
+                },
+                EHandlerType.ApplyBuff => new ApplyBuffDTO
+                {
+                    BuffId = obj["BuffId"]?.Value<int>() ?? 0,
+                    Target = obj["Target"]?.Value<int>() ?? 0,
+                    StackPolicy = obj["StackPolicy"]?.Value<int>() ?? 0
+                },
+                EHandlerType.AddTag => new AddTagDTO
+                {
+                    Tags = obj["Tags"]?.ToObject<string[]>() ?? Array.Empty<string>(),
+                    Target = obj["Target"]?.Value<int>() ?? 0,
+                    DurationMs = DeserializeNumericRef(obj["DurationMs"])
+                },
+                EHandlerType.RemoveTag => new RemoveTagDTO
+                {
+                    Tags = obj["Tags"]?.ToObject<string[]>() ?? Array.Empty<string>(),
+                    Target = obj["Target"]?.Value<int>() ?? 0
+                },
+                EHandlerType.CustomAction => new CustomActionDTO
+                {
+                    ActionName = obj["ActionName"]?.Value<string>(),
+                    Args = DeserializeNamedArgs(obj["Args"])
+                },
+                _ => null
+            };
+
+            if (dto != null) dto.Type = (int)type;
+            return dto;
+        }
+
+        private static NamedArgDTO[] DeserializeNamedArgs(JToken token)
+        {
+            if (token == null || token.Type != JTokenType.Array) return Array.Empty<NamedArgDTO>();
+            var array = token as JArray;
+            var result = new List<NamedArgDTO>();
+            foreach (var item in array)
+            {
+                if (item is JObject obj)
+                {
+                    result.Add(new NamedArgDTO
+                    {
+                        Name = obj["Name"]?.Value<string>(),
+                        Value = DeserializeNumericRef(obj["Value"])
+                    });
+                }
+            }
+            return result.ToArray();
+        }
+
+        private static NumericRefDTO DeserializeNumericRef(JToken token)
+        {
+            if (token == null) return null;
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                return NumericRefDTO.Const(token.Value<double>());
+            }
+
+            var obj = token as JObject;
+            if (obj == null) return null;
+
+            return new NumericRefDTO
+            {
+                Kind = ReadNumericRefKind(obj["Kind"]),
+                ConstValue = obj["ConstValue"]?.Value<double>() ?? obj["Value"]?.Value<double>() ?? 0d,
+                BoardId = obj["BoardId"]?.Value<int>() ?? 0,
+                KeyId = obj["KeyId"]?.Value<int>() ?? 0,
+                FieldId = obj["FieldId"]?.Value<int>() ?? 0,
+                DomainId = obj["DomainId"]?.Value<string>(),
+                Key = obj["Key"]?.Value<string>(),
+                ExprText = obj["ExprText"]?.Value<string>(),
+                Actor = obj["Actor"]?.Value<int>() ?? 0,
+                AttributeType = obj["AttributeType"]?.Value<int>() ?? 0,
+                ResourceType = obj["ResourceType"]?.Value<int>() ?? 0,
+                Coefficient = obj["Coefficient"]?.Value<double>() ?? 1d,
+                Add = obj["Add"]?.Value<double>() ?? 0d
+            };
+        }
+
+        private static EHandlerType ReadHandlerType(JToken token)
+        {
+            if (token == null) return 0;
+            if (token.Type == JTokenType.Integer) return (EHandlerType)token.Value<int>();
+            var raw = token.Value<string>();
+            return Enum.TryParse(raw, true, out EHandlerType parsed) ? parsed : 0;
+        }
+
+        private static ENumericRefKind ReadNumericRefKind(JToken token)
+        {
+            if (token == null) return ENumericRefKind.Const;
+            if (token.Type == JTokenType.Integer) return (ENumericRefKind)token.Value<int>();
+            var raw = token.Value<string>();
+            return Enum.TryParse(raw, true, out ENumericRefKind parsed) ? parsed : ENumericRefKind.Const;
         }
 
         private static SkillChecksPhaseDTO DeserializeSkillChecks(JToken token)

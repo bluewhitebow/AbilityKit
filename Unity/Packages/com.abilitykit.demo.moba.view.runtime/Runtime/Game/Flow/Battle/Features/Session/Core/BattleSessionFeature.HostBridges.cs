@@ -2,20 +2,30 @@ namespace AbilityKit.Game.Flow
 {
     public sealed partial class BattleSessionFeature
     {
-        void BattleSessionFeature.ISessionPlanHost.StartSession() => StartSession();
+        float ITickLoopHost.GetFixedDeltaSeconds() => GetFixedDeltaSeconds();
 
-        void BattleSessionFeature.ISessionPlanHost.StopSession() => StopSession();
+        void ITickLoopHost.TickRemoteDrivenLocalSim(float deltaTime) => TickRemoteDrivenLocalSim(deltaTime);
 
-        void BattleSessionFeature.ISessionPlanHost.ApplyAutoPlanActions() => ApplyAutoPlanActions();
+        void ITickLoopHost.TickConfirmedAuthorityWorldSim(float deltaTime) => TickConfirmedAuthorityWorldSim(deltaTime);
 
-        bool BattleSessionFeature.ISessionPlanHost.InvokeModulesPlanBuilt() => InvokeModulesPlanBuilt();
+        void ISessionPlanHost.StartSession() => StartSession();
 
-        void BattleSessionFeature.ISessionReplayHost.StartSession() => StartSession();
+        void ISessionPlanHost.StopSession() => StopSession();
 
-        void BattleSessionFeature.ISessionReplayHost.StopSession() => StopSession();
+        void ISessionPlanHost.ApplyAutoPlanActions() => ApplyAutoPlanActions();
 
-        void BattleSessionFeature.ISessionReplayHost.ApplyAutoPlanActions() => ApplyAutoPlanActions();
+        bool ISessionPlanHost.InvokeSubFeaturesPlanBuilt() => InvokeSubFeaturesPlanBuilt();
 
-        float BattleSessionFeature.ISessionReplayHost.GetFixedDeltaSeconds() => GetFixedDeltaSeconds();
+        void ISessionPlanHost.NotifySessionStarted(BattleStartPlan plan) => _eventsCtrl.NotifySessionStarted(this, plan);
+
+        void ISessionPlanHost.NotifySessionFailed(System.Exception exception) => _eventsCtrl.NotifySessionFailed(this, exception);
+
+        void ISessionReplayHost.StartSession() => StartSession();
+
+        void ISessionReplayHost.StopSession() => StopSession();
+
+        void ISessionReplayHost.ApplyAutoPlanActions() => ApplyAutoPlanActions();
+
+        float ISessionReplayHost.GetFixedDeltaSeconds() => GetFixedDeltaSeconds();
     }
 }

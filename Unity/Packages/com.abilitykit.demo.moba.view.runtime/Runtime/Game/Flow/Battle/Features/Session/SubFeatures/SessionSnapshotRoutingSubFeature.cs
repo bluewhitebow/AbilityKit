@@ -4,51 +4,47 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class SessionSnapshotRoutingSubFeature :
+        ISessionSubFeature<BattleSessionFeature>,
+        IGameModuleId,
+        IGameModuleDependencies
     {
-        private sealed class SessionSnapshotRoutingSubFeature :
-            ISessionSubFeature<BattleSessionFeature>,
-            IGameModuleId,
-            IGameModuleDependencies
+        private Action _onSessionStarting;
+        private Action _onSessionStopping;
+
+        public string Id => "snapshot_routing";
+
+        public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
+
+        public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
         {
-            private Action _onSessionStarting;
-            private Action _onSessionStopping;
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionSnapshotRoutingRuntime>(ctx, out var runtime)) return;
 
-            public string Id => "snapshot_routing";
+            _onSessionStarting = () => runtime.EnsureSnapshotRoutingBuilt();
+            _onSessionStopping = () => runtime.DisposeSnapshotRoutingIfAny();
 
-            public System.Collections.Generic.IEnumerable<string> Dependencies => new[] { "session_events" };
-
-            public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                _onSessionStarting = () => f.EnsureSnapshotRoutingBuilt();
-                _onSessionStopping = () => f.DisposeSnapshotRoutingIfAny();
-
-                f.Hooks?.SessionStarting.Add(_onSessionStarting);
-                f.Hooks?.SessionStopping.Add(_onSessionStopping);
-            }
-
-            public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (_onSessionStarting != null && f != null)
-                {
-                    f.Hooks?.SessionStarting.Remove(_onSessionStarting);
-                }
-                if (_onSessionStopping != null && f != null)
-                {
-                    f.Hooks?.SessionStopping.Remove(_onSessionStopping);
-                }
-
-                _onSessionStarting = null;
-                _onSessionStopping = null;
-            }
-
-            public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+            runtime.Hooks?.SessionStarting.Add(_onSessionStarting);
+            runtime.Hooks?.SessionStopping.Add(_onSessionStopping);
         }
+
+        public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
+        {
+            BattleSessionFeatureRuntimeAccess.TryGet<ISessionSnapshotRoutingRuntime>(ctx, out var runtime);
+            if (_onSessionStarting != null && runtime != null)
+            {
+                runtime.Hooks?.SessionStarting.Remove(_onSessionStarting);
+            }
+            if (_onSessionStopping != null && runtime != null)
+            {
+                runtime.Hooks?.SessionStopping.Remove(_onSessionStopping);
+            }
+
+            _onSessionStarting = null;
+            _onSessionStopping = null;
+        }
+
+        public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
     }
 }

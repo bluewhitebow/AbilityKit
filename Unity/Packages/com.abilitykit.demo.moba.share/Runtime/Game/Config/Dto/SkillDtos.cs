@@ -59,6 +59,8 @@ namespace AbilityKit.Demo.Moba.Share.Config
     {
         Checks = 1,
         Timeline = 2,
+        Handlers = 3,
+        RulePlan = 4,
         Sequence = 10,
         Parallel = 11,
         Repeat = 12,
@@ -72,9 +74,19 @@ namespace AbilityKit.Demo.Moba.Share.Config
         public string PhaseId;
         public SkillChecksPhaseDTO Checks;
         public SkillTimelinePhaseDTO Timeline;
+        public SkillFlowHandlerConfigDTO Handlers;
+        public SkillRulePlanPhaseDTO RulePlan;
         public SkillPhaseDTO[] Children;
         public SkillRepeatPhaseDTO Repeat;
         public SkillDelayPhaseDTO Delay;
+    }
+
+    [Serializable]
+    public sealed class SkillRulePlanPhaseDTO
+    {
+        public int[] TriggerIds;
+        public bool AbortOnFailure = true;
+        public string FailReason;
     }
 
     [Serializable]

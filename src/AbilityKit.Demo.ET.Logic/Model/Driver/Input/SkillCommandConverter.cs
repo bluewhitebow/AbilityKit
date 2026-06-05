@@ -22,8 +22,11 @@ namespace ET.Logic
                 return false;
             }
 
+            // Runtime skill slots are 1-based. Keep positive slots unchanged and
+            // tolerate legacy ET test commands that still use 0 for the first skill.
+            var runtimeSlot = skill.SkillSlot <= 0 ? 1 : skill.SkillSlot;
             var skillEvent = new SkillInputEvent(
-                slot: skill.SkillSlot,
+                slot: runtimeSlot,
                 phase: SkillInputPhase.Press,
                 targetActorId: skill.TargetActorId,
                 aimPos: new Vec3(skill.TargetX, 0, skill.TargetY));
@@ -33,7 +36,7 @@ namespace ET.Logic
                 new PlayerId(skill.PlayerId),
                 MobaOpCodes.Input.SkillInput,
                 payload);
-            Log.Debug($"[SkillCommandConverter] PlayerId={skill.PlayerId}, Slot={skill.SkillSlot}, TargetActorId={skill.TargetActorId}");
+            Log.Debug($"[SkillCommandConverter] PlayerId={skill.PlayerId}, Slot={runtimeSlot}, RawSlot={skill.SkillSlot}, TargetActorId={skill.TargetActorId}");
             return true;
         }
     }

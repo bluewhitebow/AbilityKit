@@ -98,13 +98,12 @@ namespace ET.Logic
                 PlayerInputCommand first = playerCommands[0];
                 Log.Info($"[ProcessETInputPhase] Submit: Frame={ctx.CurrentFrame}, Count={playerCommands.Count}, FirstPlayer={first.Player.Value}, FirstOp={first.OpCode}");
                 var result = runtime.Submit(new FrameIndex(ctx.CurrentFrame), playerCommands);
+                inputComponent.ClearProcessedInputs(ctx.CurrentFrame);
                 if (!result.Succeeded)
                 {
                     Log.Warning($"[ProcessETInputPhase] Submit rejected. {result}");
                     return;
                 }
-
-                inputComponent.ClearProcessedInputs(ctx.CurrentFrame);
             }
         }
     }

@@ -47,6 +47,11 @@ namespace AbilityKit.Demo.Moba.Config.BattleDemo
             if (dtoType == null) throw new ArgumentNullException(nameof(dtoType));
             if (string.IsNullOrEmpty(text)) return Array.CreateInstance(dtoType, 0);
 
+            if (dtoType == typeof(SkillFlowDTO))
+            {
+                return LubanConfigGroupDeserializer.Instance.DeserializeFromText(text, dtoType);
+            }
+
             var token = JToken.Parse(text);
             if (token is not JArray array) return Array.CreateInstance(dtoType, 0);
 

@@ -1,43 +1,63 @@
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class TickLoopController
     {
-        internal sealed class TickLoopController
+        private readonly BattleSessionState _state;
+        private readonly BattleSessionHandles _handles;
+        private readonly ITickLoopHost _host;
+
+        public TickLoopController(BattleSessionState state, BattleSessionHandles handles, ITickLoopHost host)
         {
-            private readonly BattleSessionState _state;
-            private readonly BattleSessionHandles _handles;
-            private readonly ITickLoopHost _host;
+            _state = state;
+            _handles = handles;
+            _host = host;
+        }
 
-            public TickLoopController(BattleSessionState state, BattleSessionHandles handles, ITickLoopHost host)
+        public void MainTick(float deltaTime)
+        {
+            if (!HasSession()) return;
+
+            var fixedDelta = _host.GetFixedDeltaSeconds();
+            if (fixedDelta <= 0f) return;
+
+            AccumulateDelta(deltaTime);
+            TickMainSession(fixedDelta);
+            TickAuxiliaryWorlds(deltaTime);
+        }
+
+        private bool HasSession()
+        {
+            return _handles.Session != null;
+        }
+
+        private void AccumulateDelta(float deltaTime)
+        {
+            _state.Tick.TickAcc += deltaTime;
+        }
+
+        private void TickMainSession(float fixedDelta)
+        {
+            while (_state.Tick.TickAcc >= fixedDelta)
             {
-                _state = state;
-                _handles = handles;
-                _host = host;
+                TickNextFrame(fixedDelta);
             }
+        }
 
-            public void MainTick(float deltaTime)
-            {
-                if (_handles.Session == null) return;
+        private void TickNextFrame(float fixedDelta)
+        {
+            var nextFrame = _state.Tick.LastFrame + 1;
 
-                if (!_state.Flags.TickEnteredLogged)
-                {
-                    _state.Flags.TickEnteredLogged = true;
-                }
+            _handles.Replay.Driver?.Pump(_handles.Session, nextFrame);
+            _handles.Session.Tick(fixedDelta);
 
-                _state.Tick.TickAcc += deltaTime;
-                var fixedDelta = _host.GetFixedDeltaSeconds();
-                while (_state.Tick.TickAcc >= fixedDelta)
-                {
-                    var nextFrame = _state.Tick.LastFrame + 1;
-                    _handles.Replay.Driver?.Pump(_handles.Session, nextFrame);
-                    _handles.Session.Tick(fixedDelta);
-                    _state.Tick.LastFrame = nextFrame;
-                    _state.Tick.TickAcc -= fixedDelta;
-                }
+            _state.Tick.LastFrame = nextFrame;
+            _state.Tick.TickAcc -= fixedDelta;
+        }
 
-                _host.TickRemoteDrivenLocalSim(deltaTime);
-                _host.TickConfirmedAuthorityWorldSim(deltaTime);
-            }
+        private void TickAuxiliaryWorlds(float deltaTime)
+        {
+            _host.TickRemoteDrivenLocalSim(deltaTime);
+            _host.TickConfirmedAuthorityWorldSim(deltaTime);
         }
     }
 }

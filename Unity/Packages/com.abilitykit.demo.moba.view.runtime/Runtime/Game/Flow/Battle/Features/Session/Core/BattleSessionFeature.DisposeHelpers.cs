@@ -21,26 +21,45 @@ namespace AbilityKit.Game.Flow
 
         private void DisposeConfirmedView()
         {
+            DetachConfirmedViewFeature();
+            DisposeConfirmedViewSubscriptions();
+            DisposeConfirmedViewSnapshotPipeline();
+            DisposeConfirmedViewContext();
+        }
+
+        private void DetachConfirmedViewFeature()
+        {
             if (_flow != null && _confirmedViewFeature != null)
             {
                 _flow.Detach(_confirmedViewFeature);
                 _confirmedViewFeature = null;
             }
+        }
 
+        private void DisposeConfirmedViewSubscriptions()
+        {
             _confirmedViewSubLobby?.Dispose();
             _confirmedViewSubLobby = null;
             _confirmedViewSubActorTransform?.Dispose();
             _confirmedViewSubActorTransform = null;
             _confirmedViewSubStateHash?.Dispose();
             _confirmedViewSubStateHash = null;
+            _confirmedViewSubActorSpawn?.Dispose();
+            _confirmedViewSubActorSpawn = null;
+        }
 
+        private void DisposeConfirmedViewSnapshotPipeline()
+        {
             _confirmedViewCmdHandler?.Dispose();
             _confirmedViewPipeline?.Dispose();
             _confirmedViewSnapshots?.Dispose();
             _confirmedViewCmdHandler = null;
             _confirmedViewPipeline = null;
             _confirmedViewSnapshots = null;
+        }
 
+        private void DisposeConfirmedViewContext()
+        {
             if (_confirmedViewCtx != null)
             {
                 _confirmedViewCtx.FrameSnapshots = null;
@@ -71,15 +90,30 @@ namespace AbilityKit.Game.Flow
 
         private void DisposeConfirmedWorld()
         {
+            ClearConfirmedWorldRuntime();
+            DisposeConfirmedInput();
+            DisposeConfirmedViewEventPipeline();
+            ClearConfirmedDebugContext();
+        }
+
+        private void ClearConfirmedWorldRuntime()
+        {
             _confirmedWorld = null;
             _confirmedRuntime = null;
             _confirmedWorlds = null;
             _confirmedLastTickedFrame = 0;
+        }
+
+        private void DisposeConfirmedInput()
+        {
             _confirmedInputSource?.Dispose();
             _confirmedInputSource = null;
             _confirmedConsumable = null;
             _confirmedSink = null;
+        }
 
+        private void DisposeConfirmedViewEventPipeline()
+        {
             _confirmedSnapshotViewAdapter?.Dispose();
             _confirmedSnapshotViewAdapter = null;
 
@@ -87,8 +121,12 @@ namespace AbilityKit.Game.Flow
             _confirmedTriggerBridge = null;
 
             _confirmedViewEventSink = null;
+            _confirmedSnapshots?.Dispose();
             _confirmedSnapshots = null;
+        }
 
+        private void ClearConfirmedDebugContext()
+        {
             BattleFlowDebugProvider.ConfirmedAuthorityWorldStats = null;
 
             if (_ctx != null)

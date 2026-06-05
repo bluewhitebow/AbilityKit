@@ -10,10 +10,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!-- 排除有 UnityEngine.Random 引用的文件 -->
   <ItemGroup>
-    <Compile Include="../../Unity/Packages/com.abilitykit.combat.damage/Runtime/**/*.cs" 
-             Exclude="../../Unity/Packages/com.abilitykit.combat.damage/Runtime/Damage/Processor/DamageProcessors.cs" />
+    <Compile Include="../../Unity/Packages/com.abilitykit.combat.damage/Runtime/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -27,7 +27,14 @@
     <ProjectReference Include="..\AbilityKit.Behavior\AbilityKit.Behavior.csproj" />
     <ProjectReference Include="..\AbilityKit.Host\AbilityKit.Host.csproj" />
     <ProjectReference Include="..\AbilityKit.World.DI\AbilityKit.World.DI.csproj" />
+    <ProjectReference Include="..\AbilityKit.Dataflow\AbilityKit.Dataflow.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.EntityManager\AbilityKit.Combat.EntityManager.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.SkillLibrary\AbilityKit.Combat.SkillLibrary.csproj" />
     <ProjectReference Include="..\AbilityKit.Combat.Targeting\AbilityKit.Combat.Targeting.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.Damage\AbilityKit.Combat.Damage.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.Collision.Abstractions\AbilityKit.Combat.Collision.Abstractions.csproj" />
+    <ProjectReference Include="..\AbilityKit.Combat.Projectile\AbilityKit.Combat.Projectile.csproj" />
+    <ProjectReference Include="..\AbilityKit.Game.Battle.Runtime\AbilityKit.Game.Battle.Runtime.csproj" />
   </ItemGroup>
 
   <!-- NuGet Dependencies -->
@@ -38,6 +45,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="sample-manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

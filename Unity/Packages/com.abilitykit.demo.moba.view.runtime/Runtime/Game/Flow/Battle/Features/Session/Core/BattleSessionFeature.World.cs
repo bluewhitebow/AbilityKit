@@ -52,25 +52,10 @@ namespace AbilityKit.Game.Flow
 
             TrySetupProtocolWireSerializerInstaller();
 
-            var builder = WorldServiceContainerFactory.CreateWithAttributes(
-                AbilityKit.Ability.World.Services.Attributes.WorldServiceProfile.All,
-                new[]
-                {
-                    typeof(WorldServiceContainerFactory).Assembly,
-                    typeof(AbilityKit.Demo.Moba.Systems.MobaWorldBootstrapModule).Assembly,
-                    typeof(BattleSessionFeature).Assembly
-                },
-                new[] { "AbilityKit" }
-            );
-
-            builder.AddModule(new MobaConfigWorldModule());
-
-            var options = new WorldCreateOptions(new WorldId(_plan.WorldId), _plan.WorldType)
-            {
-                ServiceBuilder = builder,
-            };
-            options.SetEntitasContextsFactory(new MobaEntitasContextsFactory());
-
+            var options = SessionMobaWorldBootstrapFactory.CreateWorldOptions(
+                _plan,
+                new WorldId(_plan.WorldId),
+                registerWorldInitData: false);
             var req = new CreateWorldRequest(options, _plan.CreateWorldOpCode, _plan.CreateWorldPayload);
             _session.CreateWorld(req);
         }

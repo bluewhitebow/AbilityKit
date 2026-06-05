@@ -250,10 +250,20 @@ namespace AbilityKit.Samples.Logic.Samples.Continuous
         public void Pause() => _state = ContinuousState.Paused;
         public void Resume() => _state = ContinuousState.Active;
 
+        public void End(ContinuousEndReason reason)
+        {
+            if (IsTerminated)
+                return;
+
+            _state = reason == ContinuousEndReason.Completed
+                ? ContinuousState.Expired
+                : ContinuousState.Aborted;
+            OnEnded?.Invoke(this, reason);
+        }
+
         public void Abort(string reason)
         {
-            _state = ContinuousState.Aborted;
-            OnEnded?.Invoke(this, ContinuousEndReason.Interrupted);
+            End(ContinuousEndReason.Interrupted);
         }
 
         public void InternalTick(float deltaTime)

@@ -50,6 +50,7 @@ namespace AbilityKit.Demo.Moba.Systems
 
             // Resource Actions
             public const string ConsumeResource = "consume_resource";
+            public const string StartCooldown = "start_cooldown";
         }
 
         /// <summary>
@@ -129,6 +130,7 @@ namespace AbilityKit.Demo.Moba.Systems
 
         // Resource Action IDs
         public static ActionId ConsumeResourceId => GetActionId(Actions.ConsumeResource);
+        public static ActionId StartCooldownId => GetActionId(Actions.StartCooldown);
 
         /// <summary>
         /// 获取预定义的Event ID

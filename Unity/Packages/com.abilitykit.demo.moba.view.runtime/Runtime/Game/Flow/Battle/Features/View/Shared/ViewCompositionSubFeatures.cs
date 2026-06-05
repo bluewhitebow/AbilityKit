@@ -2,55 +2,27 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleViewFeature
+    internal sealed class ViewContextBindingSubFeature<TFeature> : IViewSubFeature<TFeature>
+        where TFeature : class, IViewFeatureRuntime
     {
-        private sealed class ContextBindingSubFeature : IViewSubFeature<BattleViewFeature>
+        public void OnAttach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<BattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
 
-                f._query = f._ctx != null ? f._ctx.EntityQuery : null;
-            }
-
-            public void OnDetach(in FeatureModuleContext<BattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._query = null;
-            }
-
-            public void Tick(in FeatureModuleContext<BattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleViewFeature> ctx) { }
+            runtime.Query = runtime.Context != null ? runtime.Context.EntityQuery : null;
         }
-    }
 
-    public sealed partial class ConfirmedBattleViewFeature
-    {
-        private sealed class ContextBindingSubFeature : IViewSubFeature<ConfirmedBattleViewFeature>
+        public void OnDetach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
 
-                f._query = f._confirmedCtx != null ? f._confirmedCtx.EntityQuery : null;
-            }
-
-            public void OnDetach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._query = null;
-            }
-
-            public void Tick(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx) { }
+            runtime.Query = null;
         }
+
+        public void Tick(in FeatureModuleContext<TFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<TFeature> ctx) { }
     }
 }

@@ -16,12 +16,11 @@ namespace AbilityKit.Game.Flow
             BattleContext battleCtx;
             ctx.Root.TryGetRef(out battleCtx);
             _ctx = battleCtx;
-            _root = ctx.Root;
             _flow = ctx.Entry != null ? ctx.Entry.Get<GameFlowDomain>() : null;
 
             _eventsCtrl.OnAttach(this);
 
-            EnsureModulesCreated();
+            EnsureSubFeaturesCreated();
             _subFeatureHost?.Attach(new FeatureModuleContext<BattleSessionFeature>(ctx, this));
         }
 
@@ -57,11 +56,7 @@ namespace AbilityKit.Game.Flow
 
             _eventsCtrl.OnDetach(this);
 
-            if (_ctx != null)
-            {
-                _ctx.Session = null;
-                _ctx.Hooks = null;
-            }
+            SessionContextBinder.ClearSession(_ctx);
 
             _ctx = null;
             _phaseCtx = default;
@@ -70,7 +65,7 @@ namespace AbilityKit.Game.Flow
         public void Tick(in GamePhaseContext ctx, float deltaTime)
         {
             Hooks?.PreTick.Invoke(deltaTime);
-            InvokeModulesPreTick(ctx, deltaTime);
+            InvokeSubFeaturesPreTick(ctx, deltaTime);
 
             if (_session == null) return;
 
@@ -78,7 +73,7 @@ namespace AbilityKit.Game.Flow
 
             if (_ctx != null)
             {
-                _ctx.LastFrame = _lastFrame;
+                SessionContextBinder.BindLastFrame(_ctx, _state);
                 var fixedDelta = GetFixedDeltaSeconds();
                 if (fixedDelta > 0f)
                 {

@@ -1,0 +1,109 @@
+{
+  "samples": [
+    {
+      "id": "onboarding/orientation",
+      "type": "AbilityKit.Samples.Logic.Samples.Onboarding.AbilityKitOrientation",
+      "order": 0,
+      "title": "AbilityKit Orientation",
+      "tags": [ "onboarding", "learning-path", "web" ]
+    },
+    {
+      "id": "onboarding/host-boundary",
+      "type": "AbilityKit.Samples.Logic.Samples.Onboarding.PureLogicHostBoundary",
+      "order": 1,
+      "title": "Pure Logic And Host Boundary",
+      "tags": [ "onboarding", "host", "logic", "web" ]
+    },
+    {
+      "id": "onboarding/package-composition",
+      "type": "AbilityKit.Samples.Logic.Samples.Onboarding.PackageCompositionPath",
+      "order": 2,
+      "title": "Package Composition Path",
+      "tags": [ "onboarding", "composition", "web" ]
+    },
+    {
+      "id": "onboarding/skill-slice",
+      "type": "AbilityKit.Samples.Logic.Samples.Onboarding.FromConceptToSkillSlice",
+      "order": 3,
+      "title": "From Concept To Skill Slice",
+      "tags": [ "onboarding", "skill-slice", "package-api", "web" ]
+    },
+    {
+      "id": "onboarding/ui-host",
+      "type": "AbilityKit.Samples.Logic.Samples.Onboarding.SampleHostIntegration",
+      "order": 4,
+      "title": "UI Host Integration",
+      "tags": [ "onboarding", "host", "ui", "web" ]
+    },
+    {
+      "id": "foundation/hello-world",
+      "type": "AbilityKit.Samples.Logic.Samples.Foundation.HelloWorld",
+      "order": 100,
+      "title": "Hello World",
+      "tags": [ "foundation", "hello-world", "web" ]
+    },
+    {
+      "id": "flow/basics",
+      "type": "AbilityKit.Samples.Logic.Samples.Flow.FlowBasics",
+      "order": 300,
+      "title": "Flow Basics",
+      "tags": [ "flow", "package-api", "continuous-drive", "web" ]
+    },
+    {
+      "id": "combat/entity-keyed-index",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatEntityKeyedIndex",
+      "order": 700,
+      "title": "Combat Entity Keyed Index",
+      "tags": [ "combat", "entity", "index", "package-api", "web" ]
+    },
+    {
+      "id": "combat/skill-library-index",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatSkillLibraryIndex",
+      "order": 701,
+      "title": "Combat Skill Library Index",
+      "tags": [ "combat", "skill-library", "index", "package-api", "web" ]
+    },
+    {
+      "id": "combat/targeting-index-provider",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatTargetingIndexProvider",
+      "order": 702,
+      "title": "Combat Targeting Index Provider",
+      "tags": [ "combat", "targeting", "index", "package-api", "web" ]
+    },
+    {
+      "id": "combat/damage-pipeline",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatDamagePipelineSample",
+      "order": 703,
+      "title": "Combat Damage Pipeline",
+      "tags": [ "combat", "damage", "dataflow", "package-api", "web" ]
+    },
+    {
+      "id": "combat/collision-raycast",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatCollisionRaycast",
+      "order": 704,
+      "title": "Combat Collision Raycast",
+      "tags": [ "combat", "collision", "raycast", "package-api", "web" ]
+    },
+    {
+      "id": "combat/area-enter-stay-exit",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatAreaEnterStayExit",
+      "order": 705,
+      "title": "Combat Area Enter Stay Exit",
+      "tags": [ "combat", "area", "collision", "package-api", "web" ]
+    },
+    {
+      "id": "combat/projectile-basic-hit",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatProjectileBasicHit",
+      "order": 706,
+      "title": "Combat Projectile Basic Hit",
+      "tags": [ "combat", "projectile", "collision", "package-api", "web" ]
+    },
+    {
+      "id": "combat/projectile-hit-damage",
+      "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatProjectileHitDamage",
+      "order": 707,
+      "title": "Combat Projectile Hit Damage",
+      "tags": [ "combat", "projectile", "damage", "package-api", "web" ]
+    }
+  ]
+}

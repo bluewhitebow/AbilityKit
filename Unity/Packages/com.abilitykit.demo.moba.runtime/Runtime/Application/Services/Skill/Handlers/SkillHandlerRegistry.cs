@@ -1,6 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using AbilityKit.Ability.FrameSync;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Log;
+using AbilityKit.Demo.Moba.Share.Config;
+using AbilityKit.GameplayTags;
 
 namespace AbilityKit.Demo.Moba.Services
 {
@@ -88,10 +94,48 @@ namespace AbilityKit.Demo.Moba.Services
     /// 技能处理项注册表
     /// 管理所有已注册的处理项类型
     /// </summary>
-    public sealed class SkillHandlerRegistry
+    [WorldService(typeof(SkillHandlerRegistry))]
+    public sealed class SkillHandlerRegistry : IService, IWorldInitializable
     {
         private readonly Dictionary<int, ISkillHandler> _handlers = new Dictionary<int, ISkillHandler>();
         private readonly Dictionary<string, ISkillHandler> _handlersByName = new Dictionary<string, ISkillHandler>(StringComparer.OrdinalIgnoreCase);
+
+        public SkillHandlerRegistry(
+            MobaActorLookupService actors = null,
+            IFrameTime time = null,
+            MobaSkillNumericRefResolver numericRefs = null,
+            IGameplayTagService tags = null)
+        {
+            RegisterBuiltIns(actors, time, numericRefs, tags);
+        }
+
+        public void OnInit(IWorldResolver services)
+        {
+            if (services == null) return;
+            services.TryResolve<MobaActorLookupService>(out var actors);
+            services.TryResolve<IFrameTime>(out var time);
+            services.TryResolve<MobaSkillNumericRefResolver>(out var numericRefs);
+            services.TryResolve<IGameplayTagService>(out var tags);
+            RegisterBuiltIns(actors, time, numericRefs, tags, clearExisting: true);
+        }
+
+        private void RegisterBuiltIns(
+            MobaActorLookupService actors,
+            IFrameTime time,
+            MobaSkillNumericRefResolver numericRefs,
+            IGameplayTagService tags,
+            bool clearExisting = false)
+        {
+            if (clearExisting)
+            {
+                _handlers.Clear();
+                _handlersByName.Clear();
+            }
+
+            Register(new ApplyBuffHandler(actors));
+            Register(new AddTagHandler(actors, tags));
+            Register(new RemoveTagHandler(actors, tags));
+        }
 
         /// <summary>
         /// 注册处理项
@@ -129,6 +173,12 @@ namespace AbilityKit.Demo.Moba.Services
         /// 获取所有已注册的处理项类型
         /// </summary>
         public IEnumerable<int> GetRegisteredTypes() => _handlers.Keys;
+
+        public void Dispose()
+        {
+            _handlers.Clear();
+            _handlersByName.Clear();
+        }
     }
 
     /// <summary>

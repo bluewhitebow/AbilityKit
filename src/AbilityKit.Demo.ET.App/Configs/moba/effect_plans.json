@@ -13,8 +13,8 @@
       },
       "Actions": [
         {
-          "ActionId": -1873296895,
-          "Arity": 2,
+          "ActionId": 176148626,
+          "Arity": 0,
           "Args": {
             "damage_value": {
               "Kind": "Const",
@@ -41,8 +41,8 @@
       },
       "Actions": [
         {
-          "ActionId": -1873296895,
-          "Arity": 2,
+          "ActionId": 176148626,
+          "Arity": 0,
           "Args": {
             "damage_value": {
               "Kind": "Const",
@@ -69,8 +69,8 @@
       },
       "Actions": [
         {
-          "ActionId": -1873296895,
-          "Arity": 2,
+          "ActionId": 176148626,
+          "Arity": 0,
           "Args": {
             "damage_value": {
               "Kind": "Const",

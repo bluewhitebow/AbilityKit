@@ -12,8 +12,8 @@ namespace AbilityKit.Game.Flow
             ctx.Root.TryGetRef(out _ctx);
             _query = _ctx?.EntityQuery;
 
-            EnsureModulesCreated();
-            _moduleHost?.Attach(new FeatureModuleContext<BattleViewFeature>(ctx, this));
+            EnsureSubFeaturesCreated();
+            _subFeatureHost?.Attach(new FeatureModuleContext<BattleViewFeature>(ctx, this));
             OnAllSubFeaturesAttached(ctx);
         }
 
@@ -26,7 +26,7 @@ namespace AbilityKit.Game.Flow
 
         public void OnDetach(in GamePhaseContext ctx)
         {
-            _moduleHost?.Detach(new FeatureModuleContext<BattleViewFeature>(ctx, this));
+            _subFeatureHost?.Detach(new FeatureModuleContext<BattleViewFeature>(ctx, this));
 
             _ctx = null;
         }
@@ -34,29 +34,29 @@ namespace AbilityKit.Game.Flow
         public void Tick(in GamePhaseContext ctx, float deltaTime)
         {
             if (_ctx?.EntityWorld == null) return;
-            _moduleHost?.Tick(new FeatureModuleContext<BattleViewFeature>(ctx, this), deltaTime);
+            _subFeatureHost?.Tick(new FeatureModuleContext<BattleViewFeature>(ctx, this), deltaTime);
         }
 
         public void RebindAll()
         {
             if (_ctx?.EntityWorld == null) return;
-            _moduleHost?.RebindAll(new FeatureModuleContext<BattleViewFeature>(default, this));
+            _subFeatureHost?.RebindAll(new FeatureModuleContext<BattleViewFeature>(default, this));
 
             var frame = _ctx != null ? _ctx.LastFrame : 0;
             var worldId = _ctx != null ? _ctx.RuntimeWorldId : default;
             _ctx?.Hooks?.ViewsRebound.Invoke(new ViewsReboundEvent(isConfirmed: false, worldId: worldId, frame: frame));
         }
 
-        private void EnsureModulesCreated()
+        private void EnsureSubFeaturesCreated()
         {
-            if (_moduleHost != null && _subFeatures.Count > 0) return;
+            if (_subFeatureHost != null && _subFeatures.Count > 0) return;
 
             _subFeatures.Clear();
-            AddFeatureSubFeatures(_subFeatures);
+            ViewFeatureSubFeatureBuilder.AddBattleViewSubFeatures(_subFeatures);
 
-            ViewSubFeaturePipeline.AddStandardViewModules(_subFeatures);
+            ViewSubFeaturePipeline.AddStandardViewSubFeatures(_subFeatures);
 
-            _moduleHost = ViewSubFeaturePipeline.CreateModuleHost(_subFeatures);
+            _subFeatureHost = ViewSubFeaturePipeline.CreateHost(_subFeatures);
         }
     }
 }

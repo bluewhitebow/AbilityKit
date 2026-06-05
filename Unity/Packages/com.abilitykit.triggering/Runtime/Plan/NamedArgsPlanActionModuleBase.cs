@@ -108,11 +108,13 @@ namespace AbilityKit.Triggering.Runtime.Plan
                         return;
                     }
 
-                    Execute(triggerArgs, default, ctx);
+                    var parsedArgs = ParseActionArgs(ctx, triggerArgs, actionArgs);
+                    Execute(triggerArgs, parsedArgs, ctx);
                 }
                 catch (Exception ex)
                 {
                     Log.Exception(ex, $"[Plan] Action {ActionId.Value} ({typeof(TActionArgs).Name}) executed failed");
+                    throw;
                 }
             };
         }
@@ -129,12 +131,13 @@ namespace AbilityKit.Triggering.Runtime.Plan
                         return;
                     }
 
-                    var parsedArgs = ParseActionArgs(ctx, actionArgs);
+                    var parsedArgs = ParseActionArgs(ctx, triggerArgs, actionArgs);
                     Execute(triggerArgs, parsedArgs, ctx);
                 }
                 catch (Exception ex)
                 {
                     Log.Exception(ex, $"[Plan] Action {ActionId.Value} ({typeof(TActionArgs).Name}) executed failed");
+                    throw;
                 }
             };
         }
@@ -151,17 +154,18 @@ namespace AbilityKit.Triggering.Runtime.Plan
                         return;
                     }
 
-                    var parsedArgs = ParseActionArgs(ctx, actionArgs);
+                    var parsedArgs = ParseActionArgs(ctx, triggerArgs, actionArgs);
                     Execute(triggerArgs, parsedArgs, ctx);
                 }
                 catch (Exception ex)
                 {
                     Log.Exception(ex, $"[Plan] Action {ActionId.Value} ({typeof(TActionArgs).Name}) executed failed");
+                    throw;
                 }
             };
         }
 
-        private TActionArgs ParseActionArgs(ExecCtx<TCtx> ctx, object rawArgs)
+        private TActionArgs ParseActionArgs(ExecCtx<TCtx> ctx, object triggerArgs, object rawArgs)
         {
             if (rawArgs is TActionArgs typed)
             {
@@ -170,15 +174,25 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
             if (rawArgs is NamedArgsDict dict)
             {
-                return ActionSchemaRegistry.ParseArgs<TActionArgs, TCtx>(ActionId, dict.InnerDict, ctx);
+                return ParseNamedArgs(ctx, triggerArgs, dict.InnerDict);
             }
 
             if (rawArgs is Dictionary<string, ActionArgValue> namedArgs)
             {
-                return ActionSchemaRegistry.ParseArgs<TActionArgs, TCtx>(ActionId, namedArgs, ctx);
+                return ParseNamedArgs(ctx, triggerArgs, namedArgs);
             }
 
             return default;
+        }
+
+        private TActionArgs ParseNamedArgs(ExecCtx<TCtx> ctx, object triggerArgs, Dictionary<string, ActionArgValue> namedArgs)
+        {
+            if (Schema is ITriggerArgsAwareActionSchema<TActionArgs, TCtx> triggerArgsAwareSchema)
+            {
+                return triggerArgsAwareSchema.ParseArgs(namedArgs, ctx, triggerArgs);
+            }
+
+            return ActionSchemaRegistry.ParseArgs<TActionArgs, TCtx>(ActionId, namedArgs, ctx);
         }
     }
 }

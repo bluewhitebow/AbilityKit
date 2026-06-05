@@ -6,6 +6,11 @@ namespace AbilityKit.Samples.Abstractions
     public enum SampleCategory
     {
         /// <summary>
+        /// 新手导览
+        /// </summary>
+        Onboarding = -1,
+
+        /// <summary>
         /// 基础层
         /// </summary>
         Foundation = 0,
@@ -83,6 +88,7 @@ namespace AbilityKit.Samples.Abstractions
         {
             return category switch
             {
+                SampleCategory.Onboarding => "Onboarding",
                 SampleCategory.Foundation => "Foundation",
                 SampleCategory.Triggering => "Triggering",
                 SampleCategory.Tags => "Tags",

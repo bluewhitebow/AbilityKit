@@ -64,7 +64,23 @@ namespace AbilityKit.Demo.Moba.Services
                         Log.Warning($"[SkillTimelinePhase] ExecuteMode={raw} is not supported (legacy publish removed). effectId={e.EffectId}");
                     }
 
-                    _effects?.Execute(e.EffectId, context);
+                    if (e.EffectId <= 0)
+                    {
+                        Log.Warning($"[SkillTimelinePhase] Skip invalid timeline effect. phase={PhaseId.Value}, eventIndex={_nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
+                    }
+                    else
+                    {
+                        var effects = ResolveEffects(context);
+                        if (effects == null)
+                        {
+                            Log.Warning($"[SkillTimelinePhase] Skip timeline effect: MobaEffectInvokerService missing. phase={PhaseId.Value}, eventIndex={_nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
+                        }
+                        else
+                        {
+                            effects.Execute(e.EffectId, context);
+                        }
+                    }
+
                     _nextIndex++;
 
                     try { context?.SetData(AbilityContextKeys.TimelineNextEventIndex.ToKeyString(), _nextIndex); }
@@ -92,6 +108,13 @@ namespace AbilityKit.Demo.Moba.Services
         {
             base.Reset();
             _nextIndex = 0;
+        }
+
+        private MobaEffectInvokerService ResolveEffects(SkillPipelineContext context)
+        {
+            if (_effects != null) return _effects;
+            if (context?.WorldServices == null) return null;
+            return context.WorldServices.TryResolve<MobaEffectInvokerService>(out var effects) ? effects : null;
         }
     }
 }

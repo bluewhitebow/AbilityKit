@@ -4,80 +4,75 @@ using AbilityKit.Game.Flow.Battle.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal interface ISessionPlanHost
     {
-        internal interface ISessionPlanHost
+        void StartSession();
+        void StopSession();
+        void ApplyAutoPlanActions();
+        bool InvokeSubFeaturesPlanBuilt();
+        void NotifySessionStarted(BattleStartPlan plan);
+        void NotifySessionFailed(Exception exception);
+    }
+
+    internal sealed class SessionPlanController
+    {
+        public void OnAttach(
+            ISessionPlanHost host,
+            IBattleBootstrapper bootstrapper,
+            BattleSessionState state,
+            BattleSessionHandles handles,
+            BattleSessionHooks hooks,
+            BattleContext ctx)
         {
-            void StartSession();
-            void StopSession();
-            void ApplyAutoPlanActions();
-            bool InvokeModulesPlanBuilt();
-        }
+            if (host == null || state == null || handles == null) return;
 
-        private sealed class SessionPlanController
-        {
-            public delegate void OnPlanBuilt(BattleStartPlan plan);
-            public delegate void OnSessionStarted(BattleStartPlan plan);
-            public delegate void OnSessionFailed(Exception exception);
+            var plan = BuildPlan(bootstrapper);
+            state.Plan = plan;
 
-            private OnPlanBuilt _onPlanBuilt;
-            private OnSessionStarted _onSessionStarted;
-            private OnSessionFailed _onSessionFailed;
+            LogPlan(plan);
 
-            public void SetCallbacks(OnPlanBuilt onPlanBuilt, OnSessionStarted onSessionStarted, OnSessionFailed onSessionFailed)
+            if (!IsSessionStartIntercepted(host, hooks, plan))
             {
-                _onPlanBuilt = onPlanBuilt;
-                _onSessionStarted = onSessionStarted;
-                _onSessionFailed = onSessionFailed;
+                if (!TryStartSession(host, plan)) return;
             }
 
-            public void OnAttach(
-                ISessionPlanHost host,
-                IBattleBootstrapper bootstrapper,
-                BattleSessionState state,
-                BattleSessionHandles handles,
-                BattleSessionHooks hooks,
-                BattleContext ctx)
+            SessionContextBinder.BindSession(ctx, state, handles, hooks, plan);
+        }
+
+        private static BattleStartPlan BuildPlan(IBattleBootstrapper bootstrapper)
+        {
+            return bootstrapper?.Build() ?? default;
+        }
+
+        private static void LogPlan(BattleStartPlan plan)
+        {
+            Log.Info($"[BattleSessionFeature] OnAttach Plan: HostMode={plan.HostMode}, UseGatewayTransport={plan.UseGatewayTransport}, Gateway={plan.GatewayHost}:{plan.GatewayPort}, NumericRoomId={plan.NumericRoomId}, AutoConnect={plan.AutoConnect}, AutoCreateWorld={plan.AutoCreateWorld}, AutoJoin={plan.AutoJoin}, AutoReady={plan.AutoReady}, WorldId={plan.WorldId}, PlayerId={plan.PlayerId}");
+        }
+
+        private static bool IsSessionStartIntercepted(ISessionPlanHost host, BattleSessionHooks hooks, BattleStartPlan plan)
+        {
+            if (hooks != null && hooks.PlanBuilt.Invoke(plan)) return true;
+
+            return host.InvokeSubFeaturesPlanBuilt();
+        }
+
+        private static bool TryStartSession(ISessionPlanHost host, BattleStartPlan plan)
+        {
+            try
             {
-                if (host == null || state == null || handles == null) return;
-
-                var plan = bootstrapper?.Build() ?? default;
-                state.Plan = plan;
-
-                _onPlanBuilt?.Invoke(plan);
-                hooks?.PlanBuilt.Invoke(plan);
-
-                Log.Info($"[BattleSessionFeature] OnAttach Plan: HostMode={plan.HostMode}, UseGatewayTransport={plan.UseGatewayTransport}, Gateway={plan.GatewayHost}:{plan.GatewayPort}, NumericRoomId={plan.NumericRoomId}, AutoConnect={plan.AutoConnect}, AutoCreateWorld={plan.AutoCreateWorld}, AutoJoin={plan.AutoJoin}, AutoReady={plan.AutoReady}, WorldId={plan.WorldId}, PlayerId={plan.PlayerId}");
-
-                var planIntercepted = hooks != null && hooks.PlanBuilt.Invoke(plan);
-
-                if (!(planIntercepted || host.InvokeModulesPlanBuilt()))
-                {
-                    try
-                    {
-                        host.StartSession();
-                        _onSessionStarted?.Invoke(plan);
-                        hooks?.SessionStarted.Invoke(plan);
-                        host.ApplyAutoPlanActions();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Exception(ex, "[BattleSessionFeature] StartSession failed in OnAttach");
-                        host.StopSession();
-                        _onSessionFailed?.Invoke(ex);
-                        hooks?.SessionFailed.Invoke(ex);
-                        return;
-                    }
-                }
-
-                if (ctx != null)
-                {
-                    ctx.Plan = plan;
-                    ctx.Session = handles.Session;
-                    ctx.LastFrame = state.Tick.LastFrame;
-                    ctx.Hooks = hooks;
-                }
+                host.StartSession();
+                host.NotifySessionStarted(plan);
+                host.ApplyAutoPlanActions();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, "[BattleSessionFeature] StartSession failed in OnAttach");
+                host.StopSession();
+                host.NotifySessionFailed(ex);
+                return false;
             }
         }
+
     }
 }

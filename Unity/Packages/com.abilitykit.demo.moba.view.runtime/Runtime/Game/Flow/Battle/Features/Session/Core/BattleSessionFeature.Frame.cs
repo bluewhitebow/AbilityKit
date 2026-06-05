@@ -21,13 +21,9 @@ namespace AbilityKit.Game.Flow
             {
                 _firstFrameReceived = true;
                 _eventsCtrl.NotifyFirstFrameReceived(this);
-                Hooks?.FirstFrameReceived.Invoke();
             }
 
-            if (_ctx != null)
-            {
-                _ctx.LastFrame = _lastFrame;
-            }
+            SessionContextBinder.BindLastFrame(_ctx, _state);
 
             if (_subFeatureHost != null)
             {

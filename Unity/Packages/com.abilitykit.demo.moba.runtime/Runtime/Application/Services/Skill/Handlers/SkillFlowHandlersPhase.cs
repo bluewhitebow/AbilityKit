@@ -1,5 +1,6 @@
 using System;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Share.Config;
 using AbilityKit.Pipeline;
 
 namespace AbilityKit.Demo.Moba.Services

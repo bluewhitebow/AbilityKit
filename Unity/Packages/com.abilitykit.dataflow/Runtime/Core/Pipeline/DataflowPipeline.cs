@@ -109,6 +109,8 @@ namespace AbilityKit.Dataflow
             }
 
             int processedCount = 0;
+            var lastOutput = default(TOutput);
+            var hasOutput = false;
             try
             {
                 for (int i = 0; i < _processors.Count; i++)
@@ -122,17 +124,20 @@ namespace AbilityKit.Dataflow
                     // 执行处理器
                     var processor = _processors[i];
                     var output = processor.Process(input, context);
+                    lastOutput = output;
+                    hasOutput = true;
 
-                    // 更新输入为输出（支持链式处理）
-                    if (output != null)
+                    // 仅在类型兼容时把输出回灌为下一处理器输入。
+                    // 这样同类型管线仍支持链式处理，DamageRequest -> DamageResult 这类管线也能安全返回结果。
+                    if (output is TInput nextInput)
                     {
-                        input = (TInput)(object)output;
+                        input = nextInput;
                     }
 
                     processedCount++;
                 }
 
-                return DataflowResult<TOutput>.Success((TOutput)(object)input, processedCount);
+                return DataflowResult<TOutput>.Success(hasOutput ? lastOutput : default, processedCount);
             }
             catch (Exception ex)
             {

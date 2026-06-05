@@ -13,7 +13,7 @@ using EC = AbilityKit.World.ECS;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class ConfirmedBattleViewFeature : IGamePhaseFeature, IViewFeatureModulesHost
+    public sealed partial class ConfirmedBattleViewFeature : IGamePhaseFeature
     {
         private readonly BattleContext _confirmedCtx;
 
@@ -25,7 +25,7 @@ namespace AbilityKit.Game.Flow
         private ViewTimeline _timeline;
 
         private readonly System.Collections.Generic.List<IViewSubFeature<ConfirmedBattleViewFeature>> _subFeatures = new System.Collections.Generic.List<IViewSubFeature<ConfirmedBattleViewFeature>>(8);
-        private ModuleHost<FeatureModuleContext<ConfirmedBattleViewFeature>, IViewSubFeature<ConfirmedBattleViewFeature>> _moduleHost;
+        private ModuleHost<FeatureModuleContext<ConfirmedBattleViewFeature>, IViewSubFeature<ConfirmedBattleViewFeature>> _subFeatureHost;
 
         private BattleFloatingTextSystem _floatingTexts;
         private BattleAreaViewSystem _areaViews;

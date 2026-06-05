@@ -10,6 +10,7 @@ using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Eventing;
+using AbilityKit.Triggering.Payload;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Triggering.Runtime.Plan.Json;
@@ -28,6 +29,7 @@ namespace AbilityKit.Demo.Moba.Services
         [WorldInject] private AbilityKit.Triggering.Eventing.IEventBus _planEventBus;
         [WorldInject] private FunctionRegistry _planFunctions;
         [WorldInject] private ActionRegistry _planActions;
+        [WorldInject(required: false)] private IPayloadAccessorRegistry _planPayloads;
         [WorldInject(required: false)] private IFrameTime _frameTime;
         [WorldInject(required: false)] private MobaSkillCastRuntimeService _skillRuntimes;
         [WorldInject(required: false)] private MobaTriggerPayloadResolverRegistry _payloadResolvers;
@@ -415,7 +417,8 @@ namespace AbilityKit.Demo.Moba.Services
                         _planDb,
                         _planEventBus,
                         _planFunctions,
-                        _planActions);
+                        _planActions,
+                        _planPayloads);
                 }
 
                 return _planExecutor;

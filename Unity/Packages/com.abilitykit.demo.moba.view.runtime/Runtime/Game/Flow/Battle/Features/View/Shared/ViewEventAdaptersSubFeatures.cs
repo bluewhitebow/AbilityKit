@@ -5,95 +5,47 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleViewFeature
+    internal sealed class ViewEventAdaptersSubFeature<TFeature> : IViewSubFeature<TFeature>
+        where TFeature : class, IViewFeatureRuntime
     {
-        private sealed class EventAdaptersSubFeature : IViewSubFeature<BattleViewFeature>
+        public void OnAttach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<BattleViewFeature> ctx)
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
+
+            runtime.SnapshotAdapter?.Dispose();
+            runtime.SnapshotAdapter = null;
+
+            runtime.TriggerAdapter?.Dispose();
+            runtime.TriggerAdapter = null;
+
+            var mode = runtime.Context != null ? runtime.Context.Plan.ViewEventSourceMode : BattleViewEventSourceMode.SnapshotOnly;
+
+            if ((mode == BattleViewEventSourceMode.TriggerOnly || mode == BattleViewEventSourceMode.Hybrid) && runtime.Context?.Session != null)
             {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._snapshotAdapter?.Dispose();
-                f._snapshotAdapter = null;
-
-                f._triggerAdapter?.Dispose();
-                f._triggerAdapter = null;
-
-                var mode = f._ctx != null ? f._ctx.Plan.ViewEventSourceMode : BattleViewEventSourceMode.SnapshotOnly;
-
-                if ((mode == BattleViewEventSourceMode.TriggerOnly || mode == BattleViewEventSourceMode.Hybrid) && f._ctx?.Session != null)
-                {
-                    f._triggerAdapter = new BattleTriggerEventViewAdapter(f._ctx.Session, f._eventSink);
-                }
-
-                if ((mode == BattleViewEventSourceMode.SnapshotOnly || mode == BattleViewEventSourceMode.Hybrid) && f._ctx?.FrameSnapshots != null)
-                {
-                    f._snapshotAdapter = new BattleSnapshotViewAdapter(f._ctx.FrameSnapshots, f._eventSink);
-                }
+                runtime.TriggerAdapter = new BattleTriggerEventViewAdapter(runtime.Context.Session, runtime.EventSink);
             }
 
-            public void OnDetach(in FeatureModuleContext<BattleViewFeature> ctx)
+            if ((mode == BattleViewEventSourceMode.SnapshotOnly || mode == BattleViewEventSourceMode.Hybrid) && runtime.Context?.FrameSnapshots != null)
             {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._snapshotAdapter?.Dispose();
-                f._snapshotAdapter = null;
-
-                f._triggerAdapter?.Dispose();
-                f._triggerAdapter = null;
+                runtime.SnapshotAdapter = new BattleSnapshotViewAdapter(runtime.Context.FrameSnapshots, runtime.EventSink);
             }
-
-            public void Tick(in FeatureModuleContext<BattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleViewFeature> ctx) { }
         }
-    }
 
-    public sealed partial class ConfirmedBattleViewFeature
-    {
-        private sealed class EventAdaptersSubFeature : IViewSubFeature<ConfirmedBattleViewFeature>
+        public void OnDetach(in FeatureModuleContext<TFeature> ctx)
         {
-            public void OnAttach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
+            var runtime = ctx.Feature;
+            if (runtime == null) return;
 
-                f._snapshotAdapter?.Dispose();
-                f._snapshotAdapter = null;
+            runtime.SnapshotAdapter?.Dispose();
+            runtime.SnapshotAdapter = null;
 
-                f._triggerAdapter?.Dispose();
-                f._triggerAdapter = null;
-
-                var mode = f._confirmedCtx != null ? f._confirmedCtx.Plan.ViewEventSourceMode : BattleViewEventSourceMode.SnapshotOnly;
-
-                if ((mode == BattleViewEventSourceMode.TriggerOnly || mode == BattleViewEventSourceMode.Hybrid) && f._confirmedCtx?.Session != null)
-                {
-                    f._triggerAdapter = new BattleTriggerEventViewAdapter(f._confirmedCtx.Session, f._eventSink);
-                }
-
-                if ((mode == BattleViewEventSourceMode.SnapshotOnly || mode == BattleViewEventSourceMode.Hybrid) && f._confirmedCtx?.FrameSnapshots != null)
-                {
-                    f._snapshotAdapter = new BattleSnapshotViewAdapter(f._confirmedCtx.FrameSnapshots, f._eventSink);
-                }
-            }
-
-            public void OnDetach(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._snapshotAdapter?.Dispose();
-                f._snapshotAdapter = null;
-
-                f._triggerAdapter?.Dispose();
-                f._triggerAdapter = null;
-            }
-
-            public void Tick(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<ConfirmedBattleViewFeature> ctx) { }
+            runtime.TriggerAdapter?.Dispose();
+            runtime.TriggerAdapter = null;
         }
+
+        public void Tick(in FeatureModuleContext<TFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<TFeature> ctx) { }
     }
 }

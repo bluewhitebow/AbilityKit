@@ -3,74 +3,69 @@ using AbilityKit.Game.Flow.Battle.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal interface ISessionEventsHost
     {
-        internal interface ISessionEventsHost
+        void OnStartSessionRequested();
+
+        void RaiseSessionStarted(BattleStartPlan plan);
+        void RaiseSessionFailed(Exception exception);
+        void RaiseFirstFrameReceived();
+
+        Exception PendingSubFeatureValidationFailure { get; set; }
+
+        BattleSessionHooks Hooks { get; set; }
+    }
+
+    internal sealed class SessionEventsController
+    {
+        private bool _hasAttached;
+
+        public void OnAttach(ISessionEventsHost host)
         {
-            void OnStartSessionRequested();
+            if (host == null) return;
+            if (_hasAttached) return;
 
-            void RaiseSessionStarted(BattleStartPlan plan);
-            void RaiseSessionFailed(Exception exception);
-            void RaiseFirstFrameReceived();
+            host.Hooks ??= new BattleSessionHooks();
 
-            BattleContext Context { get; }
+            if (host.PendingSubFeatureValidationFailure != null)
+            {
+                host.RaiseSessionFailed(host.PendingSubFeatureValidationFailure);
+                host.PendingSubFeatureValidationFailure = null;
+            }
 
-            Exception PendingModuleValidationFailure { get; set; }
-
-            BattleSessionHooks Hooks { get; set; }
+            _hasAttached = true;
         }
 
-        private sealed class SessionEventsController
+        public void OnDetach(ISessionEventsHost host)
         {
-            private bool _hasAttached;
+            if (host == null) return;
 
-            public void OnAttach(ISessionEventsHost host)
-            {
-                if (host == null) return;
-                if (_hasAttached) return;
+            host.Hooks = null;
+            _hasAttached = false;
+        }
 
-                host.Hooks ??= new BattleSessionHooks();
+        public void RequestStartSession(ISessionEventsHost host)
+        {
+            if (host == null) return;
+            host.OnStartSessionRequested();
+        }
 
-                if (host.PendingModuleValidationFailure != null)
-                {
-                    host.RaiseSessionFailed(host.PendingModuleValidationFailure);
-                    host.PendingModuleValidationFailure = null;
-                }
+        public void NotifySessionStarted(ISessionEventsHost host, BattleStartPlan plan)
+        {
+            if (host == null) return;
+            host.RaiseSessionStarted(plan);
+        }
 
-                _hasAttached = true;
-            }
+        public void NotifySessionFailed(ISessionEventsHost host, Exception exception)
+        {
+            if (host == null) return;
+            host.RaiseSessionFailed(exception);
+        }
 
-            public void OnDetach(ISessionEventsHost host)
-            {
-                if (host == null) return;
-
-                host.Hooks = null;
-                _hasAttached = false;
-            }
-
-            public void RequestStartSession(ISessionEventsHost host)
-            {
-                if (host == null) return;
-                host.OnStartSessionRequested();
-            }
-
-            public void NotifySessionStarted(ISessionEventsHost host, BattleStartPlan plan)
-            {
-                if (host == null) return;
-                host.RaiseSessionStarted(plan);
-            }
-
-            public void NotifySessionFailed(ISessionEventsHost host, Exception exception)
-            {
-                if (host == null) return;
-                host.RaiseSessionFailed(exception);
-            }
-
-            public void NotifyFirstFrameReceived(ISessionEventsHost host)
-            {
-                if (host == null) return;
-                host.RaiseFirstFrameReceived();
-            }
+        public void NotifyFirstFrameReceived(ISessionEventsHost host)
+        {
+            if (host == null) return;
+            host.RaiseFirstFrameReceived();
         }
     }
 }

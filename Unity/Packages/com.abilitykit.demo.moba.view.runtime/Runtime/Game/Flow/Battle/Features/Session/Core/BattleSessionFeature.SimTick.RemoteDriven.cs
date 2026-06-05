@@ -1,12 +1,5 @@
-﻿using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
-using AbilityKit.Ability.Host.Extensions.FrameSync;
-using AbilityKit.Core.Common.Log;
-using AbilityKit.Ability.World.Services;
-using AbilityKit.Game.Battle;
-
-using HostWorldStateSnapshotProvider = AbilityKit.Ability.Host.IWorldStateSnapshotProvider;
 
 namespace AbilityKit.Game.Flow
 {
@@ -29,31 +22,14 @@ namespace AbilityKit.Game.Flow
             var fixedDelta = GetFixedDeltaSeconds();
             var stepsBudget = MaxRemoteDrivenCatchUpStepsPerUpdate;
             if (stepsBudget <= 0) return;
-            HostWorldStateSnapshotProvider provider = null;
 
-            try
-            {
-                if (_remoteDrivenWorld.Services != null)
-                {
-                    _remoteDrivenWorld.Services.TryResolve(out provider);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex);
-                provider = null;
-            }
-
-
-            _remoteDrivenLastTickedFrame = WorldCatchUpDriver.CatchUpAndFeedSnapshots(
+            _remoteDrivenLastTickedFrame = _worldCatchUp.CatchUpAndFeedSnapshots(
                 runtime: _remoteDrivenRuntime,
                 world: _remoteDrivenWorld,
                 lastTickedFrame: _remoteDrivenLastTickedFrame,
                 driveTargetFrame: driveTargetFrame,
                 fixedDelta: fixedDelta,
                 stepsBudget: stepsBudget,
-                provider: provider,
-                maxSnapshotsPerStep: 16,
                 feed: packet => _snapshots?.Feed(packet));
 
             _remoteDrivenInputSource.TrimBefore(_remoteDrivenLastTickedFrame - 120);

@@ -69,6 +69,40 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                     Log.Warning($"[TriggerPlansStage] Failed to load directory trigger plans: {ex.Message}");
                 }
 
+                // 3. 从 ability/rules 目录加载释放条件、提交消耗等通用技能规则。
+                Log.Info("[TriggerPlansStage] Loading ability rules from ability/rules directory");
+                try
+                {
+                    var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
+                    var directoryLoader = new TriggerPlanDirectoryLoader(fsAdapter);
+                    var loadedDb = directoryLoader.LoadDirectory("ability/rules", "**/*.json");
+
+                    if (loadedDb != null && loadedDb.Records != null)
+                    {
+                        db.MergeFrom(loadedDb, replaceExisting: true);
+                        Log.Info($"[TriggerPlansStage] Ability rules merged. total records={db.Records?.Count ?? 0}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning($"[TriggerPlansStage] Failed to load ability rules: {ex.Message}");
+                }
+
+                // 4. 加载 MOBA 效果计划，让技能流程事件可以复用触发器计划系统。
+                Log.Info("[TriggerPlansStage] Loading moba effect plans from moba/effect_plans.json");
+                try
+                {
+                    var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
+                    var effectPlanDb = new TriggerPlanJsonDatabase();
+                    effectPlanDb.Load(fsAdapter, "moba/effect_plans.json");
+                    db.MergeFrom(effectPlanDb, replaceExisting: true);
+                    Log.Info($"[TriggerPlansStage] Moba effect plans merged. total records={db.Records?.Count ?? 0}");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning($"[TriggerPlansStage] Failed to load moba effect plans: {ex.Message}");
+                }
+
                 return db;
             });
         }

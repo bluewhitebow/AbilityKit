@@ -4,36 +4,31 @@ using AbilityKit.Game.Flow.Modules;
 
 namespace AbilityKit.Game.Flow
 {
-    public sealed partial class BattleSessionFeature
+    internal sealed class SessionEventsSubFeature :
+        ISessionSubFeature<BattleSessionFeature>,
+        IGameModuleId,
+        IGameModuleDependencies
     {
-        private sealed class SessionEventsSubFeature :
-            ISessionSubFeature<BattleSessionFeature>,
-            IGameModuleId,
-            IGameModuleDependencies
+        public string Id => "session_events";
+
+        public System.Collections.Generic.IEnumerable<string> Dependencies => null;
+
+        public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
         {
-            public string Id => "session_events";
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionEventsRuntime>(ctx, out var runtime)) return;
 
-            public System.Collections.Generic.IEnumerable<string> Dependencies => null;
-
-            public void OnAttach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._eventsCtrl.OnAttach((ISessionEventsHost)f);
-            }
-
-            public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
-            {
-                var f = ctx.Feature;
-                if (f == null) return;
-
-                f._eventsCtrl.OnDetach((ISessionEventsHost)f);
-            }
-
-            public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
-
-            public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
+            runtime.Events.OnAttach((ISessionEventsHost)ctx.Feature);
         }
+
+        public void OnDetach(in FeatureModuleContext<BattleSessionFeature> ctx)
+        {
+            if (!BattleSessionFeatureRuntimeAccess.TryGet<ISessionEventsRuntime>(ctx, out var runtime)) return;
+
+            runtime.Events.OnDetach((ISessionEventsHost)ctx.Feature);
+        }
+
+        public void Tick(in FeatureModuleContext<BattleSessionFeature> ctx, float deltaTime) { }
+
+        public void RebindAll(in FeatureModuleContext<BattleSessionFeature> ctx) { }
     }
 }
