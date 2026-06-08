@@ -1,10 +1,9 @@
 using System.Collections.Generic;
+using System.Text;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Services;
-using AbilityKit.Demo.Moba.Services.Search;
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
@@ -29,7 +28,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (!ctx.Context.TryResolve<MobaCombatEffectService>(out var combat) || combat == null)
             {
-                Log.Warning("[Plan] give_damage cannot resolve MobaCombatEffectService.");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", "cannot resolve MobaCombatEffectService.");
                 return;
             }
 
@@ -37,47 +36,28 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var effectInput = new MobaEffectActionInput(in coreInput);
             if (!effectInput.HasCasterActor)
             {
-                Log.Warning($"[Plan] give_damage missing caster. target={effectInput.TargetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"missing caster. target={effectInput.TargetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
                 return;
             }
 
             var attackerActorId = effectInput.CasterActorId;
-            if (args.QueryTemplateId > 0)
+            var targets = new List<int>(8);
+            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "give_damage", targets))
             {
-                if (!ctx.Context.TryResolve<SearchTargetService>(out var search) || search == null)
-                {
-                    Log.Warning($"[Plan] give_damage cannot resolve SearchTargetService. queryTemplateId={args.QueryTemplateId}");
-                    return;
-                }
-
-                var targets = new List<int>(8);
-                var aimPosition = coreInput.AimPosition;
-                if (!search.TrySearchActorIds(args.QueryTemplateId, attackerActorId, in aimPosition, effectInput.TargetActorId, targets))
-                {
-                    return;
-                }
-
-                for (int i = 0; i < targets.Count; i++)
-                {
-                    ExecuteDamage(combat, args, effectInput, attackerActorId, targets[i]);
-                }
                 return;
             }
 
-            if (!effectInput.HasTargetActor)
+            for (int i = 0; i < targets.Count; i++)
             {
-                Log.Warning($"[Plan] give_damage missing target. attacker={attackerActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
-                return;
+                ExecuteDamage(combat, args, effectInput, ctx, attackerActorId, targets[i]);
             }
-
-            ExecuteDamage(combat, args, effectInput, attackerActorId, effectInput.TargetActorId);
         }
 
-        private static void ExecuteDamage(MobaCombatEffectService combat, GiveDamageArgs args, MobaEffectActionInput input, int attackerActorId, int targetActorId)
+        private static void ExecuteDamage(MobaCombatEffectService combat, GiveDamageArgs args, MobaEffectActionInput input, ExecCtx<IWorldResolver> ctx, int attackerActorId, int targetActorId)
         {
             if (targetActorId <= 0)
             {
-                Log.Warning($"[Plan] give_damage invalid target. attacker={attackerActorId}, target={targetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"invalid target. attacker={attackerActorId}, target={targetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
                 return;
             }
 
@@ -98,8 +78,129 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var result = combat.DealDamage(attack);
             if (result == null)
             {
-                Log.Warning($"[Plan] give_damage pipeline returned null. attacker={attackerActorId} target={targetActorId} damage={args.DamageValue:0.###} reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"pipeline returned null. attacker={attackerActorId} target={targetActorId} damage={args.DamageValue:0.###} reasonParam={args.ReasonParam}");
+                return;
             }
+
+            LogDamageTrace(args, input, ctx, in origin, result);
+        }
+
+        private static void LogDamageTrace(GiveDamageArgs args, MobaEffectActionInput input, ExecCtx<IWorldResolver> ctx, in MobaGameplayOrigin origin, DamageResult result)
+        {
+            var sb = new StringBuilder(1024);
+            sb.Append("[MobaDamageTrace] damage applied")
+                .Append(" attacker=").Append(result.AttackerActorId)
+                .Append(" target=").Append(result.TargetActorId)
+                .Append(" requested=").Append(args.DamageValue.ToString("0.###"))
+                .Append(" actual=").Append(result.Value.ToString("0.###"))
+                .Append(" damageType=").Append(result.DamageType)
+                .Append(" reason=").Append(result.ReasonKind).Append(':').Append(result.ReasonParam)
+                .Append(" originKind=").Append(origin.ImmediateKind)
+                .Append(" originConfig=").Append(origin.ImmediateConfigId)
+                .Append(" immediateCtx=").Append(origin.ImmediateContextId)
+                .Append(" parentCtx=").Append(origin.EffectiveParentContextId)
+                .Append(" rootCtx=").Append(origin.EffectiveRootContextId)
+                .Append(" ownerCtx=").Append(origin.OwnerContextId)
+                .Append(" skillHandle=").Append(origin.SkillRuntimeHandle.ToString());
+
+            AppendSkillRuntime(sb, ctx, in origin);
+            AppendTraceChain(sb, ctx, input, in origin);
+
+            MobaPlanActionDiagnostics.Investigation(ctx.Context, "give_damage", sb.ToString());
+        }
+
+        private static void AppendSkillRuntime(StringBuilder sb, ExecCtx<IWorldResolver> ctx, in MobaGameplayOrigin origin)
+        {
+            var handle = origin.SkillRuntimeHandle;
+            if (!handle.IsValid)
+            {
+                sb.AppendLine().Append("  skillRuntime: missing handle");
+                return;
+            }
+
+            if (!ctx.Context.TryResolve<MobaSkillCastRuntimeService>(out var runtimes) || runtimes == null)
+            {
+                sb.AppendLine().Append("  skillRuntime: service not resolved handle=").Append(handle.ToString());
+                return;
+            }
+
+            if (!runtimes.TryGet(in handle, out var runtime) || runtime == null)
+            {
+                sb.AppendLine().Append("  skillRuntime: not found handle=").Append(handle.ToString())
+                    .Append(" rootTrace=").Append(handle.RootTraceContextId);
+                return;
+            }
+
+            sb.AppendLine().Append("  skillRuntime: skillId=").Append(runtime.SkillId)
+                .Append(" slot=").Append(runtime.SkillSlot)
+                .Append(" level=").Append(runtime.SkillLevel)
+                .Append(" runtime=").Append(runtime.RuntimeId).Append(':').Append(runtime.Generation)
+                .Append(" stage=").Append(runtime.Stage)
+                .Append(" caster=").Append(runtime.CasterActorId)
+                .Append(" target=").Append(runtime.TargetActorId)
+                .Append(" rootTrace=").Append(runtime.RootTraceContextId)
+                .Append(" pendingChildren=").Append(runtime.PendingChildren);
+
+            var children = runtime.Children;
+            for (int i = 0; i < children.Count; i++)
+            {
+                var child = children[i];
+                sb.AppendLine().Append("    child[").Append(i).Append("]: kind=").Append(child.Kind)
+                    .Append(" id=").Append(child.ChildId)
+                    .Append(" traceCtx=").Append(child.TraceContextId)
+                    .Append(" config=").Append(child.ConfigId);
+            }
+        }
+
+        private static void AppendTraceChain(StringBuilder sb, ExecCtx<IWorldResolver> ctx, MobaEffectActionInput input, in MobaGameplayOrigin origin)
+        {
+            if (!ctx.Context.TryResolve<MobaTraceRegistry>(out var traces) || traces == null)
+            {
+                sb.AppendLine().Append("  traceChain: registry not resolved");
+                return;
+            }
+
+            var rootId = ResolveTraceRootId(input, in origin);
+            if (rootId == 0L)
+            {
+                sb.AppendLine().Append("  traceChain: missing root id");
+                return;
+            }
+
+            var chain = traces.GetChain(rootId);
+            if (chain == null || chain.Count == 0)
+            {
+                sb.AppendLine().Append("  traceChain: empty root=").Append(rootId);
+                return;
+            }
+
+            sb.AppendLine().Append("  traceChain: root=").Append(rootId).Append(" nodes=").Append(chain.Count);
+            for (int i = 0; i < chain.Count; i++)
+            {
+                var node = chain[i];
+                var metadata = node.Metadata != null ? node.Metadata.ToDisplayString() : string.Empty;
+                sb.AppendLine().Append("    [").Append(i).Append("] kind=").Append((MobaTraceKind)node.Kind)
+                    .Append(" ctx=").Append(node.ContextId)
+                    .Append(" parent=").Append(node.ParentId)
+                    .Append(" childCount=").Append(node.ChildCount);
+
+                if (!string.IsNullOrEmpty(metadata))
+                {
+                    sb.Append(" meta=").Append(metadata);
+                }
+            }
+        }
+
+        private static long ResolveTraceRootId(MobaEffectActionInput input, in MobaGameplayOrigin origin)
+        {
+            if (origin.EffectiveRootContextId != 0L) return origin.EffectiveRootContextId;
+            if (origin.SkillRuntimeHandle.RootTraceContextId != 0L) return origin.SkillRuntimeHandle.RootTraceContextId;
+
+            var executionContext = input.ExecutionContext;
+            if (executionContext.RootContextId != 0L) return executionContext.RootContextId;
+            if (executionContext.SkillRuntimeHandle.RootTraceContextId != 0L) return executionContext.SkillRuntimeHandle.RootTraceContextId;
+
+            return 0L;
         }
     }
 }

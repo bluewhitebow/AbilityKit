@@ -21,12 +21,14 @@ namespace AbilityKit.Demo.Moba.Services
         private IMobaEffectiveTagQueryService _effectiveTags;
         private IMobaContinuousTagRuleService _tagRules;
         private IWorldResolver _services;
+        private IMobaBattleDiagnosticsService _diagnostics;
 
         public void OnInit(IWorldResolver services)
         {
             if (services == null) return;
 
             _services = services;
+            services.TryResolve(out _diagnostics);
             RegisterDefaultModifierProjectors(services);
             RegisterDefaultIntervalHandlers(services);
         }
@@ -55,18 +57,37 @@ namespace AbilityKit.Demo.Moba.Services
             var active = GetAllActiveContinuous();
             if (active == null || active.Count == 0) return;
 
+            var diagnostics = _diagnostics;
+            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
+            var ticked = 0;
+            var intervalCandidates = 0;
+
             for (int i = 0; i < active.Count; i++)
             {
                 var continuous = active[i];
                 if (continuous == null || !continuous.IsActive || continuous.IsTerminated) continue;
 
+                ticked++;
                 if (continuous is IMobaTickableContinuous tickable)
                 {
                     tickable.TickManaged(deltaTimeSeconds);
                 }
 
                 if (continuous.IsTerminated) continue;
+                if (continuous.Config is IMobaContinuousPeriodicConfig) intervalCandidates++;
                 TickInterval(continuous, deltaTimeSeconds);
+            }
+
+            if (diagnostics != null)
+            {
+                diagnostics.Gauge("moba.continuous.active", active.Count);
+                diagnostics.Sample("moba.continuous.ticked", ticked);
+                diagnostics.Sample("moba.continuous.intervalCandidates", intervalCandidates);
+                diagnostics.RecordDuration(
+                    MobaBattleDiagnosticMetric.ContinuousTick,
+                    start,
+                    MobaBattleDiagnosticsDefaults.ContinuousTickWarnMs,
+                    $"active={active.Count} ticked={ticked} intervalCandidates={intervalCandidates}");
             }
         }
 
@@ -130,6 +151,7 @@ namespace AbilityKit.Demo.Moba.Services
         {
             _modifierProjectors = new MobaContinuousModifierProjectorRegistry();
             _modifierProjectors.Register(new MobaAttributeContinuousModifierProjector());
+            _modifierProjectors.Register(new MobaSkillParamContinuousModifierProjector());
             _modifierProjectors.OnInit(services);
 
             _lifecycleBinder = new MobaContinuousLifecycleBinder(_modifierProjectors);

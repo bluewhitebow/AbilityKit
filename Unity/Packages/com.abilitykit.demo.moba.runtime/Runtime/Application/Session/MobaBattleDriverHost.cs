@@ -5,7 +5,6 @@ using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Host.Framework;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Coordinator;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Protocol.Moba.StateSync;
 using AbilityKit.Demo.Moba.Services;
 
@@ -101,13 +100,13 @@ namespace AbilityKit.Demo.Moba.Session
             _isRunning = true;
             _currentFrame = new FrameIndex(0);
             _logicTimeSeconds = 0;
-            Log.Info("[MobaBattleDriverHost] Started");
+            MobaRuntimeLog.Info(MobaRuntimeLogModule.Session, MobaRuntimeLogPurpose.Lifecycle, nameof(MobaBattleDriverHost), "Started");
         }
 
         public void Stop()
         {
             _isRunning = false;
-            Log.Info("[MobaBattleDriverHost] Stopped");
+            MobaRuntimeLog.Info(MobaRuntimeLogModule.Session, MobaRuntimeLogPurpose.Lifecycle, nameof(MobaBattleDriverHost), "Stopped");
         }
 
         public void SubmitInputs(PlayerInput[] inputs)
@@ -117,7 +116,7 @@ namespace AbilityKit.Demo.Moba.Session
                 return;
             }
 
-            Log.Info($"[MobaBattleDriverHost] SubmitInputs: {inputs.Length} inputs");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"SubmitInputs: {inputs.Length} inputs");
 
             var commands = _inputConverter.Convert(inputs);
             SubmitCommands(commands);
@@ -143,7 +142,7 @@ namespace AbilityKit.Demo.Moba.Session
             var result = _runtime.Submit(targetFrame, commands);
             if (!result.Succeeded)
             {
-                Log.Warning($"[MobaBattleDriverHost] SubmitCommands rejected. {result}");
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Rejection, nameof(MobaBattleDriverHost), $"SubmitCommands rejected. {result}");
             }
 
             return result;
@@ -219,7 +218,7 @@ namespace AbilityKit.Demo.Moba.Session
             if (!_missingDriveGateLogged)
             {
                 _missingDriveGateLogged = true;
-                Log.Warning("[MobaBattleDriverHost] Logic world drive blocked: ILogicWorldDriveGate not resolved");
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Session, MobaRuntimeLogPurpose.Validation, nameof(MobaBattleDriverHost), "Logic world drive blocked: ILogicWorldDriveGate not resolved");
             }
 
             return false;
@@ -240,7 +239,7 @@ namespace AbilityKit.Demo.Moba.Session
                 return;
             }
 
-            Log.Info($"[MobaBattleDriverHost] Skill input: player={input.PlayerId} slot={slot} target=({x},{z})");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Skill input: player={input.PlayerId} slot={slot} target=({x},{z})");
             // Skill execution is handled by moba.core logic layer during HostRuntime.Tick
         }
 
@@ -253,12 +252,12 @@ namespace AbilityKit.Demo.Moba.Session
                 return;
             }
 
-            Log.Info($"[MobaBattleDriverHost] Move input queued: player={input.PlayerId} target=({x},{z})");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Move input queued: player={input.PlayerId} target=({x},{z})");
         }
 
         private void HandleStopInput(PlayerInput input)
         {
-            Log.Info($"[MobaBattleDriverHost] Stop input: player={input.PlayerId}");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Stop input: player={input.PlayerId}");
         }
     }
 }

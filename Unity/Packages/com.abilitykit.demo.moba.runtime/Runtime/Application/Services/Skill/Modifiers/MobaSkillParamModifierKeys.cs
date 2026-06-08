@@ -18,6 +18,7 @@ namespace AbilityKit.Demo.Moba.Services
             public static readonly ModifierKey ProjectileId = ModifierKey.Create(ModifierKey.Categories.Projectile, 2);
             public static readonly ModifierKey CountPerShot = ModifierKey.Create(ModifierKey.Categories.Projectile, 3);
             public static readonly ModifierKey FanAngleDeg = ModifierKey.Create(ModifierKey.Categories.Projectile, 4);
+            public static readonly ModifierKey DurationMs = ModifierKey.Create(ModifierKey.Categories.Projectile, 5);
         }
 
         public static class Summon

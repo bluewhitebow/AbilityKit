@@ -1,5 +1,4 @@
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
@@ -18,13 +17,12 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (ctx.Context == null)
             {
-                Log.Warning("[Plan] end_game skipped: missing world context");
+                LogRejected("missing world context");
                 return;
             }
 
-            if (!ctx.Context.TryResolve<MobaGameplayService>(out var gameplay) || gameplay == null)
+            if (!TryResolveRequired(ctx, out MobaGameplayService gameplay))
             {
-                Log.Warning("[Plan] end_game skipped: gameplay service not found");
                 return;
             }
 
@@ -41,11 +39,11 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (!gameplay.End(reason, args.WinTeamId))
             {
-                Log.Info($"[Plan] end_game ignored: phase={gameplay.Phase}, reason={reason}, winTeamId={args.WinTeamId}");
+                LogRejected($"ignored phase={gameplay.Phase}, reason={reason}, winTeamId={args.WinTeamId}");
                 return;
             }
 
-            Log.Info($"[Plan] end_game: reason={reason}, winTeamId={args.WinTeamId}");
+            LogApplied($"reason={reason}, winTeamId={args.WinTeamId}");
         }
     }
 }

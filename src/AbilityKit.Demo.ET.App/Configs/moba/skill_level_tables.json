@@ -28,5 +28,15 @@
       { "CooldownMs": 10500, "Cost": 130, "Params": [420.0] },
       { "CooldownMs": 10000, "Cost": 140, "Params": [500.0] }
     ]
+  },
+  {
+    "Id": 10010401,
+    "Levels": [
+      { "CooldownMs": 1000, "Cost": 0, "Params": [101.0, 10.0] },
+      { "CooldownMs": 1000, "Cost": 0, "Params": [101.0, 10.0] },
+      { "CooldownMs": 1000, "Cost": 0, "Params": [101.0, 10.0] },
+      { "CooldownMs": 1000, "Cost": 0, "Params": [101.0, 10.0] },
+      { "CooldownMs": 1000, "Cost": 0, "Params": [101.0, 10.0] }
+    ]
   }
 ]

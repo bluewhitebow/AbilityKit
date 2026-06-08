@@ -27,6 +27,26 @@ namespace AbilityKit.Demo.Moba.Config.BattleDemo.MO
             Selector = BuildSelector(dto);
         }
 
+        public SearchQueryTemplateMO(
+            int id,
+            string name,
+            int maxCount,
+            int explicitTargetPolicy,
+            SearchTargetProviderConfig provider,
+            SearchTargetRuleConfig[] rules,
+            SearchTargetScorerConfig scorer,
+            SearchTargetSelectorConfig selector)
+        {
+            Id = id;
+            Name = name;
+            MaxCount = maxCount;
+            ExplicitTargetPolicy = explicitTargetPolicy;
+            Provider = provider ?? new SearchTargetProviderConfig(0, (int)SearchTargetProviderKind.AllActors);
+            Rules = rules ?? Array.Empty<SearchTargetRuleConfig>();
+            Scorer = scorer ?? new SearchTargetScorerConfig(0, (int)SearchTargetScorerKind.DistanceToCaster, (int)SearchTargetPointKind.Caster);
+            Selector = selector ?? new SearchTargetSelectorConfig(0, (int)SearchTargetSelectorKind.TopKByScore);
+        }
+
         private static SearchTargetProviderConfig BuildProvider(SearchQueryTemplateDTO dto)
         {
             return dto.Provider != null
@@ -72,14 +92,17 @@ namespace AbilityKit.Demo.Moba.Config.BattleDemo.MO
 
     public sealed class SearchTargetProviderConfig : SearchTargetComponentConfig
     {
+        public int Param { get; }
+
         public SearchTargetProviderConfig(SearchTargetProviderDTO dto)
-            : this(dto != null ? dto.Id : 0, dto != null ? dto.Kind : 0)
+            : this(dto != null ? dto.Id : 0, dto != null ? dto.Kind : 0, dto != null ? dto.Param : 0)
         {
         }
 
-        public SearchTargetProviderConfig(int id, int kind)
+        public SearchTargetProviderConfig(int id, int kind, int param = 0)
             : base(id, kind)
         {
+            Param = param;
         }
     }
 

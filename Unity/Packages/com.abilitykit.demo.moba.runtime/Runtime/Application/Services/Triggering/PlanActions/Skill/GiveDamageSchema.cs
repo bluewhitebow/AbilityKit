@@ -26,10 +26,8 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var damageValue = ReadFloat(namedArgs, ctx, 0f, "damage_value", "value", "damagevalue");
             var reasonParam = ReadInt(namedArgs, ctx, 0, "reason_param", "reasonparam");
             var damageType = ReadEnum(namedArgs, ctx, DamageType.Physical, "damage_type", "damagetype");
-            var queryTemplateId = ReadInt(namedArgs, ctx, 0,
-                "query_template_id", "querytemplateid", "target_query_id", "targetqueryid", "target_query_template_id", "targetquerytemplateid");
-
-            return new GiveDamageArgs(damageValue, reasonParam, damageType, queryTemplateId);
+            var targetRequest = MobaActionTargetSchemaReader.Read(namedArgs, ctx);
+            return new GiveDamageArgs(damageValue, reasonParam, damageType, targetRequest);
         }
 
         public override bool TryValidateArgs(ReadOnlySpan<KeyValuePair<string, ActionArgValue>> args, out string error)

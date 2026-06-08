@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
@@ -13,13 +14,28 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly MobaActorLookupService _actors;
         private readonly MobaDamageService _damage;
         private readonly AbilityKit.Triggering.Eventing.IEventBus _eventBus;
-        private static bool _formulaLimitLogged;
+        private readonly List<IMobaDamagePipelineStage> _standardStages;
+        private readonly IMobaBattleDiagnosticsService _diagnostics;
 
-        public DamagePipelineService(MobaActorLookupService actors, MobaDamageService damage, AbilityKit.Triggering.Eventing.IEventBus eventBus)
+        public DamagePipelineService(
+            MobaActorLookupService actors,
+            MobaDamageService damage,
+            AbilityKit.Triggering.Eventing.IEventBus eventBus,
+            MobaDamageMitigationService mitigation = null,
+            MobaShieldService shields = null,
+            IMobaBattleDiagnosticsService diagnostics = null)
         {
             _actors = actors ?? throw new ArgumentNullException(nameof(actors));
             _damage = damage ?? throw new ArgumentNullException(nameof(damage));
             _eventBus = eventBus;
+            _diagnostics = diagnostics;
+            _standardStages = new List<IMobaDamagePipelineStage>(4)
+            {
+                new MobaBaseDamagePipelineStage(),
+                new MobaDamageMitigationPipelineStage(mitigation),
+                new MobaShieldAbsorbPipelineStage(shields),
+                new MobaFinalDamagePipelineStage(),
+            };
         }
 
         public DamageResult Execute(AttackInfo attack)
@@ -27,52 +43,72 @@ namespace AbilityKit.Demo.Moba.Services
             if (attack == null) return null;
             if (attack.TargetActorId <= 0) return null;
 
-            if (!_actors.TryGetActorEntity(attack.TargetActorId, out var target) || target == null) return null;
+            var diagnostics = _diagnostics;
+            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
 
-            Publish(DamagePipelineEvents.AttackCreated, attack);
-            Publish(DamagePipelineEvents.BeforeCalc, attack);
-
-            var calc = new AttackCalcInfo(attack);
-
-            Publish(DamagePipelineEvents.CalcBegin, calc);
-
-            ApplyFormula(calc);
-
-            Publish(DamagePipelineEvents.BeforeApply, calc);
-
-            var targetAttrs = target.GetMobaAttrs();
-            var oldHp = targetAttrs.Hp;
-            var maxHp = targetAttrs.MaxHp;
-
-            var applied = _damage.ApplyDamage(
-                attackerActorId: attack.AttackerActorId,
-                targetActorId: attack.TargetActorId,
-                damageType: (int)attack.DamageType,
-                value: calc.HpDamage.Value,
-                reasonKind: (int)attack.ReasonKind,
-                reasonParam: attack.ReasonParam);
-
-            var result = new DamageResult
+            try
             {
-                AttackerActorId = attack.AttackerActorId,
-                TargetActorId = attack.TargetActorId,
+                if (!_actors.TryGetActorEntity(attack.TargetActorId, out var target) || target == null)
+                {
+                    diagnostics?.Counter("moba.damage.targetMissing");
+                    return null;
+                }
 
-                DamageType = attack.DamageType,
-                CritType = attack.CritType,
-                ReasonKind = attack.ReasonKind,
-                ReasonParam = attack.ReasonParam,
-                Value = applied,
-                TargetHp = Clamp(oldHp - applied, 0f, maxHp),
-                TargetMaxHp = maxHp,
-            };
+                Publish(DamagePipelineEvents.AttackCreated, attack);
+                Publish(DamagePipelineEvents.BeforeCalc, attack);
 
-            if (attack.TryGetOrigin(out var origin))
-            {
-                result.SetOrigin(in origin);
+                var calc = new AttackCalcInfo(attack);
+
+                Publish(DamagePipelineEvents.CalcBegin, calc);
+
+                ApplyFormula(calc);
+
+                Publish(DamagePipelineEvents.BeforeApply, calc);
+
+                var targetAttrs = target.GetMobaAttrs();
+                var oldHp = targetAttrs.Hp;
+                var maxHp = targetAttrs.MaxHp;
+
+                var applied = _damage.ApplyDamage(
+                    attackerActorId: attack.AttackerActorId,
+                    targetActorId: attack.TargetActorId,
+                    damageType: (int)attack.DamageType,
+                    value: calc.HpDamage.Value,
+                    reasonKind: (int)attack.ReasonKind,
+                    reasonParam: attack.ReasonParam);
+
+                var result = new DamageResult
+                {
+                    AttackerActorId = attack.AttackerActorId,
+                    TargetActorId = attack.TargetActorId,
+
+                    DamageType = attack.DamageType,
+                    CritType = attack.CritType,
+                    ReasonKind = attack.ReasonKind,
+                    ReasonParam = attack.ReasonParam,
+                    Value = applied,
+                    TargetHp = Clamp(oldHp - applied, 0f, maxHp),
+                    TargetMaxHp = maxHp,
+                };
+
+                if (attack.TryGetOrigin(out var origin))
+                {
+                    result.SetOrigin(in origin);
+                }
+
+                Publish(DamagePipelineEvents.AfterApply, result);
+                diagnostics?.Counter("moba.damage.applied");
+                diagnostics?.Sample("moba.damage.value", applied);
+                return result;
             }
-
-            Publish(DamagePipelineEvents.AfterApply, result);
-            return result;
+            finally
+            {
+                diagnostics?.RecordDuration(
+                    MobaBattleDiagnosticMetric.DamagePipeline,
+                    start,
+                    MobaBattleDiagnosticsDefaults.DamagePipelineWarnMs,
+                    $"attacker={attack.AttackerActorId} target={attack.TargetActorId} type={attack.DamageType}");
+            }
         }
 
         private void ApplyFormula(AttackCalcInfo calc)
@@ -83,44 +119,34 @@ namespace AbilityKit.Demo.Moba.Services
             var kind = (DamageFormulaKind)attack.FormulaKind;
             if (kind == DamageFormulaKind.None) kind = DamageFormulaKind.Standard;
 
-            if (!_formulaLimitLogged)
-            {
-                _formulaLimitLogged = true;
-                Log.Warning("[DamagePipelineService] Damage mitigation and shield stages are currently pass-through; production formulas should wire mitigation/shield services before enabling advanced damage configs.");
-            }
-
             switch (kind)
             {
                 case DamageFormulaKind.Standard:
                 default:
-                {
-                    // Step: base
-                    var baseValue = attack.BaseDamage.Value;
-                    var scaled = baseValue * attack.DamageRate.Value + attack.FlatBonus.Value;
-                    calc.RawDamage.BaseValue = scaled;
-
-                    // Step: mitigate. Current runtime keeps this pass-through until mitigation services are wired.
-                    calc.MitigatedDamage.BaseValue = calc.RawDamage.Value;
-
-                    // Step: shield. Current runtime has no shield absorption service wired.
-                    calc.ShieldAbsorb.BaseValue = 0f;
-                    var hpDamage = System.Math.Max(0f, calc.MitigatedDamage.Value - calc.ShieldAbsorb.Value);
-                    calc.HpDamage.BaseValue = hpDamage;
-
-                    // Final override if any
-                    var finalOverride = attack.FinalDamage.Value;
-                    if (finalOverride > 0f)
-                    {
-                        calc.HpDamage.BaseValue = finalOverride;
-                    }
+                    RunStages(calc, _standardStages);
                     break;
-                }
             }
+        }
 
-            Publish(DamagePipelineEvents.AfterBase, calc);
-            Publish(DamagePipelineEvents.AfterMitigate, calc);
-            Publish(DamagePipelineEvents.AfterShield, calc);
-            Publish(DamagePipelineEvents.CalcFinal, calc);
+        private void RunStages(AttackCalcInfo calc, List<IMobaDamagePipelineStage> stages)
+        {
+            if (calc == null || stages == null) return;
+
+            var diagnostics = _diagnostics;
+            for (var i = 0; i < stages.Count; i++)
+            {
+                var stage = stages[i];
+                if (stage == null) continue;
+
+                var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
+                stage.Execute(calc);
+                diagnostics?.RecordDuration(
+                    MobaBattleDiagnosticMetric.DamageStage,
+                    start,
+                    MobaBattleDiagnosticsDefaults.DamageStageWarnMs,
+                    $"stage={stage.GetType().Name} event={stage.EventId}");
+                Publish(stage.EventId, calc);
+            }
         }
 
         private void Publish(string eventId, object payload)

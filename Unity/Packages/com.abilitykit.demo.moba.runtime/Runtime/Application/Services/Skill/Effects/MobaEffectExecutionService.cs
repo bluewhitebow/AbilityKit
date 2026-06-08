@@ -418,7 +418,8 @@ namespace AbilityKit.Demo.Moba.Services
                         _planEventBus,
                         _planFunctions,
                         _planActions,
-                        _planPayloads);
+                        _planPayloads,
+                        this);
                 }
 
                 return _planExecutor;

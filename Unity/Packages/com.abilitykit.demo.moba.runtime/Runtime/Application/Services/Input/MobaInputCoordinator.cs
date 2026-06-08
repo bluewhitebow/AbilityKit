@@ -6,7 +6,6 @@ using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Config.BattleDemo;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Services.EntityManager;
@@ -62,20 +61,14 @@ namespace AbilityKit.Demo.Moba.Services
             }
             catch (Exception ex)
             {
-                Log.Exception(ex, "[MobaInputCoordinator] Hotfix router TryHandle failed.");
+                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, nameof(MobaInputCoordinator), "Hotfix router TryHandle failed.");
                 return false;
             }
         }
 
-        protected override bool Dispatch(MobaInputCommandContext context, FrameIndex frame, PlayerInputCommand command, out string failureReason)
+        protected override bool Dispatch(MobaInputCommandContext context, FrameIndex frame, PlayerInputCommand command, out MobaInputCommandResult result)
         {
-            bool handled = _handlers.TryHandle(context, frame, command, out failureReason);
-            if (!handled)
-            {
-                Log.Warning($"[MobaInputCoordinator] Dispatch rejected. Frame={frame.Value}, Player={command.Player.Value}, OpCode={command.OpCode}, Payload={command.Payload?.Length ?? 0}, HandlerCount={_handlers.HandlerCount}, Reason={failureReason ?? string.Empty}");
-            }
-
-            return handled;
+            return _handlers.TryHandle(context, frame, command, out result);
         }
 
         private void ResolveSkillExecutor(IWorldResolver services)
@@ -85,12 +78,12 @@ namespace AbilityKit.Demo.Moba.Services
                 _skills = services.Resolve<SkillExecutor>();
                 if (_skills == null)
                 {
-                    Log.Error("[MobaInputCoordinator] SkillExecutor resolved as null.");
+                    MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "SkillExecutor resolved as null.");
                 }
             }
             catch (Exception ex)
             {
-                Log.Exception(ex, "[MobaInputCoordinator] Failed to resolve SkillExecutor.");
+                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, nameof(MobaInputCoordinator), "Failed to resolve SkillExecutor.");
                 LogResolveDiagnostics(services);
             }
         }
@@ -99,15 +92,15 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (services is IWorldServiceContainer c)
             {
-                Log.Error($"[MobaInputCoordinator] Registered: SkillExecutor={c.IsRegistered(typeof(SkillExecutor))}, IFrameTime={c.IsRegistered(typeof(IFrameTime))}, IUnitResolver={c.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={c.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={c.IsRegistered(typeof(IWorldClock))}, IEventBus={c.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
+                MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), $"Registered: SkillExecutor={c.IsRegistered(typeof(SkillExecutor))}, IFrameTime={c.IsRegistered(typeof(IFrameTime))}, IUnitResolver={c.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={c.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={c.IsRegistered(typeof(IWorldClock))}, IEventBus={c.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
 
-                if (services.TryResolve(typeof(IWorldClock), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: IWorldClock");
-                if (services.TryResolve(typeof(IFrameTime), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: IFrameTime");
-                if (services.TryResolve(typeof(AbilityKit.Triggering.Eventing.IEventBus), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: IEventBus");
-                if (services.TryResolve(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: IUnitResolver");
-                if (services.TryResolve(typeof(MobaSkillLoadoutService), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: MobaSkillLoadoutService");
-                if (services.TryResolve(typeof(MobaActorLookupService), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: MobaActorLookupService");
-                if (services.TryResolve(typeof(IMobaSkillPipelineLibrary), out _) == false) Log.Error("[MobaInputCoordinator] Resolve check failed: IMobaSkillPipelineLibrary");
+                if (services.TryResolve(typeof(IWorldClock), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IWorldClock");
+                if (services.TryResolve(typeof(IFrameTime), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IFrameTime");
+                if (services.TryResolve(typeof(AbilityKit.Triggering.Eventing.IEventBus), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IEventBus");
+                if (services.TryResolve(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IUnitResolver");
+                if (services.TryResolve(typeof(MobaSkillLoadoutService), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: MobaSkillLoadoutService");
+                if (services.TryResolve(typeof(MobaActorLookupService), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: MobaActorLookupService");
+                if (services.TryResolve(typeof(IMobaSkillPipelineLibrary), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IMobaSkillPipelineLibrary");
             }
 
             TryResolveForLog<IMobaSkillPipelineLibrary>(services, "IMobaSkillPipelineLibrary");
@@ -124,7 +117,7 @@ namespace AbilityKit.Demo.Moba.Services
             }
             catch (Exception ex)
             {
-                Log.Exception(ex, $"[MobaInputCoordinator] {name} resolve failed.");
+                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, nameof(MobaInputCoordinator), $"{name} resolve failed.");
             }
         }
 

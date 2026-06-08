@@ -1,8 +1,8 @@
 ﻿using System;
 using AbilityKit.Ability.Host;
 using AbilityKit.Core.Common.SnapshotRouting;
-using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Game.Battle;
+using AbilityKit.Game.Flow.Battle.ViewEvents;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Triggering;
 using AbilityKit.Network.Abstractions;
@@ -11,12 +11,6 @@ namespace AbilityKit.Game.Flow
 {
     public sealed partial class BattleSessionFeature
     {
-        private AbilityKit.Ability.World.Management.IWorldManager _confirmedWorlds
-        {
-            get => _handles.Confirmed.Worlds;
-            set => _handles.Confirmed.Worlds = value;
-        }
-
         private AbilityKit.Ability.Host.Framework.HostRuntime _confirmedRuntime
         {
             get => _handles.Confirmed.Runtime;
@@ -45,6 +39,12 @@ namespace AbilityKit.Game.Flow
         {
             get => _handles.Confirmed.Sink;
             set => _handles.Confirmed.Sink = value;
+        }
+
+        private ConfirmedViewEventPipeline _confirmedViewEventPipeline
+        {
+            get => _handles.Confirmed.ViewEventPipeline;
+            set => _handles.Confirmed.ViewEventPipeline = value;
         }
 
         private FrameSnapshotDispatcher _confirmedSnapshots
@@ -77,52 +77,16 @@ namespace AbilityKit.Game.Flow
             set => _handles.Confirmed.ViewCtx = value;
         }
 
-        private FrameSnapshotDispatcher _confirmedViewSnapshots
+        private ConfirmedViewSnapshotRuntime _confirmedViewSnapshotRuntime
         {
-            get => _handles.Confirmed.ViewSnapshots;
-            set => _handles.Confirmed.ViewSnapshots = value;
-        }
-
-        private SnapshotPipeline _confirmedViewPipeline
-        {
-            get => _handles.Confirmed.ViewPipeline;
-            set => _handles.Confirmed.ViewPipeline = value;
-        }
-
-        private SnapshotCmdHandler _confirmedViewCmdHandler
-        {
-            get => _handles.Confirmed.ViewCmdHandler;
-            set => _handles.Confirmed.ViewCmdHandler = value;
+            get => _handles.Confirmed.ViewSnapshotRuntime;
+            set => _handles.Confirmed.ViewSnapshotRuntime = value;
         }
 
         private ConfirmedBattleViewFeature _confirmedViewFeature
         {
             get => _handles.Confirmed.ViewFeature;
             set => _handles.Confirmed.ViewFeature = value;
-        }
-
-        private IDisposable _confirmedViewSubLobby
-        {
-            get => _handles.Confirmed.ViewSubLobby;
-            set => _handles.Confirmed.ViewSubLobby = value;
-        }
-
-        private IDisposable _confirmedViewSubActorTransform
-        {
-            get => _handles.Confirmed.ViewSubActorTransform;
-            set => _handles.Confirmed.ViewSubActorTransform = value;
-        }
-
-        private IDisposable _confirmedViewSubStateHash
-        {
-            get => _handles.Confirmed.ViewSubStateHash;
-            set => _handles.Confirmed.ViewSubStateHash = value;
-        }
-
-        private IDisposable _confirmedViewSubActorSpawn
-        {
-            get => _handles.Confirmed.ViewSubActorSpawn;
-            set => _handles.Confirmed.ViewSubActorSpawn = value;
         }
 
         private void StartConfirmedAuthorityWorld()

@@ -1,5 +1,4 @@
 using System;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.MotionSystem.Core;
 using AbilityKit.Core.Math;
 using AbilityKit.Demo.Moba.Services;
@@ -26,7 +25,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (args.Distance <= 0f)
             {
-                Log.Warning($"[Plan] blink requires positive distance. distance={args.Distance}");
+                LogRejected(ctx, $"requires positive distance. distance={args.Distance}");
                 return;
             }
 
@@ -35,26 +34,26 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (actorId <= 0)
             {
-                Log.Warning($"[Plan] blink cannot resolve actor. applyToCaster={args.ApplyToCaster}");
+                LogRejected(ctx, $"cannot resolve actor. applyToCaster={args.ApplyToCaster}");
                 return;
             }
 
             var registry = input.Actors;
             if (registry == null)
             {
-                Log.Warning($"[Plan] blink requires MobaActorRegistry service");
+                LogRejected(ctx, "requires MobaActorRegistry service");
                 return;
             }
 
             if (!registry.TryGet(actorId, out var entity) || entity == null || !entity.hasMotion)
             {
-                Log.Warning($"[Plan] blink requires actor has Motion component. actorId={actorId}");
+                LogRejected(ctx, $"requires actor has Motion component. actorId={actorId}");
                 return;
             }
 
             if (!entity.hasTransform)
             {
-                Log.Warning($"[Plan] blink requires actor has Transform component. actorId={actorId}");
+                LogRejected(ctx, $"requires actor has Transform component. actorId={actorId}");
                 return;
             }
 

@@ -1,0 +1,39 @@
+{
+  "Name": "skill-self-bleed-buff-trace",
+  "DisableBuiltinSkillTest": true,
+  "Inputs": [
+    {
+      "Type": "move",
+      "FrameOffset": 1,
+      "MoveX": 1.0,
+      "MoveZ": 0.0
+    },
+    {
+      "Type": "skill",
+      "FrameOffset": 1,
+      "SkillSlot": 4,
+      "Target": "current-target"
+    }
+  ],
+  "Expected": {
+    "RequireMoveInput": true,
+    "RequireSkillInput": true,
+    "RequireSkillTarget": true,
+    "RequireTransformSnapshot": true,
+    "RequireStateHashSnapshot": true,
+    "RequireActorSpawnSnapshot": true,
+    "RequireActorSpawnCoverage": true,
+    "RequireEventSnapshot": true,
+    "MinEventSnapshots": 1,
+    "MinActorSpawns": 2,
+    "ExpectedTargetHpAtMost": 0.0,
+    "RequireTargetAttributeGroup": true,
+    "RequireTargetResourceContainer": true,
+    "RequireTargetSkillLoadout": true,
+    "MinTargetActiveSkillCount": 3,
+    "RequireLocalSkillCooldown": true,
+    "ExpectedCooldownSkillSlot": 4,
+    "MinLocalSkillCooldownRemainingMs": 1,
+    "RequireLocalManaConsumed": false
+  }
+}

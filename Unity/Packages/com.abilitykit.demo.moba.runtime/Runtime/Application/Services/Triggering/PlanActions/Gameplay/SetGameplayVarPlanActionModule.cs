@@ -1,5 +1,4 @@
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Gameplay;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
@@ -19,9 +18,8 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 return;
             }
 
-            if (!ctx.Context.TryResolve<MobaGameplayVariableService>(out var variables) || variables == null)
+            if (!TryResolveRequired(ctx, out MobaGameplayVariableService variables))
             {
-                Log.Warning("[Plan] set_gameplay_var skipped: gameplay variable service not found");
                 return;
             }
 

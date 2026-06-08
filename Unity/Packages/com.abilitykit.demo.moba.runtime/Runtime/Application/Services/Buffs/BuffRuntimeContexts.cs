@@ -261,6 +261,8 @@ namespace AbilityKit.Demo.Moba.Services
             _runtime.ContextSource = default;
             _runtime.Continuous = null;
             _runtime.TagRequirements = null;
+            _runtime.ModifierBindings?.Clear();
+            _runtime.ModifierBindings = null;
             ClearSkillRuntimeBinding();
         }
     }

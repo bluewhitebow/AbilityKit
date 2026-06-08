@@ -2,9 +2,11 @@ using System;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.Projectile;
 using AbilityKit.Core.Continuous;
+using AbilityKit.Demo.Moba;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
 {
+    [MobaProjectileEmitter(ProjectileEmitterType.Linear, IsDefault = true)]
     public sealed class RepeatProjectileLaunchSequence : IMobaProjectileLaunchSequence
     {
         public bool TryStart(in MobaProjectileLaunchContext context, out MobaProjectileLaunchResult result)

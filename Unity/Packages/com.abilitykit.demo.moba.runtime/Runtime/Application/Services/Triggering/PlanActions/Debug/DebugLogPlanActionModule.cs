@@ -1,4 +1,3 @@
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
@@ -11,7 +10,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
     /// <summary>
     /// 调试日志Plan Action模块
-    /// 使用强类型参�?Schema API
+    /// 使用强类型参�?Schema API
     /// </summary>
     [PlanActionModule(order: 0)]
     public sealed class DebugLogPlanActionModule : MobaPlanActionModuleBase<DebugLogArgs, DebugLogPlanActionModule>
@@ -27,13 +26,13 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 db.TryGetString(args.MsgId, out msg);
             }
 
-            Log.Info($"[Plan] debug_log: {msg}");
+            LogInvestigation(ctx, $"debug_log: {msg}");
 
             if (args.Dump)
             {
                 var argsType = triggerArgs != null ? triggerArgs.GetType().Name : "<null>";
                 var ctxType = ctx.Context != null ? ctx.Context.GetType().Name : "<null>";
-                Log.Info($"[Plan] debug_log dump. argsType={argsType}, ctxType={ctxType}");
+                LogInvestigation(ctx, $"debug_log dump. argsType={argsType}, ctxType={ctxType}");
             }
         }
     }

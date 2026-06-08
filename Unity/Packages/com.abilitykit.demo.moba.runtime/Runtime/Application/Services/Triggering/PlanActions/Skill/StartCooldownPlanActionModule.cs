@@ -1,7 +1,6 @@
 using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
@@ -20,14 +19,14 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (!ctx.Context.TryResolve<MobaActorLookupService>(out var actors) || actors == null)
             {
-                Log.Warning("[Plan] start_cooldown: MobaActorLookupService not found");
+                LogRejected(ctx, "MobaActorLookupService not found");
                 return;
             }
 
             var input = MobaPlanActionInputResolver.ResolveEffect(triggerArgs, ctx);
             if (!input.HasCasterActor)
             {
-                Log.Warning("[Plan] start_cooldown: caster actor not found");
+                LogRejected(ctx, "caster actor not found");
                 return;
             }
 
@@ -56,7 +55,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 throw new InvalidOperationException($"[Plan] start_cooldown failed: active skill not found. actorId={input.CasterActorId}, skillId={skillId}, slot={skillSlot}, cooldownMs={args.CooldownMs}");
             }
 
-            Log.Info($"[Plan] start_cooldown: actorId={input.CasterActorId}, skillId={skillId}, slot={skillSlot}, cooldownMs={args.CooldownMs}, endMs={cooldownEndTimeMs}");
+            LogApplied(ctx, $"actorId={input.CasterActorId}, skillId={skillId}, slot={skillSlot}, cooldownMs={args.CooldownMs}, endMs={cooldownEndTimeMs}");
         }
     }
 }

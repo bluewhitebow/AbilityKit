@@ -2,7 +2,6 @@ using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.Abstractions;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Protocol.Moba.StateSync;
 
@@ -52,7 +51,7 @@ namespace AbilityKit.Demo.Moba.Session
 
             MobaActorTransformSnapshotEntry[] entries = MobaActorTransformSnapshotCodec.Deserialize(snapshot.Payload);
             callback?.Invoke(frame.Value, entries);
-            Log.Info($"[MobaBattleDriverHost] Transform snapshot: {entries?.Length ?? 0} entities");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaTransformSnapshotDispatcher), $"Transform snapshot: {entries?.Length ?? 0} entities");
         }
     }
 }

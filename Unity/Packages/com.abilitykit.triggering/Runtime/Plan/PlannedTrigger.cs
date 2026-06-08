@@ -225,7 +225,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
                         ExecuteLegacy(in args, in call, in ctx, i);
                     }
 
-                    if (ctx.Control != null && (ctx.Control.StopPropagation || ctx.Control.Cancel)) return;
+                    if (ctx.Control != null && ctx.Control.IsHardStopped) return;
                 }
             }
             finally

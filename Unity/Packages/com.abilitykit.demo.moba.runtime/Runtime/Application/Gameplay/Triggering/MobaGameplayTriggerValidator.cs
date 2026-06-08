@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
+using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Triggering.Runtime.Config.Plans;
@@ -10,8 +10,24 @@ using AbilityKit.Triggering.Runtime.Plan.Json;
 
 namespace AbilityKit.Demo.Moba.Gameplay.Triggering
 {
+    public sealed class MobaGameplayTriggerRuntimeValidator : IMobaRuntimeValidator
+    {
+        public string Name => "gameplay.trigger";
+
+        public void Validate(in MobaRuntimeValidationContext context, MobaRuntimeValidationReport report)
+        {
+            if (report == null) return;
+
+            context.TryResolve<TriggerPlanJsonDatabase>(out var db);
+            context.TryResolve<MobaEventSubscriptionRegistry>(out var eventRegistry);
+            MobaGameplayTriggerValidator.ValidateDatabase(db, eventRegistry, report);
+        }
+    }
+
     public static class MobaGameplayTriggerValidator
     {
+        private const string Source = "gameplay.trigger";
+
         private static readonly HashSet<int> KnownPayloadFieldIds = new HashSet<int>
         {
             StableStringId.Get("payload:" + GameplayTriggerEvents.FrameIndexField),
@@ -33,12 +49,20 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
 
         public static bool Validate(TriggerPlanJsonDatabase db, MobaEventSubscriptionRegistry eventRegistry)
         {
-            var errors = 0;
-            var warnings = 0;
+            var report = new MobaRuntimeValidationReport();
+            ValidateDatabase(db, eventRegistry, report);
+            Report(report);
+            return !report.HasErrors;
+        }
+
+        public static void ValidateDatabase(TriggerPlanJsonDatabase db, MobaEventSubscriptionRegistry eventRegistry, MobaRuntimeValidationReport report)
+        {
+            if (report == null) return;
 
             if (db?.Records == null || db.Records.Count == 0)
             {
-                return true;
+                report.Info(Source, "trigger.database", "gameplay trigger database is empty");
+                return;
             }
 
             for (int i = 0; i < db.Records.Count; i++)
@@ -49,34 +73,39 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
                     continue;
                 }
 
-                ValidateRecord(record, eventRegistry, $"trigger[{record.TriggerId}:{record.EventName}]", ref errors, ref warnings);
+                ValidateRecord(record, eventRegistry, $"trigger[{record.TriggerId}:{record.EventName}]", report);
             }
-
-            return Report(errors, warnings);
         }
 
         public static bool ValidateGameplay(GameplayMO gameplay, TriggerPlanJsonDatabase db, MobaEventSubscriptionRegistry eventRegistry)
         {
-            var errors = 0;
-            var warnings = 0;
+            var report = new MobaRuntimeValidationReport();
+            ValidateGameplay(gameplay, db, eventRegistry, report);
+            Report(report);
+            return !report.HasErrors;
+        }
+
+        public static void ValidateGameplay(GameplayMO gameplay, TriggerPlanJsonDatabase db, MobaEventSubscriptionRegistry eventRegistry, MobaRuntimeValidationReport report)
+        {
+            if (report == null) return;
 
             if (gameplay == null)
             {
-                AddError("gameplay", "gameplay config is null", ref errors);
-                return Report(errors, warnings);
+                AddError(report, "gameplay", "gameplay config is null");
+                return;
             }
 
             if (db == null)
             {
-                AddError($"gameplay[{gameplay.Id}]", "trigger database is null", ref errors);
-                return Report(errors, warnings);
+                AddError(report, $"gameplay[{gameplay.Id}]", "trigger database is null", gameplay.Id.ToString());
+                return;
             }
 
             var triggerIds = gameplay.TriggerIds;
             if (triggerIds == null || triggerIds.Count == 0)
             {
-                AddWarning($"gameplay[{gameplay.Id}]", "gameplay has no trigger ids", ref warnings);
-                return Report(errors, warnings);
+                AddWarning(report, $"gameplay[{gameplay.Id}]", "gameplay has no trigger ids", gameplay.Id.ToString());
+                return;
             }
 
             for (int i = 0; i < triggerIds.Count; i++)
@@ -85,14 +114,12 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
                 var path = $"gameplay[{gameplay.Id}].triggerIds[{i}]={triggerId}";
                 if (!_TryGetRecord(db, triggerId, out var record))
                 {
-                    AddError(path, "trigger id not found in trigger database", ref errors);
+                    AddError(report, path, "trigger id not found in trigger database", triggerId.ToString());
                     continue;
                 }
 
-                ValidateRecord(record, eventRegistry, path, ref errors, ref warnings);
+                ValidateRecord(record, eventRegistry, path, report);
             }
-
-            return Report(errors, warnings);
         }
 
         private static bool _TryGetRecord(TriggerPlanJsonDatabase db, int triggerId, out TriggerPlanJsonDatabase.Record record)
@@ -104,25 +131,23 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
             TriggerPlanJsonDatabase.Record record,
             MobaEventSubscriptionRegistry eventRegistry,
             string path,
-            ref int errors,
-            ref int warnings)
+            MobaRuntimeValidationReport report)
         {
-            ValidateEvent(record, eventRegistry, path, ref errors, ref warnings);
-            ValidatePlan(record.Plan, path, ref errors, ref warnings);
+            var businessId = record.TriggerId == 0 ? null : record.TriggerId.ToString();
+            ValidateEvent(record, eventRegistry, path, report, businessId);
+            ValidatePlan(record.Plan, path, report, businessId);
         }
 
-        private static bool Report(int errors, int warnings)
+        private static void Report(MobaRuntimeValidationReport report)
         {
-            if (errors > 0 || warnings > 0)
+            if (report == null) return;
+            if (report.Entries.Count == 0)
             {
-                Log.Warning($"[MobaGameplayTriggerValidator] validation completed. errors={errors}, warnings={warnings}");
-            }
-            else
-            {
-                Log.Info("[MobaGameplayTriggerValidator] validation completed. gameplay trigger configs are valid");
+                MobaRuntimeLog.Info(MobaRuntimeLogModule.Triggering, MobaRuntimeLogPurpose.Validation, nameof(MobaGameplayTriggerValidator), "validation completed. gameplay trigger configs are valid");
+                return;
             }
 
-            return errors == 0;
+            MobaRuntimeLog.Warning(MobaRuntimeLogModule.Triggering, MobaRuntimeLogPurpose.Validation, nameof(MobaGameplayTriggerValidator), "validation completed. " + report.FormatSummary());
         }
 
         private static bool IsGameplayRecord(TriggerPlanJsonDatabase.Record record)
@@ -135,41 +160,39 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
             TriggerPlanJsonDatabase.Record record,
             MobaEventSubscriptionRegistry eventRegistry,
             string path,
-            ref int errors,
-            ref int warnings)
+            MobaRuntimeValidationReport report,
+            string businessId)
         {
             if (record.EventId == 0)
             {
-                AddError(path, "event id is empty", ref errors);
+                AddError(report, path, "event id is empty", businessId);
             }
 
             if (record.Scope != TriggerPlanScope.Global)
             {
-                AddWarning(path, $"gameplay trigger scope is {record.Scope}; lifecycle gameplay events are normally global", ref warnings);
+                AddWarning(report, path, $"gameplay trigger scope is {record.Scope}; lifecycle gameplay events are normally global", businessId);
             }
 
             if (eventRegistry == null || !eventRegistry.TryGetArgsType(record.EventName, out var argsType) || argsType == null)
             {
-                AddError(path, $"event '{record.EventName}' is not registered in MobaEventSubscriptionRegistry", ref errors);
-                return;
+                AddError(report, path, $"event '{record.EventName}' is not registered in MobaEventSubscriptionRegistry", businessId);
             }
-
         }
 
-        private static void ValidatePlan(TriggerPlan<object> plan, string path, ref int errors, ref int warnings)
+        private static void ValidatePlan(TriggerPlan<object> plan, string path, MobaRuntimeValidationReport report, string businessId)
         {
             if (plan.Actions == null || plan.Actions.Length == 0)
             {
-                AddError(path, "gameplay trigger has no actions", ref errors);
+                AddError(report, path, "gameplay trigger has no actions", businessId);
             }
 
-            ValidatePayloadRef(plan.PredicateArg0, path + ".predicate.arg0", ref errors);
-            ValidatePayloadRef(plan.PredicateArg1, path + ".predicate.arg1", ref errors);
-            ValidatePredicateExpr(plan.PredicateExpr, path + ".predicate", ref errors);
-            ValidateActions(plan.Actions, path, ref errors, ref warnings);
+            ValidatePayloadRef(plan.PredicateArg0, path + ".predicate.arg0", report, businessId);
+            ValidatePayloadRef(plan.PredicateArg1, path + ".predicate.arg1", report, businessId);
+            ValidatePredicateExpr(plan.PredicateExpr, path + ".predicate", report, businessId);
+            ValidateActions(plan.Actions, path, report, businessId);
         }
 
-        private static void ValidatePredicateExpr(PredicateExprPlan expr, string path, ref int errors)
+        private static void ValidatePredicateExpr(PredicateExprPlan expr, string path, MobaRuntimeValidationReport report, string businessId)
         {
             if (expr.Nodes == null)
             {
@@ -184,12 +207,12 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
                     continue;
                 }
 
-                ValidatePayloadRef(node.Left, $"{path}.nodes[{i}].left", ref errors);
-                ValidatePayloadRef(node.Right, $"{path}.nodes[{i}].right", ref errors);
+                ValidatePayloadRef(node.Left, $"{path}.nodes[{i}].left", report, businessId);
+                ValidatePayloadRef(node.Right, $"{path}.nodes[{i}].right", report, businessId);
             }
         }
 
-        private static void ValidateActions(ActionCallPlan[] actions, string path, ref int errors, ref int warnings)
+        private static void ValidateActions(ActionCallPlan[] actions, string path, MobaRuntimeValidationReport report, string businessId)
         {
             if (actions == null)
             {
@@ -203,7 +226,7 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
 
                 if (!ActionSchemaRegistry.TryGet(action.Id, out var schema) || schema == null)
                 {
-                    AddError(actionPath, $"action schema is not registered. actionId={action.Id.Value}", ref errors);
+                    AddError(report, actionPath, $"action schema is not registered. actionId={action.Id.Value}", businessId);
                 }
                 else
                 {
@@ -211,17 +234,17 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
                     var span = new ReadOnlySpan<KeyValuePair<string, ActionArgValue>>(args);
                     if (!schema.TryValidateArgs(span, out var error))
                     {
-                        AddError(actionPath, $"action args invalid. actionId={action.Id.Value}, error={error}", ref errors);
+                        AddError(report, actionPath, $"action args invalid. actionId={action.Id.Value}, error={error}", businessId);
                     }
                 }
 
-                ValidatePayloadRef(action.Arg0, actionPath + ".arg0", ref errors);
-                ValidatePayloadRef(action.Arg1, actionPath + ".arg1", ref errors);
+                ValidatePayloadRef(action.Arg0, actionPath + ".arg0", report, businessId);
+                ValidatePayloadRef(action.Arg1, actionPath + ".arg1", report, businessId);
                 if (action.Args != null)
                 {
                     foreach (var pair in action.Args)
                     {
-                        ValidatePayloadRef(pair.Value.Ref, actionPath + "." + pair.Key, ref errors);
+                        ValidatePayloadRef(pair.Value.Ref, actionPath + "." + pair.Key, report, businessId);
                     }
                 }
             }
@@ -256,7 +279,7 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
             return positional.ToArray();
         }
 
-        private static void ValidatePayloadRef(NumericValueRef valueRef, string path, ref int errors)
+        private static void ValidatePayloadRef(NumericValueRef valueRef, string path, MobaRuntimeValidationReport report, string businessId)
         {
             if (valueRef.Kind != ENumericValueRefKind.PayloadField)
             {
@@ -265,20 +288,18 @@ namespace AbilityKit.Demo.Moba.Gameplay.Triggering
 
             if (valueRef.FieldId == 0 || !KnownPayloadFieldIds.Contains(valueRef.FieldId))
             {
-                AddError(path, $"unknown gameplay/battle payload field id={valueRef.FieldId}", ref errors);
+                AddError(report, path, $"unknown gameplay/battle payload field id={valueRef.FieldId}", businessId);
             }
         }
 
-        private static void AddError(string path, string message, ref int errors)
+        private static void AddError(MobaRuntimeValidationReport report, string path, string message, string businessId = null)
         {
-            errors++;
-            Log.Error($"[MobaGameplayTriggerValidator] {path}: {message}");
+            report?.Error(Source, path, message, businessId);
         }
 
-        private static void AddWarning(string path, string message, ref int warnings)
+        private static void AddWarning(MobaRuntimeValidationReport report, string path, string message, string businessId = null)
         {
-            warnings++;
-            Log.Warning($"[MobaGameplayTriggerValidator] {path}: {message}");
+            report?.Warning(Source, path, message, businessId);
         }
     }
 }

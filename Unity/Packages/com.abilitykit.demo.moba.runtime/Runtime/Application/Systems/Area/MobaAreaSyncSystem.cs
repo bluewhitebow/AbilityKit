@@ -5,6 +5,7 @@ using AbilityKit.Effect;
 using AbilityKit.Ability.Share.Effect;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Demo.Moba.Services.EntityManager;
+using AbilityKit.Demo.Moba.Services.Area;
 using AbilityKit.Demo.Moba.Services.Projectile;
 using AbilityKit.Core.Math;
 using AbilityKit.Ability.World.DI;
@@ -126,6 +127,7 @@ namespace AbilityKit.Demo.Moba.Systems.Area
         private AbilityKit.Triggering.Eventing.IEventBus _eventBus;
         private MobaEffectExecutionService _effects;
         private MobaAreaTriggerRegistry _areaTriggers;
+        private MobaAreaRuntimeService _areaRuntime;
 
         private readonly List<AreaSpawnEvent> _spawns = new List<AreaSpawnEvent>(32);
         private readonly List<AreaEnterEvent> _enters = new List<AreaEnterEvent>(64);
@@ -143,6 +145,7 @@ namespace AbilityKit.Demo.Moba.Systems.Area
             Services.TryResolve(out _eventBus);
             Services.TryResolve(out _effects);
             Services.TryResolve(out _areaTriggers);
+            Services.TryResolve(out _areaRuntime);
         }
 
         protected override void OnExecute()
@@ -164,6 +167,7 @@ namespace AbilityKit.Demo.Moba.Systems.Area
                     maxTargets = entry.MaxTargets;
                 }
 
+                _areaRuntime?.RegisterSpawn(evt.Area, templateId, evt.OwnerId, evt.Center, evt.Radius, collisionLayerMask, maxTargets, evt.Frame);
                 PublishAreaEvent(AreaTriggering.Events.Spawn, evt.Area.Value, templateId, MobaTraceKind.AreaSpawn, evt, ownerActorId: evt.OwnerId, targetActorId: 0, frame: evt.Frame, center: evt.Center, radius: evt.Radius, collider: default, collisionLayerMask, maxTargets);
             }
 
@@ -272,6 +276,7 @@ namespace AbilityKit.Demo.Moba.Systems.Area
                     }
                 }
 
+                _areaRuntime?.Unregister(evt.Area);
                 _areaTriggers?.Unregister(evt.Area);
             }
         }

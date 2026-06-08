@@ -83,6 +83,16 @@ namespace AbilityKit.Triggering.Runtime
         /// </summary>
         public bool Cancel;
 
+        /// <summary>
+        /// 是否已经请求硬停止。硬停止会终止事件通道和 runner 的后续分发。
+        /// </summary>
+        public bool IsHardStopped => StopPropagation || Cancel || InterruptMode == EInterruptMode.All;
+
+        /// <summary>
+        /// 是否存在按优先级过滤的软中断。软中断只跳过命中的后续触发器，不终止整个分发。
+        /// </summary>
+        public bool HasPriorityInterrupt => InterruptMode == EInterruptMode.BelowPriority || InterruptMode == EInterruptMode.BelowOrEqualPriority;
+
         public void Reset()
         {
             InterruptMode = EInterruptMode.None;
@@ -104,7 +114,7 @@ namespace AbilityKit.Triggering.Runtime
         }
 
         /// <summary>
-        /// 打断所有优先级低于指定值的触发器
+        /// 跳过所有优先级低于指定值的后续触发器，不终止整个事件分发。
         /// </summary>
         /// <param name="triggerPriority">当前触发器的优先级（作为阈值）</param>
         /// <param name="conditionPassed">是否条件成功触发</param>
@@ -112,8 +122,19 @@ namespace AbilityKit.Triggering.Runtime
         /// <param name="sourceName">来源名称（用于调试）</param>
         public void StopBelowPriority(int triggerPriority, bool conditionPassed, int triggerId = 0, string sourceName = null)
         {
-            StopPropagation = true;
             InterruptMode = EInterruptMode.BelowPriority;
+            InterruptPriority = triggerPriority;
+            InterruptConditionPassed = conditionPassed;
+            InterruptTriggerId = triggerId;
+            InterruptSourceName = sourceName;
+        }
+
+        /// <summary>
+        /// 跳过所有优先级不高于指定值的后续触发器，不终止整个事件分发。
+        /// </summary>
+        public void StopBelowOrEqualPriority(int triggerPriority, bool conditionPassed, int triggerId = 0, string sourceName = null)
+        {
+            InterruptMode = EInterruptMode.BelowOrEqualPriority;
             InterruptPriority = triggerPriority;
             InterruptConditionPassed = conditionPassed;
             InterruptTriggerId = triggerId;
@@ -125,7 +146,8 @@ namespace AbilityKit.Triggering.Runtime
         /// </summary>
         public bool ShouldBlock(int targetPhase, int targetPriority)
         {
-            if (!StopPropagation) return false;
+            if (IsHardStopped) return true;
+            if (!HasPriorityInterrupt) return false;
 
             switch (InterruptMode)
             {

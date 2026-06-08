@@ -91,12 +91,38 @@ namespace AbilityKit.Demo.Moba.Services
             return _service.ResolveFloat(resolveContext.ProjectileThenLauncherThenActorChain(), MobaSkillParamModifierKeys.Projectile.FanAngleDeg, fanAngleDeg, context);
         }
 
+        public int ResolveDurationMs(int actorId, int durationMs, IModifierContext context = null)
+        {
+            return ResolveDurationMs(MobaModifierOwnerRef.Actor(actorId), durationMs, context);
+        }
+
+        public int ResolveDurationMs(MobaModifierOwnerRef owner, int durationMs, IModifierContext context = null)
+        {
+            return _service.ResolveInt(owner, MobaSkillParamModifierKeys.Projectile.DurationMs, durationMs, context);
+        }
+
+        public int ResolveDurationMs(MobaModifierResolveContext resolveContext, int durationMs, IModifierContext context = null)
+        {
+            return ResolveDurationMsFromLauncher(resolveContext, durationMs, context);
+        }
+
+        public int ResolveDurationMsFromLauncher(MobaModifierResolveContext resolveContext, int durationMs, IModifierContext context = null)
+        {
+            return _service.ResolveInt(resolveContext.LauncherThenActorChain(), MobaSkillParamModifierKeys.Projectile.DurationMs, durationMs, context);
+        }
+
+        public int ResolveDurationMsFromProjectile(MobaModifierResolveContext resolveContext, int durationMs, IModifierContext context = null)
+        {
+            return _service.ResolveInt(resolveContext.ProjectileThenLauncherThenActorChain(), MobaSkillParamModifierKeys.Projectile.DurationMs, durationMs, context);
+        }
+
         public MobaResolvedShootProjectileParams ResolveShootProjectile(
             int actorId,
             int launcherId,
             int projectileId,
             int countPerShot,
             float fanAngleDeg,
+            int durationMs,
             IModifierContext context = null)
         {
             return ResolveShootProjectile(
@@ -105,6 +131,7 @@ namespace AbilityKit.Demo.Moba.Services
                 projectileId,
                 countPerShot,
                 fanAngleDeg,
+                durationMs,
                 context);
         }
 
@@ -114,13 +141,15 @@ namespace AbilityKit.Demo.Moba.Services
             int projectileId,
             int countPerShot,
             float fanAngleDeg,
+            int durationMs,
             IModifierContext context = null)
         {
             return new MobaResolvedShootProjectileParams(
                 ResolveLauncherId(resolveContext, launcherId, context),
                 ResolveProjectileId(resolveContext, projectileId, context),
                 ResolveCountPerShotFromLauncher(resolveContext, countPerShot, context),
-                ResolveFanAngleDegFromLauncher(resolveContext, fanAngleDeg, context));
+                ResolveFanAngleDegFromLauncher(resolveContext, fanAngleDeg, context),
+                ResolveDurationMsFromLauncher(resolveContext, durationMs, context));
         }
     }
 }

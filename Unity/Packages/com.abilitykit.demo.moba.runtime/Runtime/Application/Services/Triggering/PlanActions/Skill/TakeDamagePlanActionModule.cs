@@ -2,7 +2,6 @@ using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
@@ -60,7 +59,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var result = combat.DealDamage(attack);
             if (result == null)
             {
-                Log.Warning($"[Plan] take_damage pipeline returned null. attacker={attackerActorId} target={targetActorId} base={baseValue:0.###} rate={rate:0.###} reasonParam={reasonParam}");
+                LogRejected(ctx, $"pipeline returned null. attacker={attackerActorId} target={targetActorId} base={baseValue:0.###} rate={rate:0.###} reasonParam={reasonParam}");
             }
         }
 

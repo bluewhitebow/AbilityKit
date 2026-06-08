@@ -2,7 +2,6 @@ using AbilityKit.Ability.Host;
 using AbilityKit.Demo.Moba.Config.BattleDemo;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Demo.Moba.Services.Projectile;
@@ -48,7 +47,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (launcherId <= 0 || projectileId <= 0)
             {
-                Log.Warning($"[Plan] shoot_projectile invalid args. launcherId={launcherId} projectileId={projectileId}");
+                LogRejected(ctx, $"invalid args. launcherId={launcherId} projectileId={projectileId}");
                 return;
             }
 
@@ -67,7 +66,10 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var fanAngleDeg = paramResolver != null
                 ? paramResolver.Projectile.ResolveFanAngleDeg(casterActorId, launcher.FanAngleDeg)
                 : launcher.FanAngleDeg;
-            var launchParams = new MobaResolvedShootProjectileParams(launcherId, projectileId, countPerShot, fanAngleDeg);
+            var durationMs = paramResolver != null
+                ? paramResolver.Projectile.ResolveDurationMs(casterActorId, launcher.DurationMs)
+                : launcher.DurationMs;
+            var launchParams = new MobaResolvedShootProjectileParams(launcherId, projectileId, countPerShot, fanAngleDeg, durationMs);
 
             var casterPos = Vec3.Zero;
             if (ctx.Context.TryResolve<MobaActorRegistry>(out var actorRegistry)
@@ -84,7 +86,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 var sqr = aimPos.SqrMagnitude;
                 if (sqr > 1000f * 1000f)
                 {
-                    Log.Warning($"[Plan] shoot_projectile aimPos looks like world-space (will be treated as offset). casterActorId={casterActorId} aimPos={aimPos}");
+                    LogInvestigation(ctx, $"aimPos looks like world-space (will be treated as offset). casterActorId={casterActorId} aimPos={aimPos}");
                 }
             }
 
@@ -92,9 +94,9 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             if (!aimDir.Equals(Vec3.Zero)) aimDir = aimDir.Normalized;
 
             var sourceContext = input.CreateSourceContext(casterActorId, 0, projectile.Id);
-            if (!projectileSvc.Launch(casterActorId, launcher, projectile, launchParams.CountPerShot, launchParams.FanAngleDeg, in aimPos, in aimDir, in sourceContext))
+            if (!projectileSvc.Launch(casterActorId, launcher, projectile, launchParams.CountPerShot, launchParams.FanAngleDeg, launchParams.DurationMs, in aimPos, in aimDir, in sourceContext))
             {
-                Log.Warning($"[Plan] shoot_projectile launch failed. launcherId={launchParams.LauncherId} projectileId={launchParams.ProjectileId}");
+                LogRejected(ctx, $"launch failed. launcherId={launchParams.LauncherId} projectileId={launchParams.ProjectileId}");
             }
         }
     }

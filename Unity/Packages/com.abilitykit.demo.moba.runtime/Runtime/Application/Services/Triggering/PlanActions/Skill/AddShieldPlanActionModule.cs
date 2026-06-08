@@ -1,0 +1,106 @@
+using System;
+using System.Collections.Generic;
+using AbilityKit.Ability.FrameSync;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Demo.Moba.Components;
+using AbilityKit.Demo.Moba.Config.Core;
+using AbilityKit.Triggering.Registry;
+using AbilityKit.Triggering.Runtime;
+using AbilityKit.Triggering.Runtime.Plan;
+
+namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
+{
+    [PlanActionModule(order: 19)]
+    public sealed class AddShieldPlanActionModule : MobaPlanActionModuleBase<AddShieldArgs, AddShieldPlanActionModule>
+    {
+        protected override IActionSchema<AddShieldArgs, IWorldResolver> Schema => AddShieldSchema.Instance;
+
+        protected override void Execute(object triggerArgs, AddShieldArgs args, ExecCtx<IWorldResolver> ctx)
+        {
+            if (!TryResolveRequired(ctx, out MobaShieldService shields))
+            {
+                return;
+            }
+
+            if (args.Value <= 0f)
+            {
+                LogRejected("requires positive shield value");
+                return;
+            }
+
+            var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
+            var effectInput = new MobaEffectActionInput(in coreInput);
+            var sourceActorId = effectInput.CasterActorId;
+            var targets = new List<int>(8);
+            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, ActionName, targets))
+            {
+                return;
+            }
+
+            for (var i = 0; i < targets.Count; i++)
+            {
+                AddShield(shields, args, effectInput, ctx, sourceActorId, targets[i], LogApplied);
+            }
+        }
+
+        private static void AddShield(MobaShieldService shields, AddShieldArgs args, MobaEffectActionInput input, ExecCtx<IWorldResolver> ctx, int sourceActorId, int targetActorId, Action<string> logApplied)
+        {
+            if (targetActorId <= 0) return;
+
+            ResolveFrames(args, ctx, out var startFrame, out var expireFrame);
+            var origin = input.BuildOrigin(sourceActorId, targetActorId, MobaTraceKind.EffectExecution, args.ShieldId);
+            var layer = new ShieldLayer
+            {
+                ShieldId = args.ShieldId,
+                SourceActorId = sourceActorId,
+                OwnerActorId = sourceActorId,
+                TargetActorId = targetActorId,
+                SourceContextId = origin.ImmediateContextId,
+                RootContextId = origin.EffectiveRootContextId,
+                OwnerContextId = origin.OwnerContextId,
+                CurrentValue = args.Value,
+                MaxValue = args.Value,
+                InitialValue = args.Value,
+                AbsorbRatio = args.AbsorbRatio,
+                Priority = args.Priority,
+                DamageTypeMask = args.DamageTypeMask,
+                StartFrame = startFrame,
+                ExpireFrame = expireFrame,
+                RemoveWhenDepleted = true,
+                StackingPolicy = args.StackingPolicy,
+                ConsumePolicy = args.ConsumePolicy,
+                SharePolicy = ShieldSharePolicy.None,
+                TransferPolicy = ShieldTransferPolicy.None,
+            };
+
+            var instanceId = shields.AddShield(targetActorId, layer);
+            logApplied?.Invoke($"source={sourceActorId} target={targetActorId} shieldId={args.ShieldId} instance={instanceId} value={args.Value:0.###} expireFrame={expireFrame}");
+        }
+
+        private static void ResolveFrames(AddShieldArgs args, ExecCtx<IWorldResolver> ctx, out int startFrame, out int expireFrame)
+        {
+            startFrame = 0;
+            expireFrame = 0;
+
+            if (ctx.Context != null && ctx.Context.TryResolve<IFrameTime>(out var frameTime) && frameTime != null)
+            {
+                startFrame = frameTime.Frame.Value;
+                if (args.DurationFrames > 0)
+                {
+                    expireFrame = startFrame + args.DurationFrames;
+                    return;
+                }
+
+                if (args.DurationMs > 0)
+                {
+                    var seconds = args.DurationMs / 1000f;
+                    expireFrame = Math.Max(startFrame + 1, frameTime.TimeToFrame(frameTime.Time + seconds).Value);
+                }
+            }
+            else if (args.DurationFrames > 0)
+            {
+                expireFrame = args.DurationFrames;
+            }
+        }
+    }
+}

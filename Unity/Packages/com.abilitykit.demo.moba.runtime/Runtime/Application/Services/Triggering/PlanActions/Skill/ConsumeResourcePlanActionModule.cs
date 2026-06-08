@@ -2,7 +2,6 @@ using System;
 using AbilityKit.Ability.Share.ECS;
 using AbilityKit.Ability.Share.ECS.Entitas;
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Triggering.Registry;
@@ -27,14 +26,14 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (!ctx.Context.TryResolve<MobaActorLookupService>(out var actors) || actors == null)
             {
-                Log.Warning("[Plan] consume_resource: MobaActorLookupService not found");
+                LogRejected(ctx, "MobaActorLookupService not found");
                 return;
             }
 
             var input = MobaPlanActionInputResolver.ResolveEffect(triggerArgs, ctx);
             if (!input.HasCasterActor)
             {
-                Log.Warning("[Plan] consume_resource: caster actor not found");
+                LogRejected(ctx, "caster actor not found");
                 return;
             }
 
@@ -42,13 +41,13 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (!actors.TryGetActorEntity(casterActorId, out var entity) || entity == null)
             {
-                Log.Warning($"[Plan] consume_resource: caster unit not found, actorId={casterActorId}");
+                LogRejected(ctx, $"caster unit not found, actorId={casterActorId}");
                 return;
             }
 
             if (!entity.hasSkillLoadout)
             {
-                Log.Warning($"[Plan] consume_resource: caster has no skill loadout, actorId={casterActorId}");
+                LogRejected(ctx, $"caster has no skill loadout, actorId={casterActorId}");
                 return;
             }
 
@@ -74,7 +73,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             }
 
             state.Current -= args.Amount;
-            Log.Info($"[Plan] consume_resource: actorId={casterActorId}, type={args.ResourceType}, amount={args.Amount}, remaining={state.Current}");
+            LogApplied(ctx, $"actorId={casterActorId}, type={args.ResourceType}, amount={args.Amount}, remaining={state.Current}");
         }
     }
 }

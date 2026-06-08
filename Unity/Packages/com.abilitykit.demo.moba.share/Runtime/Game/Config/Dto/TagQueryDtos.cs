@@ -41,6 +41,12 @@ namespace AbilityKit.Demo.Moba.Share.Config
     {
         AllActors = 1,
         ExplicitTarget = 2,
+        ContextTarget = 3,
+        Caster = 4,
+        SameTeam = 5,
+        EnemyTeam = 6,
+        MainType = 7,
+        UnitSubType = 8,
     }
 
     public enum SearchTargetRuleKind
@@ -93,6 +99,7 @@ namespace AbilityKit.Demo.Moba.Share.Config
     [Serializable]
     public sealed class SearchTargetProviderDTO : SearchTargetComponentDTO
     {
+        public int Param;
     }
 
     [Serializable]

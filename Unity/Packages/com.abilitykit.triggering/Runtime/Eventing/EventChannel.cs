@@ -77,8 +77,8 @@ namespace AbilityKit.Triggering.Eventing
             SortHandlersIfNeeded();
             for (int i = 0; i < _handlerCount; i++)
             {
-                // ShortCircuit: 如果已停止传播，跳过后续 Handler
-                if (control != null && control.StopPropagation) break;
+                // ShortCircuit: 硬停止才终止事件通道；优先级软过滤交给 runner 内部处理。
+                if (control != null && control.IsHardStopped) break;
                 _handlers[i].Handler(args, control);
             }
         }
@@ -99,8 +99,8 @@ namespace AbilityKit.Triggering.Eventing
 
                 for (int i = 0; i < _handlerCount; i++)
                 {
-                    // ShortCircuit: 如果已停止传播，跳过后续 Handler
-                    if (item.Control != null && item.Control.StopPropagation) break;
+                    // ShortCircuit: 硬停止才终止事件通道；优先级软过滤交给 runner 内部处理。
+                    if (item.Control != null && item.Control.IsHardStopped) break;
                     _handlers[i].Handler(item.Args, item.Control);
                 }
             }

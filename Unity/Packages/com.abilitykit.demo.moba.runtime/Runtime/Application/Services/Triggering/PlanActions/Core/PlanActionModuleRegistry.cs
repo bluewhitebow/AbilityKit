@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using AbilityKit.Ability.World.DI;
@@ -12,23 +12,26 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     public sealed class PlanActionModuleRegistry : IService
     {
         public IPlanActionModule[] Modules { get; }
+        public MobaPlanActionDescriptor[] Descriptors { get; }
 
         // Parameterless constructor for DI container (auto-discovery internally)
         public PlanActionModuleRegistry()
         {
-            Modules = CreateModules();
+            Descriptors = CreateDescriptors();
+            Modules = ExtractModules(Descriptors);
         }
 
         // Explicit constructor for manual creation with specific modules
         public PlanActionModuleRegistry(IPlanActionModule[] modules)
         {
             Modules = modules ?? Array.Empty<IPlanActionModule>();
+            Descriptors = CreateDescriptors(Modules);
         }
 
-        private static IPlanActionModule[] CreateModules()
+        private static MobaPlanActionDescriptor[] CreateDescriptors()
         {
             var asm = typeof(PlanActionModuleRegistry).Assembly;
-            var list = new List<(int order, string name, IPlanActionModule module)>();
+            var list = new List<(int order, string name, string actionName, IPlanActionModule module)>();
 
             foreach (var t in asm.GetTypes())
             {
@@ -43,7 +46,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
                 if (Activator.CreateInstance(t) is IPlanActionModule m)
                 {
-                    list.Add((attr.Order, t.FullName ?? t.Name, m));
+                    list.Add((attr.Order, t.FullName ?? t.Name, GetActionName(m), m));
                 }
             }
 
@@ -54,18 +57,50 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 return string.CompareOrdinal(a.name, b.name);
             });
 
-            var modules = new IPlanActionModule[list.Count];
+            var descriptors = new MobaPlanActionDescriptor[list.Count];
             for (int i = 0; i < list.Count; i++)
             {
-                modules[i] = list[i].module;
+                descriptors[i] = new MobaPlanActionDescriptor(list[i].order, list[i].name, list[i].actionName, list[i].module);
+            }
+
+            return descriptors;
+        }
+
+        private static MobaPlanActionDescriptor[] CreateDescriptors(IPlanActionModule[] modules)
+        {
+            if (modules == null || modules.Length == 0) return Array.Empty<MobaPlanActionDescriptor>();
+
+            var descriptors = new MobaPlanActionDescriptor[modules.Length];
+            for (int i = 0; i < modules.Length; i++)
+            {
+                var module = modules[i];
+                descriptors[i] = new MobaPlanActionDescriptor(0, module?.GetType().FullName ?? string.Empty, GetActionName(module), module);
+            }
+
+            return descriptors;
+        }
+
+        private static IPlanActionModule[] ExtractModules(MobaPlanActionDescriptor[] descriptors)
+        {
+            if (descriptors == null || descriptors.Length == 0) return Array.Empty<IPlanActionModule>();
+
+            var modules = new IPlanActionModule[descriptors.Length];
+            for (int i = 0; i < descriptors.Length; i++)
+            {
+                modules[i] = descriptors[i].Module;
             }
 
             return modules;
         }
 
+        private static string GetActionName(IPlanActionModule module)
+        {
+            return module is IMobaPlanActionMetadata metadata ? metadata.ActionName : null;
+        }
+
         public static PlanActionModuleRegistry CreateDefault()
         {
-            return new PlanActionModuleRegistry(CreateModules());
+            return new PlanActionModuleRegistry();
         }
 
         public void Dispose()

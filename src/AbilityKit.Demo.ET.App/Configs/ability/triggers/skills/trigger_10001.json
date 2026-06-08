@@ -19,7 +19,7 @@
                         "type":  "give_damage",
                         "reason_param":  0,
                         "damage_value":  50.0,
-                        "target_mode":  "Explicit",
+                        "target_source":  2,
                         "reason_kind":  1
                     }
                 ],

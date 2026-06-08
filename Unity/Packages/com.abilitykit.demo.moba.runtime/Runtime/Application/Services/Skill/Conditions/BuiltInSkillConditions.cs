@@ -142,16 +142,42 @@ namespace AbilityKit.Demo.Moba.Services
     public sealed class NotSilencedSkillCondition : SkillConditionBase
     {
         private readonly MobaActorLookupService _actors;
+        private readonly MobaCombatRulesService _rules;
 
-        public NotSilencedSkillCondition(MobaActorLookupService actors)
+        public NotSilencedSkillCondition(MobaActorLookupService actors, MobaCombatRulesService rules = null)
         {
             _actors = actors;
+            _rules = rules;
         }
 
         public override SkillConditionResult Check(SkillPipelineContext context)
         {
-            // TODO: 实现沉默/禁用状态检查
-            // 需要通过 Tag 系统检查是否有 "silenced" 或 "disabled" 标签
+            var casterActorId = context.CasterActorId;
+
+            if (_rules != null)
+            {
+                var result = _rules.CanCastSkill(casterActorId);
+                if (result.Passed) return Pass;
+
+                switch (result.Failure)
+                {
+                    case MobaCombatRuleFailure.Dead:
+                        return Fail("施法者已死亡", "caster_dead");
+                    case MobaCombatRuleFailure.Stunned:
+                        return Fail("眩晕中", "stunned");
+                    case MobaCombatRuleFailure.Silenced:
+                    case MobaCombatRuleFailure.Disabled:
+                        return Fail("被禁用", "silenced");
+                    default:
+                        return Fail("无法释放技能", result.Message ?? "cannot_cast");
+                }
+            }
+
+            if (_actors != null && !_actors.TryGetActorEntity(casterActorId, out _))
+            {
+                return Fail("施法者不存在", "caster_not_found");
+            }
+
             return Pass;
         }
     }

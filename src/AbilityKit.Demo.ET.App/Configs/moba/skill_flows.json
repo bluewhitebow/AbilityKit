@@ -91,5 +91,36 @@
         }
       }
     ]
+  },
+  {
+    "Id": 10010401,
+    "Name": "廉颇-自损Buff测试",
+    "Phases": [
+      {
+        "Type": 4,
+        "RulePlan": {
+          "TriggerIds": [900101011],
+          "AbortOnFailure": true,
+          "FailReason": "skill_release_failed"
+        }
+      },
+      {
+        "Type": 4,
+        "RulePlan": {
+          "TriggerIds": [900101012],
+          "AbortOnFailure": true,
+          "FailReason": "skill_commit_failed"
+        }
+      },
+      {
+        "Type": 2,
+        "Timeline": {
+          "DurationMs": 100,
+          "Events": [
+            { "AtMs": 0, "EffectId": 10004, "ExecuteMode": 0, "EventTag": "self_bleed_buff_start" }
+          ]
+        }
+      }
+    ]
   }
 ]

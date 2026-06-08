@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.Marker;
 
 /// <summary>
@@ -59,19 +58,24 @@ namespace AbilityKit.Demo.Moba.Services
         /// <summary>
         /// 尝试处理输入命令。
         /// </summary>
-        public bool TryHandle(MobaInputCommandContext context, FrameIndex frame, PlayerInputCommand command, out string failureReason)
+        public bool TryHandle(MobaInputCommandContext context, FrameIndex frame, PlayerInputCommand command, out MobaInputCommandResult result)
         {
             if (!_handlers.TryGetValue(command.OpCode, out IMobaInputCommandHandler handler))
             {
-                failureReason = $"MissingHandler(OpCode={command.OpCode},Registered={_handlers.Count})";
-                Log.Warning($"[MobaInputCommandHandlerRegistry] Missing input handler: OpCode={command.OpCode}, Registered={_handlers.Count}");
+                result = MobaInputCommandResult.Rejected(
+                    command,
+                    MobaInputCommandFailureCode.MissingHandler,
+                    $"MissingHandler(OpCode={command.OpCode},Registered={_handlers.Count})");
                 return false;
             }
 
-            bool handled = handler.Handle(context, frame, command, out failureReason);
-            if (!handled && string.IsNullOrEmpty(failureReason))
+            bool handled = handler.Handle(context, frame, command, out result);
+            if (!handled && string.IsNullOrEmpty(result.Message))
             {
-                failureReason = $"HandlerRejected({handler.GetType().Name})";
+                result = MobaInputCommandResult.Rejected(
+                    command,
+                    MobaInputCommandFailureCode.HandlerRejected,
+                    $"HandlerRejected({handler.GetType().Name})");
             }
 
             return handled;

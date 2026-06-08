@@ -1,5 +1,4 @@
 using System;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.MotionSystem.Core;
 using AbilityKit.Core.Common.MotionSystem.Generic;
 using AbilityKit.Core.Math;
@@ -27,7 +26,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (args.Speed <= 0f || args.DurationMs <= 0f)
             {
-                Log.Warning($"[Plan] pull requires positive speed and duration. speed={args.Speed} duration={args.DurationMs}");
+                LogRejected(ctx, $"requires positive speed and duration. speed={args.Speed} duration={args.DurationMs}");
                 return;
             }
 
@@ -35,34 +34,34 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var targetId = input.TargetActorId;
             if (targetId <= 0)
             {
-                Log.Warning($"[Plan] pull requires valid target actor");
+                LogRejected(ctx, "requires valid target actor");
                 return;
             }
 
             var registry = input.Actors;
             if (registry == null)
             {
-                Log.Warning($"[Plan] pull requires MobaActorRegistry service");
+                LogRejected(ctx, "requires MobaActorRegistry service");
                 return;
             }
 
             if (!registry.TryGet(targetId, out var targetEntity) || targetEntity == null || !targetEntity.hasMotion)
             {
-                Log.Warning($"[Plan] pull requires target has Motion component. targetId={targetId}");
+                LogRejected(ctx, $"requires target has Motion component. targetId={targetId}");
                 return;
             }
 
             var m = targetEntity.motion;
             if (!m.Initialized || m.Pipeline == null)
             {
-                Log.Warning($"[Plan] pull requires target Motion initialized. targetId={targetId}");
+                LogRejected(ctx, $"requires target Motion initialized. targetId={targetId}");
                 return;
             }
 
             var pullDir = input.ResolvePullDirection(args.DirectionMode, targetId);
             if (pullDir.SqrMagnitude <= 0f)
             {
-                Log.Warning($"[Plan] pull cannot resolve pull direction. mode={args.DirectionMode}");
+                LogRejected(ctx, $"cannot resolve pull direction. mode={args.DirectionMode}");
                 return;
             }
 

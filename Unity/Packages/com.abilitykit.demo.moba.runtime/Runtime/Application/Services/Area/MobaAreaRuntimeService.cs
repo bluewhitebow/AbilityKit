@@ -1,0 +1,253 @@
+using System.Collections.Generic;
+using AbilityKit.Ability.FrameSync;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.Core.Common.Projectile;
+using AbilityKit.Core.Math;
+
+namespace AbilityKit.Demo.Moba.Services.Area
+{
+    [WorldService(typeof(MobaAreaRuntimeService))]
+    public sealed class MobaAreaRuntimeService : IService
+    {
+        [WorldInject(required: false)] private IProjectileService _projectiles;
+        [WorldInject(required: false)] private IFrameTime _frameTime;
+
+        private readonly Dictionary<int, MobaAreaRuntimeInfo> _areas = new Dictionary<int, MobaAreaRuntimeInfo>();
+        private readonly Dictionary<int, List<int>> _areasByOwner = new Dictionary<int, List<int>>();
+        private readonly Dictionary<int, List<int>> _areasByTemplate = new Dictionary<int, List<int>>();
+        private readonly List<int> _queryBuffer = new List<int>(32);
+
+        public int ActiveCount => _areas.Count;
+
+        public void RegisterSpawn(
+            AreaId areaId,
+            int templateId,
+            int ownerActorId,
+            in Vec3 center,
+            float radius,
+            int collisionLayerMask,
+            int maxTargets,
+            int frame)
+        {
+            if (areaId.Value <= 0) return;
+
+            var info = new MobaAreaRuntimeInfo(
+                areaId.Value,
+                templateId,
+                ownerActorId,
+                center,
+                radius,
+                collisionLayerMask,
+                maxTargets,
+                frame);
+
+            if (_areas.TryGetValue(areaId.Value, out var oldInfo))
+            {
+                Unindex(oldInfo);
+            }
+
+            _areas[areaId.Value] = info;
+            Index(_areasByOwner, ownerActorId, areaId.Value);
+            Index(_areasByTemplate, templateId, areaId.Value);
+        }
+
+        public bool Unregister(AreaId areaId)
+        {
+            if (areaId.Value <= 0) return false;
+            if (!_areas.TryGetValue(areaId.Value, out var info)) return false;
+
+            _areas.Remove(areaId.Value);
+            Unindex(info);
+            return true;
+        }
+
+        public bool TryGetArea(int areaId, out MobaAreaRuntimeInfo info)
+        {
+            if (areaId <= 0)
+            {
+                info = default;
+                return false;
+            }
+
+            return _areas.TryGetValue(areaId, out info);
+        }
+
+        public bool TryGetAreas(List<MobaAreaRuntimeInfo> results, int ownerActorId = 0, int templateId = 0)
+        {
+            if (results == null) return false;
+            results.Clear();
+
+            _queryBuffer.Clear();
+            CollectAreaIds(_queryBuffer, ownerActorId, templateId);
+            for (var i = 0; i < _queryBuffer.Count; i++)
+            {
+                if (_areas.TryGetValue(_queryBuffer[i], out var info))
+                {
+                    results.Add(info);
+                }
+            }
+
+            _queryBuffer.Clear();
+            return results.Count > 0;
+        }
+
+        public bool DespawnArea(int areaId)
+        {
+            if (areaId <= 0) return false;
+            if (!_areas.ContainsKey(areaId)) return false;
+            if (_projectiles == null) return false;
+
+            var ok = _projectiles.DespawnArea(new AreaId(areaId), CurrentFrame);
+            if (ok)
+            {
+                Unregister(new AreaId(areaId));
+            }
+
+            return ok;
+        }
+
+        public int DespawnAreas(int ownerActorId, int templateId, bool removeAll)
+        {
+            _queryBuffer.Clear();
+            CollectAreaIds(_queryBuffer, ownerActorId, templateId);
+
+            var removed = 0;
+            for (var i = 0; i < _queryBuffer.Count; i++)
+            {
+                if (DespawnArea(_queryBuffer[i])) removed++;
+                if (removed > 0 && !removeAll) break;
+            }
+
+            _queryBuffer.Clear();
+            return removed;
+        }
+
+        public void Dispose()
+        {
+            _areas.Clear();
+            _areasByOwner.Clear();
+            _areasByTemplate.Clear();
+            _queryBuffer.Clear();
+        }
+
+        private int CurrentFrame => _frameTime != null ? _frameTime.Frame.Value : 0;
+
+        private void CollectAreaIds(List<int> results, int ownerActorId, int templateId)
+        {
+            if (results == null) return;
+
+            if (ownerActorId > 0 && templateId > 0)
+            {
+                if (!_areasByOwner.TryGetValue(ownerActorId, out var ownerList) || ownerList == null) return;
+                for (var i = 0; i < ownerList.Count; i++)
+                {
+                    var areaId = ownerList[i];
+                    if (_areas.TryGetValue(areaId, out var info) && info.TemplateId == templateId)
+                    {
+                        results.Add(areaId);
+                    }
+                }
+
+                return;
+            }
+
+            if (ownerActorId > 0)
+            {
+                CopyIndexed(_areasByOwner, ownerActorId, results);
+                return;
+            }
+
+            if (templateId > 0)
+            {
+                CopyIndexed(_areasByTemplate, templateId, results);
+                return;
+            }
+
+            foreach (var kv in _areas)
+            {
+                results.Add(kv.Key);
+            }
+        }
+
+        private void Unindex(MobaAreaRuntimeInfo info)
+        {
+            RemoveIndexed(_areasByOwner, info.OwnerActorId, info.AreaId);
+            RemoveIndexed(_areasByTemplate, info.TemplateId, info.AreaId);
+        }
+
+        private static void Index(Dictionary<int, List<int>> index, int key, int areaId)
+        {
+            if (key <= 0 || areaId <= 0) return;
+            if (!index.TryGetValue(key, out var list) || list == null)
+            {
+                list = new List<int>(8);
+                index[key] = list;
+            }
+
+            if (!list.Contains(areaId)) list.Add(areaId);
+        }
+
+        private static void CopyIndexed(Dictionary<int, List<int>> index, int key, List<int> results)
+        {
+            if (key <= 0) return;
+            if (!index.TryGetValue(key, out var list) || list == null) return;
+            for (var i = 0; i < list.Count; i++)
+            {
+                results.Add(list[i]);
+            }
+        }
+
+        private static void RemoveIndexed(Dictionary<int, List<int>> index, int key, int areaId)
+        {
+            if (key <= 0 || areaId <= 0) return;
+            if (!index.TryGetValue(key, out var list) || list == null) return;
+
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i] == areaId)
+                {
+                    list.RemoveAt(i);
+                    break;
+                }
+            }
+
+            if (list.Count == 0)
+            {
+                index.Remove(key);
+            }
+        }
+    }
+
+    public readonly struct MobaAreaRuntimeInfo
+    {
+        public readonly int AreaId;
+        public readonly int TemplateId;
+        public readonly int OwnerActorId;
+        public readonly Vec3 Center;
+        public readonly float Radius;
+        public readonly int CollisionLayerMask;
+        public readonly int MaxTargets;
+        public readonly int SpawnFrame;
+
+        public MobaAreaRuntimeInfo(
+            int areaId,
+            int templateId,
+            int ownerActorId,
+            in Vec3 center,
+            float radius,
+            int collisionLayerMask,
+            int maxTargets,
+            int spawnFrame)
+        {
+            AreaId = areaId;
+            TemplateId = templateId;
+            OwnerActorId = ownerActorId;
+            Center = center;
+            Radius = radius;
+            CollisionLayerMask = collisionLayerMask;
+            MaxTargets = maxTargets;
+            SpawnFrame = spawnFrame;
+        }
+    }
+}

@@ -33,7 +33,14 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 return executionContext;
             }
 
-            Log.Warning("[MobaPlanActionExecutionContextResolver] Creating fallback execution context. Action should run inside MobaEffectExecutionService session or provide IMobaCombatExecutionContextProvider.");
+            var options = ResolveOptions(ctx);
+            var payloadType = triggerArgs != null ? triggerArgs.GetType().FullName : "null";
+            if (options.StrictFallback)
+            {
+                throw new System.InvalidOperationException($"[MobaPlanActionExecutionContextResolver] Missing combat execution context. strictFallback=True, payloadType={payloadType}");
+            }
+
+            Log.Warning($"[MobaPlanActionExecutionContextResolver] Creating fallback execution context. strictFallback=False, payloadType={payloadType}. Action should run inside MobaEffectExecutionService session or provide IMobaCombatContextSource/IMobaCombatExecutionContextProvider.");
             return CreateFallback(triggerArgs);
         }
 
@@ -44,6 +51,13 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                    && effects != null
                    && effects.TryGetCurrentTraceScope(out traceScope)
                    && traceScope.EffectContextId != 0;
+        }
+
+        private static MobaPlanActionExecutionContextResolverOptions ResolveOptions(ExecCtx<IWorldResolver> ctx)
+        {
+            return ctx.Context.TryResolve<MobaPlanActionExecutionContextResolverOptions>(out var options) && options != null
+                ? options
+                : MobaPlanActionExecutionContextResolverOptions.Default;
         }
 
         private static MobaCombatExecutionContext CreateFallback(object triggerArgs)

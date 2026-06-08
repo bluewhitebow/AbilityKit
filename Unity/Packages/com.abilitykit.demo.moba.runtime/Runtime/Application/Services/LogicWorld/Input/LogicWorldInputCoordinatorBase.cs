@@ -4,7 +4,6 @@ using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
-using AbilityKit.Core.Common.Log;
 
 namespace AbilityKit.Demo.Moba.Services.LogicWorld
 {
@@ -15,6 +14,7 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
     public abstract class LogicWorldInputCoordinatorBase<TContext> : IService, IWorldInitializable, ILogicWorldInputCoordinator where TContext : class
     {
         private IFrameTime _frameTime;
+        private IMobaBattleDiagnosticsService _diagnostics;
         private bool _missingFrameTimeLogged;
         private bool _futureFrameLogged;
 
@@ -24,6 +24,7 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
         {
             Services = services;
             services?.TryResolve(out _frameTime);
+            services?.TryResolve(out _diagnostics);
             OnServicesReady(services);
         }
 
@@ -36,18 +37,24 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
         {
             if (inputs == null || inputs.Count == 0)
             {
-                return LogicWorldInputSubmitResult.Rejected("input command batch is null or empty");
+                const string message = "input command batch is null or empty";
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.empty", message, GetType().Name);
+                return LogicWorldInputSubmitResult.Rejected(message);
             }
 
             if (!CanSubmit(frame, inputs))
             {
-                return LogicWorldInputSubmitResult.Rejected($"input batch rejected by frame validation: targetFrame={frame.Value}, count={inputs.Count}");
+                var message = $"input batch rejected by frame validation: targetFrame={frame.Value}, count={inputs.Count}";
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.frameRejected", message, GetType().Name);
+                return LogicWorldInputSubmitResult.Rejected(message);
             }
 
             TContext context = CreateContext(frame, inputs);
             if (context == null)
             {
-                return LogicWorldInputSubmitResult.Rejected("input context creation returned null");
+                const string message = "input context creation returned null";
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.contextMissing", message, GetType().Name);
+                return LogicWorldInputSubmitResult.Rejected(message);
             }
 
             var handledCount = 0;
@@ -63,23 +70,21 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
                 }
                 else
                 {
-                    handledByDispatch = Dispatch(context, frame, command, out var failureReason);
+                    handledByDispatch = Dispatch(context, frame, command, out var commandResult);
                     if (handledByDispatch)
                     {
                         handledCount++;
                     }
-                    else if (!string.IsNullOrEmpty(failureReason))
+                    else
                     {
-                        if (i > 0) dispatchTrace += ";";
-                        dispatchTrace += $"#{i}:Before={handledBeforeDispatch},Dispatch={handledByDispatch},Reason={failureReason}";
-                        continue;
+                        MobaInputDiagnostics.RecordCommandRejected(_diagnostics, frame, in commandResult, GetType().Name);
                     }
 
                     if (i > 0) dispatchTrace += ";";
                     dispatchTrace += $"#{i}:Before={handledBeforeDispatch},Dispatch={handledByDispatch}";
-                    if (!string.IsNullOrEmpty(failureReason))
+                    if (!string.IsNullOrEmpty(commandResult.Message))
                     {
-                        dispatchTrace += $",Reason={failureReason}";
+                        dispatchTrace += $",Result={commandResult}";
                     }
                     continue;
                 }
@@ -93,17 +98,18 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
                 string message = $"Coordinator={GetType().Name}, Frame={frame.Value}, Count={inputs.Count}, Handled={handledCount}, Commands={FormatCommands(inputs)}, DispatchTrace={dispatchTrace}";
                 if (handledCount == 0)
                 {
-                    Log.Warning($"[{GetType().Name}] Input batch accepted but no command was handled. {message}");
+                    MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.noCommandHandled", $"Input batch accepted but no command was handled. {message}", GetType().Name);
                 }
                 else
                 {
-                    Log.Warning($"[{GetType().Name}] Input batch partially handled. {message}");
+                    MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.partialCommandHandled", $"Input batch partially handled. {message}", GetType().Name);
                 }
 
                 return LogicWorldInputSubmitResult.Accepted(inputs.Count, handledCount, message);
             }
 
             string successMessage = $"Coordinator={GetType().Name}, Frame={frame.Value}, Count={inputs.Count}, Handled={handledCount}, Commands={FormatCommands(inputs)}, DispatchTrace={dispatchTrace}";
+            MobaInputDiagnostics.RecordBatchAccepted(_diagnostics, inputs.Count, handledCount);
             return LogicWorldInputSubmitResult.Accepted(inputs.Count, handledCount, successMessage);
         }
 
@@ -111,7 +117,7 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
         {
             if (frame.Value < 0)
             {
-                Log.Warning($"[{GetType().Name}] Input batch rejected: targetFrame={frame.Value} is negative, count={inputs.Count}.");
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.negativeFrame", $"Input batch rejected: targetFrame={frame.Value} is negative, count={inputs.Count}.", GetType().Name);
                 return false;
             }
 
@@ -120,7 +126,7 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
                 if (!_missingFrameTimeLogged)
                 {
                     _missingFrameTimeLogged = true;
-                    Log.Warning($"[{GetType().Name}] Input frame validation degraded: IFrameTime not resolved.");
+                    MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.frameValidationDegraded", "Input frame validation degraded: IFrameTime not resolved.", GetType().Name);
                 }
 
                 return true;
@@ -129,14 +135,14 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
             int currentFrame = _frameTime.Frame.Value;
             if (frame.Value < currentFrame)
             {
-                Log.Warning($"[{GetType().Name}] Input batch rejected: targetFrame={frame.Value}, currentFrame={currentFrame}, count={inputs.Count}.");
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.pastFrame", $"Input batch rejected: targetFrame={frame.Value}, currentFrame={currentFrame}, count={inputs.Count}.", GetType().Name);
                 return false;
             }
 
             if (frame.Value > currentFrame + 1 && !_futureFrameLogged)
             {
                 _futureFrameLogged = true;
-                Log.Warning($"[{GetType().Name}] Input batch accepted with future target frame: targetFrame={frame.Value}, currentFrame={currentFrame}, count={inputs.Count}.");
+                MobaInputDiagnostics.RecordBatchWarning(_diagnostics, "input.batch.futureFrame", $"Input batch accepted with future target frame: targetFrame={frame.Value}, currentFrame={currentFrame}, count={inputs.Count}.", GetType().Name);
             }
 
             return true;
@@ -153,7 +159,7 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
             return false;
         }
 
-        protected abstract bool Dispatch(TContext context, FrameIndex frame, PlayerInputCommand command, out string failureReason);
+        protected abstract bool Dispatch(TContext context, FrameIndex frame, PlayerInputCommand command, out MobaInputCommandResult result);
 
         private static string FormatCommands(IReadOnlyList<PlayerInputCommand> inputs)
         {

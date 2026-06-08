@@ -22,16 +22,16 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         /// 娴笺倕濂栫猾璇茬€烽敍鍫㈠⒖閻?姒勬梹纭?閻喎鐤勯敍?
         /// </summary>
         public readonly DamageType DamageType;
-        public readonly int QueryTemplateId;
+        public readonly MobaActionTargetRequest TargetRequest;
 
-        public GiveDamageArgs(float damageValue, int reasonParam, DamageType damageType = DamageType.Physical, int queryTemplateId = 0)
+        public GiveDamageArgs(float damageValue, int reasonParam, DamageType damageType = DamageType.Physical, MobaActionTargetRequest targetRequest = default)
         {
             DamageValue = damageValue;
             ReasonParam = reasonParam;
             DamageType = damageType;
-            QueryTemplateId = queryTemplateId;
+            TargetRequest = targetRequest;
         }
 
-        public static GiveDamageArgs Default => new GiveDamageArgs(0f, 0, DamageType.Physical, 0);
+        public static GiveDamageArgs Default => new GiveDamageArgs(0f, 0, DamageType.Physical, MobaActionTargetRequest.ContextTarget());
     }
 }

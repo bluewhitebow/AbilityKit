@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AbilityKit.Ability.Config;
 using AbilityKit.Ability.Triggering.Json;
-using AbilityKit.Core.Common.Log;
+using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Triggering.Runtime.Plan.Json;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Demo.Moba.Systems.Bootstrap;
@@ -38,20 +38,20 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                 var textAssetLoader = r.Resolve<ITextAssetLoader>();
 
                 // 1. 加载主配置文件 ability_trigger_plans.json（保证向后兼容）
-                Log.Info("[TriggerPlansStage] Loading main trigger plans from ability/ability_trigger_plans.json");
+                MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), "Loading main trigger plans from ability/ability_trigger_plans.json");
                 try
                 {
                     var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
                     db.Load(fsAdapter, "ability/ability_trigger_plans.json");
-                    Log.Info($"[TriggerPlansStage] Main trigger plans loaded. records={db.Records?.Count ?? 0}");
+                    MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Main trigger plans loaded. records={db.Records?.Count ?? 0}");
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning($"[TriggerPlansStage] Failed to load main trigger plans: {ex.Message}");
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Failed to load main trigger plans: {ex.Message}");
                 }
 
                 // 2. 从 triggers 目录加载细粒度配置
-                Log.Info("[TriggerPlansStage] Loading trigger plans from ability/triggers directory");
+                MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), "Loading trigger plans from ability/triggers directory");
                 try
                 {
                     var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
@@ -61,16 +61,16 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                     if (loadedDb != null && loadedDb.Records != null)
                     {
                         db.MergeFrom(loadedDb, replaceExisting: true);
-                        Log.Info($"[TriggerPlansStage] Directory trigger plans merged. total records={db.Records?.Count ?? 0}");
+                        MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Directory trigger plans merged. total records={db.Records?.Count ?? 0}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning($"[TriggerPlansStage] Failed to load directory trigger plans: {ex.Message}");
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Failed to load directory trigger plans: {ex.Message}");
                 }
 
                 // 3. 从 ability/rules 目录加载释放条件、提交消耗等通用技能规则。
-                Log.Info("[TriggerPlansStage] Loading ability rules from ability/rules directory");
+                MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), "Loading ability rules from ability/rules directory");
                 try
                 {
                     var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
@@ -80,27 +80,27 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                     if (loadedDb != null && loadedDb.Records != null)
                     {
                         db.MergeFrom(loadedDb, replaceExisting: true);
-                        Log.Info($"[TriggerPlansStage] Ability rules merged. total records={db.Records?.Count ?? 0}");
+                        MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Ability rules merged. total records={db.Records?.Count ?? 0}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning($"[TriggerPlansStage] Failed to load ability rules: {ex.Message}");
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Failed to load ability rules: {ex.Message}");
                 }
 
                 // 4. 加载 MOBA 效果计划，让技能流程事件可以复用触发器计划系统。
-                Log.Info("[TriggerPlansStage] Loading moba effect plans from moba/effect_plans.json");
+                MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), "Loading moba effect plans from moba/effect_plans.json");
                 try
                 {
                     var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
                     var effectPlanDb = new TriggerPlanJsonDatabase();
                     effectPlanDb.Load(fsAdapter, "moba/effect_plans.json");
                     db.MergeFrom(effectPlanDb, replaceExisting: true);
-                    Log.Info($"[TriggerPlansStage] Moba effect plans merged. total records={db.Records?.Count ?? 0}");
+                    MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Moba effect plans merged. total records={db.Records?.Count ?? 0}");
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning($"[TriggerPlansStage] Failed to load moba effect plans: {ex.Message}");
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Failed to load moba effect plans: {ex.Message}");
                 }
 
                 return db;

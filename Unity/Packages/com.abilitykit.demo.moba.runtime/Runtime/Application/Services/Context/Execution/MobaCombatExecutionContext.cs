@@ -143,6 +143,14 @@ namespace AbilityKit.Demo.Moba.Services
                 return true;
             }
 
+            if (payload is IMobaCombatContextSource sourceProvider
+                && sourceProvider.TryGetCombatContextSource(out var source)
+                && source.IsValid)
+            {
+                context = MobaCombatContextBuilder.FromSource(payload, in source);
+                return context.IsValid;
+            }
+
             return payload is IMobaCombatExecutionContextProvider provider
                    && provider.TryGetCombatExecutionContext(out context)
                    && context.IsValid;

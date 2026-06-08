@@ -15,6 +15,7 @@ namespace AbilityKit.Demo.Moba.Systems.Motion
     public sealed class MobaMotionLocomotionInputSystem : WorldSystemBase
     {
         private IWorldClock _clock;
+        private MobaCombatRulesService _combatRules;
         private global::Entitas.IGroup<global::ActorEntity> _group;
 
         private readonly Dictionary<int, LocomotionMotionSource> _locomotionByActorId = new Dictionary<int, LocomotionMotionSource>(128);
@@ -31,6 +32,7 @@ namespace AbilityKit.Demo.Moba.Systems.Motion
         protected override void OnInit()
         {
             Services.TryResolve(out _clock);
+            Services.TryResolve(out _combatRules);
             _group = Contexts.Actor().GetGroup(global::ActorMatcher.AllOf(
                 global::ActorComponentsLookup.ActorId,
                 global::ActorComponentsLookup.Motion,
@@ -60,6 +62,15 @@ namespace AbilityKit.Demo.Moba.Systems.Motion
                 if (actorId <= 0) continue;
 
                 _seenStampByActorId[actorId] = _stamp;
+
+                if (_combatRules != null && !_combatRules.CanMove(actorId))
+                {
+                    if (_locomotionByActorId.TryGetValue(actorId, out var blockedLoco) && blockedLoco != null)
+                    {
+                        blockedLoco.SetInput(0f, 0f);
+                    }
+                    continue;
+                }
 
                 var speed = new MobaAttrs(e).MoveSpeed;
 

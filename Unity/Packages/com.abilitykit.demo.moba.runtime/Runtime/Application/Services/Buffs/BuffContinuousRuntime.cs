@@ -7,7 +7,7 @@ using AbilityKit.GameplayTags;
 
 namespace AbilityKit.Demo.Moba.Services
 {
-    public sealed class BuffContinuousRuntime : IMobaTickableContinuous, IMobaContinuousIntervalState, IMobaContinuousRuntimeStateSync, IMobaContinuousRuntimeDebugSource, IMobaContextSourceProvider
+    public sealed class BuffContinuousRuntime : MobaContinuousRuntimeBase, IMobaTickableContinuous, IMobaContinuousIntervalState, IMobaContinuousRuntimeStateSync, IMobaContinuousRuntimeDebugSource, IMobaContextSourceProvider
     {
         private readonly BuffContinuousConfig _config;
 
@@ -29,12 +29,7 @@ namespace AbilityKit.Demo.Moba.Services
         public BuffRuntime Runtime { get; private set; }
 
         public ContinuousTagRequirements TagRequirements => _config.TagRequirements;
-        public IContinuousConfig Config => _config;
-        public ContinuousState State { get; private set; } = ContinuousState.Inactive;
-        public bool IsActive => State == ContinuousState.Active;
-        public bool IsTerminated => State == ContinuousState.Expired || State == ContinuousState.Aborted;
-        public bool IsPaused => State == ContinuousState.Paused;
-        public float ElapsedSeconds { get; private set; }
+        public override IContinuousConfig Config => _config;
         public float IntervalRemainingSeconds { get; set; }
         public float RemainingSeconds
         {
@@ -46,8 +41,6 @@ namespace AbilityKit.Demo.Moba.Services
                 return remaining > 0f ? remaining : 0f;
             }
         }
-
-        public event Action<IContinuous, ContinuousEndReason> OnEnded;
 
         public void BindRuntime(BuffRuntime runtime)
         {
@@ -67,14 +60,14 @@ namespace AbilityKit.Demo.Moba.Services
             _config.Stack = stackCount;
             _config.MaxStack = maxStack > 0 ? maxStack : int.MaxValue;
             _config.TagRequirements = tagRequirements;
-            ElapsedSeconds = 0f;
+            ResetElapsed();
         }
 
         public void TickManaged(float deltaTimeSeconds)
         {
             if (!IsActive || deltaTimeSeconds <= 0f) return;
 
-            ElapsedSeconds += deltaTimeSeconds;
+            AdvanceElapsed(deltaTimeSeconds);
             var duration = _config.DurationSeconds;
             if (duration.HasValue && ElapsedSeconds >= duration.Value)
             {
@@ -88,40 +81,6 @@ namespace AbilityKit.Demo.Moba.Services
 
             Runtime.IntervalRemainingSeconds = IntervalRemainingSeconds;
             Runtime.Remaining = RemainingSeconds;
-        }
-
-        public void Activate()
-        {
-            if (State == ContinuousState.Active) return;
-            if (IsTerminated) return;
-
-            State = ContinuousState.Activating;
-            State = ContinuousState.Active;
-        }
-
-        public void Pause()
-        {
-            if (State != ContinuousState.Active) return;
-            State = ContinuousState.Paused;
-        }
-
-        public void Resume()
-        {
-            if (State != ContinuousState.Paused) return;
-            State = ContinuousState.Active;
-        }
-
-        public void End(ContinuousEndReason reason)
-        {
-            if (IsTerminated) return;
-
-            State = reason == ContinuousEndReason.Completed ? ContinuousState.Expired : ContinuousState.Aborted;
-            OnEnded?.Invoke(this, reason);
-        }
-
-        public void Abort(string reason)
-        {
-            End(ContinuousEndReason.Interrupted);
         }
 
         public bool TryGetRuntimeDebugInfo(out MobaContinuousRuntimeDebugInfo info)

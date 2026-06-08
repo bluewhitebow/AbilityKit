@@ -7,6 +7,7 @@ using AbilityKit.Core.Common;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.SnapshotRouting;
 using AbilityKit.Game.Battle.Agent;
+using AbilityKit.Game.Flow.Battle.ViewEvents;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Triggering;
 using AbilityKit.Network.Abstractions;
@@ -18,56 +19,93 @@ namespace AbilityKit.Game.Flow
     {
         internal sealed class ConfirmedHandles
         {
+            internal ConfirmedAuthorityWorldRuntime WorldRuntime;
             internal IWorldManager Worlds;
             internal HostRuntime Runtime;
             internal IWorld World;
 
+            internal ConfirmedAuthorityInputRuntime InputRuntime;
             internal IRemoteFrameSource<PlayerInputCommand[]> InputSource;
             internal IConsumableRemoteFrameSource<PlayerInputCommand[]> Consumable;
             internal IRemoteFrameSink<PlayerInputCommand[]> Sink;
 
+            internal ConfirmedViewEventPipeline ViewEventPipeline;
             internal FrameSnapshotDispatcher Snapshots;
 
-            internal BattleSessionFeature.DebugBattleViewEventSink ViewEventSink;
+            internal DebugBattleViewEventSink ViewEventSink;
 
             internal BattleSnapshotViewAdapter SnapshotViewAdapter;
             internal BattleTriggerEventViewBridge TriggerBridge;
 
             internal BattleContext ViewCtx;
-            internal FrameSnapshotDispatcher ViewSnapshots;
-            internal SnapshotPipeline ViewPipeline;
-            internal SnapshotCmdHandler ViewCmdHandler;
+            internal ConfirmedViewSnapshotRuntime ViewSnapshotRuntime;
             internal ConfirmedBattleViewFeature ViewFeature;
 
-            internal IDisposable ViewSubLobby;
-            internal IDisposable ViewSubActorTransform;
-            internal IDisposable ViewSubStateHash;
-            internal IDisposable ViewSubActorSpawn;
+            internal void BindWorldRuntime(ConfirmedAuthorityWorldRuntime runtime)
+            {
+                WorldRuntime = runtime;
+                Worlds = runtime != null ? runtime.Worlds : null;
+                Runtime = runtime != null ? runtime.Runtime : null;
+                World = runtime != null ? runtime.World : null;
+            }
 
-            public void Reset()
+            internal void BindInputRuntime(ConfirmedAuthorityInputRuntime runtime)
+            {
+                InputRuntime = runtime;
+                InputSource = runtime != null ? runtime.Source : null;
+                Consumable = runtime != null ? runtime.Consumable : null;
+                Sink = runtime != null ? runtime.Sink : null;
+            }
+
+            internal void ClearWorldRuntime()
             {
                 Worlds = null;
                 Runtime = null;
                 World = null;
+                WorldRuntime = null;
+            }
 
-                IDisposable inputSourceDisposable = InputSource;
-                InputSource = null;
-                DisposeUtils.TryDispose(ref inputSourceDisposable, ex => Log.Exception(ex));
+            internal void DisposeInput()
+            {
+                if (InputRuntime != null)
+                {
+                    DisposeUtils.TryDispose(ref InputRuntime, ex => Log.Exception(ex));
+                    InputSource = null;
+                }
+                else
+                {
+                    IDisposable inputSourceDisposable = InputSource;
+                    InputSource = null;
+                    DisposeUtils.TryDispose(ref inputSourceDisposable, ex => Log.Exception(ex));
+                }
+
                 Consumable = null;
                 Sink = null;
+            }
 
-                DisposeUtils.TryDispose(ref ViewCmdHandler, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref ViewPipeline, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref ViewSnapshots, ex => Log.Exception(ex));
+            public void Reset()
+            {
+                ClearWorldRuntime();
+                DisposeInput();
 
-                DisposeUtils.TryDispose(ref ViewSubLobby, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref ViewSubActorTransform, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref ViewSubStateHash, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref ViewSubActorSpawn, ex => Log.Exception(ex));
+                if (ViewSnapshotRuntime != null)
+                {
+                    DisposeUtils.TryDispose(ref ViewSnapshotRuntime, ex => Log.Exception(ex));
+                }
 
-                DisposeUtils.TryDispose(ref Snapshots, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref SnapshotViewAdapter, ex => Log.Exception(ex));
-                DisposeUtils.TryDispose(ref TriggerBridge, ex => Log.Exception(ex));
+                if (ViewEventPipeline != null)
+                {
+                    DisposeUtils.TryDispose(ref ViewEventPipeline, ex => Log.Exception(ex));
+                    Snapshots = null;
+                    SnapshotViewAdapter = null;
+                    TriggerBridge = null;
+                }
+                else
+                {
+                    DisposeUtils.TryDispose(ref Snapshots, ex => Log.Exception(ex));
+                    DisposeUtils.TryDispose(ref SnapshotViewAdapter, ex => Log.Exception(ex));
+                    DisposeUtils.TryDispose(ref TriggerBridge, ex => Log.Exception(ex));
+                }
 
                 ViewEventSink = null;
 

@@ -17,6 +17,18 @@ namespace AbilityKit.Demo.Moba.Systems
     /// </summary>
     public static class MobaSystemOrder
     {
+        public readonly struct OrderCheckResult
+        {
+            public OrderCheckResult(bool passed, string message)
+            {
+                Passed = passed;
+                Message = message;
+            }
+
+            public bool Passed { get; }
+            public string Message { get; }
+        }
+
         // ========== 基准值 ==========
         /// <summary>
         /// 业务层基准值
@@ -73,7 +85,59 @@ namespace AbilityKit.Demo.Moba.Systems
         public const int ProjectileSync = Base + WorldSystemOrder.Late + 10;
         /// <summary>投射物发射器清理</summary>
         public const int ProjectileLauncherCleanup = Base + WorldSystemOrder.Late + 12;
+        /// <summary>护盾生命周期</summary>
+        public const int ShieldLifecycle = Base + WorldSystemOrder.Late + 13;
         /// <summary>召唤物生命周期</summary>
         public const int SummonLifecycle = Base + WorldSystemOrder.Late + 14;
+
+        public static OrderCheckResult ValidateKeyDependencies()
+        {
+            if (EntityManagerSync >= MotionInit)
+            {
+                return Fail(nameof(EntityManagerSync), nameof(MotionInit));
+            }
+
+            if (MotionLocomotionInput >= MotionTick)
+            {
+                return Fail(nameof(MotionLocomotionInput), nameof(MotionTick));
+            }
+
+            if (PassiveSkillTriggers >= SkillPipelines)
+            {
+                return Fail(nameof(PassiveSkillTriggers), nameof(SkillPipelines));
+            }
+
+            if (SkillPipelines >= EffectsStep)
+            {
+                return Fail(nameof(SkillPipelines), nameof(EffectsStep));
+            }
+
+            if (EffectsStep >= BuffCommandsDrain)
+            {
+                return Fail(nameof(EffectsStep), nameof(BuffCommandsDrain));
+            }
+
+            if (BuffCommandsDrain >= BuffsApply || BuffsApply >= BuffsRemove || BuffsRemove >= ContinuousTick)
+            {
+                return new OrderCheckResult(false, "Buff order must be BuffCommandsDrain < BuffsApply < BuffsRemove < ContinuousTick.");
+            }
+
+            if (ContinuousTick >= BuffsTick || BuffsTick >= OngoingTriggerPlansReconcile || OngoingTriggerPlansReconcile >= GameplayTick)
+            {
+                return new OrderCheckResult(false, "Continuous order must be ContinuousTick < BuffsTick < OngoingTriggerPlansReconcile < GameplayTick.");
+            }
+
+            if (ProjectileSync >= ProjectileLauncherCleanup || ProjectileLauncherCleanup >= ShieldLifecycle || ShieldLifecycle >= SummonLifecycle)
+            {
+                return new OrderCheckResult(false, "Late cleanup order must be ProjectileSync < ProjectileLauncherCleanup < ShieldLifecycle < SummonLifecycle.");
+            }
+
+            return new OrderCheckResult(true, null);
+        }
+
+        private static OrderCheckResult Fail(string earlier, string later)
+        {
+            return new OrderCheckResult(false, $"{earlier} must run before {later}.");
+        }
     }
 }

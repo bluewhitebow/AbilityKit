@@ -6,6 +6,7 @@ using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Battle.SearchTarget;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
+using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Core.Math;
 using ST = AbilityKit.Battle.SearchTarget;
 
@@ -25,12 +26,12 @@ namespace AbilityKit.Demo.Moba.Services.Search
         private readonly AllActorsCandidateProvider _allActorsProvider;
         private readonly MobaSearchQueryBuilder _queryBuilder;
 
-        public SearchTargetService(MobaActorRegistry actors, MobaConfigDatabase configs = null)
+        public SearchTargetService(MobaActorRegistry actors, MobaConfigDatabase configs = null, MobaCombatRulesService combatRules = null)
         {
             if (actors == null) throw new ArgumentNullException(nameof(actors));
             _configs = configs;
             _allActorsProvider = new AllActorsCandidateProvider(actors);
-            _queryBuilder = new MobaSearchQueryBuilder(actors, _allActorsProvider);
+            _queryBuilder = new MobaSearchQueryBuilder(actors, _allActorsProvider, combatRules);
             _context.SetService<IPositionProvider>(new RegistryPositionProvider(actors));
             _context.SetService<IEntityKeyProvider>(ActorIdKeyProvider.Instance);
         }
@@ -64,7 +65,21 @@ namespace AbilityKit.Demo.Moba.Services.Search
             if (queryTemplateId <= 0) return false;
 
             if (!TryBuildQuery(queryTemplateId, casterActorId, in aimPos, explicitTargetActorId, maxCountOverride: 0, out var query)) return false;
+            return ExecuteSearch(in query, results);
+        }
 
+        public bool TrySearchActorIds(SearchQueryTemplateMO template, int casterActorId, in Vec3 aimPos, int explicitTargetActorId, List<int> results)
+        {
+            if (results == null) throw new ArgumentNullException(nameof(results));
+            results.Clear();
+
+            if (template == null) return false;
+            if (!_queryBuilder.TryBuild(template, _context, casterActorId, in aimPos, explicitTargetActorId, maxCountOverride: 0, out var query)) return false;
+            return ExecuteSearch(in query, results);
+        }
+
+        private bool ExecuteSearch(in SearchQuery query, List<int> results)
+        {
             _searchResults.Clear();
             _engine.SearchIds(in query, _context, _searchResults);
             if (_searchResults.Count == 0) return false;

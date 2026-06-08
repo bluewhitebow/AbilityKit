@@ -118,6 +118,11 @@ namespace AbilityKit.Demo.Moba.Services
 
             var targetActorId = target.actorId.Value;
             var normalizedReason = reason == TraceLifecycleReason.None ? TraceLifecycleReason.Expired : reason;
+            var buffId = runtime.BuffId;
+            var sourceContextId = runtime.SourceContextId;
+            var hadContinuous = runtime.Continuous != null;
+            var hadSkillRuntimeRetain = runtime.SkillRuntimeRetainHandle.IsValid;
+            var hadModifierBindings = runtime.ModifierBindings != null && runtime.ModifierBindings.Count > 0;
 
             var continuousReason = ToContinuousEndReason(normalizedReason);
             EndContinuous(runtime, continuousReason);
@@ -128,10 +133,14 @@ namespace AbilityKit.Demo.Moba.Services
             ReleaseSkillRuntime(runtime);
 
             new BuffRuntimeView(runtime).ClearRuntimeBindings();
+            var removedFromList = false;
             if (list != null && index >= 0 && index < list.Count && ReferenceEquals(list[index], runtime))
             {
                 list.RemoveAt(index);
+                removedFromList = true;
             }
+
+            Log.Warning($"[MobaBuffCleanup] buff ended. buffId={buffId}, target={targetActorId}, source={sourceActorId}, sourceContextId={sourceContextId}, reason={normalizedReason}, hadContinuous={hadContinuous}, continuousCleared={runtime.Continuous == null}, hadSkillRuntimeRetain={hadSkillRuntimeRetain}, skillRuntimeCleared={!runtime.SkillRuntimeRetainHandle.IsValid}, hadModifierBindings={hadModifierBindings}, modifierBindingsCleared={runtime.ModifierBindings == null}, removedFromList={removedFromList}");
         }
 
         private bool ApplyToExisting(global::ActorEntity target, BuffOperationContext context)
@@ -292,7 +301,7 @@ namespace AbilityKit.Demo.Moba.Services
             {
                 activated = _continuous.TryActivate(runtime.Continuous);
             }
- 
+
             return activated;
         }
 

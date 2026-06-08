@@ -18,6 +18,7 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly FunctionRegistry _functions;
         private readonly ActionRegistry _actions;
         private readonly IPayloadAccessorRegistry _payloads;
+        private readonly MobaEffectExecutionService _currentEffects;
 
         public MobaTriggerPlanExecutor(
             IWorldResolver services,
@@ -25,7 +26,8 @@ namespace AbilityKit.Demo.Moba.Services
             IEventBus eventBus,
             FunctionRegistry functions,
             ActionRegistry actions,
-            IPayloadAccessorRegistry payloads = null)
+            IPayloadAccessorRegistry payloads = null,
+            MobaEffectExecutionService currentEffects = null)
         {
             _services = services;
             _planDb = planDb;
@@ -33,6 +35,7 @@ namespace AbilityKit.Demo.Moba.Services
             _functions = functions;
             _actions = actions;
             _payloads = payloads;
+            _currentEffects = currentEffects;
         }
 
         public bool TryGetPlan(int triggerId, out TriggerPlan<object> plan)
@@ -74,8 +77,9 @@ namespace AbilityKit.Demo.Moba.Services
             var ctrl = new ExecutionControl();
             ctrl.Reset();
 
+            var context = _currentEffects != null ? new CurrentEffectWorldResolver(_services, _currentEffects) : _services;
             var execCtx = new ExecCtx<IWorldResolver>(
-                context: _services,
+                context: context,
                 eventBus: _eventBus,
                 functions: _functions,
                 actions: _actions,
@@ -114,6 +118,52 @@ namespace AbilityKit.Demo.Moba.Services
             {
                 Log.Exception(ex, $"[MobaTriggerPlanExecutor] Plan execution failed. triggerId={triggerId}");
                 return false;
+            }
+        }
+
+        private sealed class CurrentEffectWorldResolver : IWorldResolver
+        {
+            private readonly IWorldResolver _inner;
+            private readonly MobaEffectExecutionService _effects;
+
+            public CurrentEffectWorldResolver(IWorldResolver inner, MobaEffectExecutionService effects)
+            {
+                _inner = inner;
+                _effects = effects;
+            }
+
+            public object Resolve(Type serviceType)
+            {
+                if (serviceType == typeof(MobaEffectExecutionService)) return _effects;
+                return _inner.Resolve(serviceType);
+            }
+
+            public T Resolve<T>()
+            {
+                if (typeof(T) == typeof(MobaEffectExecutionService)) return (T)(object)_effects;
+                return _inner.Resolve<T>();
+            }
+
+            public bool TryResolve(Type serviceType, out object instance)
+            {
+                if (serviceType == typeof(MobaEffectExecutionService))
+                {
+                    instance = _effects;
+                    return instance != null;
+                }
+
+                return _inner.TryResolve(serviceType, out instance);
+            }
+
+            public bool TryResolve<T>(out T instance)
+            {
+                if (typeof(T) == typeof(MobaEffectExecutionService))
+                {
+                    instance = _effects != null ? (T)(object)_effects : default;
+                    return _effects != null;
+                }
+
+                return _inner.TryResolve(out instance);
             }
         }
     }

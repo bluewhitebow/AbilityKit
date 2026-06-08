@@ -174,7 +174,7 @@ namespace ET.Logic
         public string PlayerId { get; set; }
 
         public const int DefaultBasicAttackSkillId = 10010101;
-        private static readonly int[] DefaultSkillIds = { 10010101, 10010201, 10010301 };
+        private static readonly int[] DefaultSkillIds = { 10010101, 10010201, 10010301, 10010401 };
 
         public int CharacterId { get; set; }
         public int AttributeTemplateId { get; set; }

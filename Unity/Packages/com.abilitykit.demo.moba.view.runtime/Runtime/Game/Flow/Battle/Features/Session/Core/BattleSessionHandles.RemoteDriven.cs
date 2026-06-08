@@ -15,25 +15,62 @@ namespace AbilityKit.Game.Flow
     {
         internal sealed class RemoteDrivenHandles
         {
+            internal RemoteDrivenWorldRuntime WorldRuntime;
             internal IWorldManager Worlds;
             internal HostRuntime Runtime;
             internal IWorld World;
 
+            internal RemoteDrivenInputRuntime InputRuntime;
             internal IRemoteFrameSource<PlayerInputCommand[]> InputSource;
             internal IConsumableRemoteFrameSource<PlayerInputCommand[]> Consumable;
             internal IRemoteFrameSink<PlayerInputCommand[]> Sink;
 
-            public void Reset()
+            internal void BindWorldRuntime(RemoteDrivenWorldRuntime runtime)
             {
+                WorldRuntime = runtime;
+                Worlds = runtime != null ? runtime.Worlds : null;
+                Runtime = runtime != null ? runtime.Runtime : null;
+                World = runtime != null ? runtime.World : null;
+            }
+
+            internal void BindInputRuntime(RemoteDrivenInputRuntime runtime)
+            {
+                InputRuntime = runtime;
+                InputSource = runtime != null ? runtime.Source : null;
+                Consumable = runtime != null ? runtime.Consumable : null;
+                Sink = runtime != null ? runtime.Sink : null;
+            }
+
+            internal void ClearWorldRuntime()
+            {
+                WorldRuntime = null;
                 Worlds = null;
                 Runtime = null;
                 World = null;
+            }
 
-                IDisposable inputSourceDisposable = InputSource;
-                InputSource = null;
-                DisposeUtils.TryDispose(ref inputSourceDisposable, ex => Log.Exception(ex));
+            internal void DisposeInput()
+            {
+                if (InputRuntime != null)
+                {
+                    DisposeUtils.TryDispose(ref InputRuntime, ex => Log.Exception(ex));
+                    InputSource = null;
+                }
+                else
+                {
+                    IDisposable inputSourceDisposable = InputSource;
+                    InputSource = null;
+                    DisposeUtils.TryDispose(ref inputSourceDisposable, ex => Log.Exception(ex));
+                }
+
                 Consumable = null;
                 Sink = null;
+            }
+
+            public void Reset()
+            {
+                ClearWorldRuntime();
+                DisposeInput();
             }
         }
     }

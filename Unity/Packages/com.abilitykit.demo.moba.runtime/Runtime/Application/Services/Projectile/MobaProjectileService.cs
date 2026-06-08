@@ -36,6 +36,7 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
         [WorldInject(required: false)] private MobaSkillParamModifierService _skillParamModifiers;
         [WorldInject(required: false)] private IMobaActorSpawnService _actorSpawn;
         [WorldInject(required: false)] private IContinuousManager _continuous;
+        [WorldInject(required: false)] private IMobaProjectileEmitterManager _emitters;
 
         public bool Shoot(int casterActorId, ProjectileEmitterType emitterType, int projectileCode, float speed, int lifetimeFrames, float maxDistance, in Vec3 aimPos, in Vec3 aimDir)
         {
@@ -203,6 +204,11 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
 
         public bool Launch(int casterActorId, ProjectileLauncherMO launcher, ProjectileMO projectile, int countPerShot, float fanAngleDeg, in Vec3 aimPos, in Vec3 aimDir, in ProjectileSourceContext sourceContext)
         {
+            return Launch(casterActorId, launcher, projectile, countPerShot, fanAngleDeg, launcher?.DurationMs ?? 0, in aimPos, in aimDir, in sourceContext);
+        }
+
+        public bool Launch(int casterActorId, ProjectileLauncherMO launcher, ProjectileMO projectile, int countPerShot, float fanAngleDeg, int durationMs, in Vec3 aimPos, in Vec3 aimDir, in ProjectileSourceContext sourceContext)
+        {
             if (_entities == null) return false;
             if (casterActorId <= 0) return false;
             if (launcher == null) return false;
@@ -218,7 +224,7 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             dir = dir.Normalized;
             if (dir.SqrMagnitude <= 0f) dir = Vec3.Forward;
 
-            return LaunchFromSpawn(casterActorId, launcher, projectile, countPerShot, fanAngleDeg, in spawnPos, in dir, in sourceContext);
+            return LaunchFromSpawn(casterActorId, launcher, projectile, countPerShot, fanAngleDeg, durationMs, in spawnPos, in dir, in sourceContext);
         }
 
         public bool LaunchFromSpawn(int casterActorId, ProjectileLauncherMO launcher, ProjectileMO projectile, in Vec3 spawnPos, in Vec3 dir)
@@ -233,12 +239,18 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
 
         public bool LaunchFromSpawn(int casterActorId, ProjectileLauncherMO launcher, ProjectileMO projectile, int countPerShot, float fanAngleDeg, in Vec3 spawnPos, in Vec3 dir, in ProjectileSourceContext sourceContext)
         {
+            return LaunchFromSpawn(casterActorId, launcher, projectile, countPerShot, fanAngleDeg, launcher?.DurationMs ?? 0, in spawnPos, in dir, in sourceContext);
+        }
+
+        public bool LaunchFromSpawn(int casterActorId, ProjectileLauncherMO launcher, ProjectileMO projectile, int countPerShot, float fanAngleDeg, int durationMs, in Vec3 spawnPos, in Vec3 dir, in ProjectileSourceContext sourceContext)
+        {
             var request = new MobaProjectileLaunchRequest(
                 casterActorId,
                 launcher,
                 projectile,
                 countPerShot,
                 fanAngleDeg,
+                durationMs,
                 in spawnPos,
                 in dir,
                 in sourceContext);
@@ -295,10 +307,11 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             var returnSpeed = projectile.ReturnSpeed;
             var returnStopDistance = projectile.ReturnStopDistance;
 
+            var durationMs = request.DurationMs;
             var count = 1;
-            if (launcher.DurationMs > 0 && launcher.IntervalMs > 0)
+            if (durationMs > 0 && launcher.IntervalMs > 0)
             {
-                count = System.Math.Max(1, (launcher.DurationMs / launcher.IntervalMs) + 1);
+                count = System.Math.Max(1, (durationMs / launcher.IntervalMs) + 1);
             }
 
             var bulletsPerShot = System.Math.Max(1, request.CountPerShot);
@@ -370,8 +383,8 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
 
             var sourceContext = request.SourceContext;
             var launcherSource = CreateLaunchSource(casterActorId, 0, projectile.Id, in sourceContext);
-            var endTimeMs = launcher.DurationMs > 0 ? nowMs + launcher.DurationMs : nowMs;
-            var sequence = CreateLaunchSequence(in request);
+            var endTimeMs = durationMs > 0 ? nowMs + durationMs : nowMs;
+            var sequence = CreateLaunchSequence(in request, launcher);
             var context = new MobaProjectileLaunchContext(
                 in request,
                 launcher,
@@ -413,8 +426,13 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             return launcherActorId > 0 && _registry != null && _registry.TryGet(launcherActorId, out launcherEntity);
         }
 
-        private static IMobaProjectileLaunchSequence CreateLaunchSequence(in MobaProjectileLaunchRequest request)
+        private IMobaProjectileLaunchSequence CreateLaunchSequence(in MobaProjectileLaunchRequest request, ProjectileLauncherMO launcher)
         {
+            if (_emitters != null && _emitters.TryCreateSequence(launcher, out var sequence) && sequence != null)
+            {
+                return sequence;
+            }
+
             return new RepeatProjectileLaunchSequence();
         }
 

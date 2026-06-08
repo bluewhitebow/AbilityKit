@@ -1,0 +1,23 @@
+{
+  "id": 10101,
+  "name": "buff_101_tick_self_damage_10",
+  "enabled": true,
+  "phase": "immediate",
+  "event": "",
+  "allowExternal": false,
+  "priority": 50,
+  "conditions": [],
+  "actions": [
+    {
+      "type": "debug_log",
+      "message": "buff_101_tick_self_damage_10",
+      "dump_args": true
+    },
+    {
+      "type": "give_damage",
+      "damage_value": 10.0,
+      "damage_type": 1,
+      "reason_param": 10101
+    }
+  ]
+}

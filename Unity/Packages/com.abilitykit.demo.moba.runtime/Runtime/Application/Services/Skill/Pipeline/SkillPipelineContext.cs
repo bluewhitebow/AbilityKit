@@ -13,7 +13,7 @@ using AbilityKit.Pipeline;
 namespace AbilityKit.Demo.Moba.Services
 {
     using AbilityKit.Ability;
-    public sealed class SkillPipelineContext : IAbilityPipelineContext<object>
+    public sealed class SkillPipelineContext : IAbilityPipelineContext<object>, IMobaCombatContextSource, IMobaCombatExecutionContextProvider, IMobaTriggerLineageContextProvider, IMobaTriggerExecutionSnapshotProvider, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaContextSourceProvider
     {
         public object AbilityInstance { get; private set; }
         public AbilityPipelinePhaseId CurrentPhaseId { get; set; }
@@ -105,16 +105,45 @@ namespace AbilityKit.Demo.Moba.Services
             for (int i = _cleanupActions.Count - 1; i >= 0; i--)
             {
                 try { _cleanupActions[i]?.Invoke(); }
-                catch { }
+                catch (Exception ex) { ReportCleanupException(ex, "action"); }
             }
             _cleanupActions.Clear();
 
             for (int i = _disposables.Count - 1; i >= 0; i--)
             {
                 try { _disposables[i]?.Dispose(); }
-                catch { }
+                catch (Exception ex) { ReportCleanupException(ex, "disposable"); }
             }
             _disposables.Clear();
+        }
+
+        private void ReportCleanupException(Exception ex, string kind)
+        {
+            try
+            {
+                var exceptions = WorldServices != null ? WorldServices.Resolve<IMobaBattleExceptionPolicy>() : null;
+                if (exceptions != null)
+                {
+                    exceptions.Handle(
+                        ex,
+                        new MobaBattleExceptionContext(
+                            MobaBattleExceptionDomain.Cleanup,
+                            "skill.context.cleanup",
+                            actorId: CasterActorId,
+                            skillId: SkillId,
+                            runtimeId: RuntimeId,
+                            detail: "kind=" + kind),
+                        MobaBattleExceptionSeverity.Recoverable);
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            AbilityKit.Core.Common.Log.Log.Exception(
+                ex,
+                $"[SkillPipelineContext] Cleanup failed. kind={kind} actor={CasterActorId} skill={SkillId} runtime={RuntimeId}");
         }
 
         public void Initialize(object abilityInstance, in SkillCastRequest request, SkillCastContext triggerContext = null)
@@ -189,6 +218,70 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (deltaTime <= 0f) return;
             ElapsedTime += deltaTime;
+        }
+
+        public bool TryGetCombatContextSource(out MobaCombatContextSource source)
+        {
+            TryGetSkillRuntimeHandle(out var handle);
+            TryGetData(AbilityContextKeys.Frame.ToKeyString(), out int frame);
+            var sourceContextId = SourceContextId != 0L ? SourceContextId : this.GetSourceContextId();
+            source = MobaCombatContextBuilder.SkillCast(
+                SkillId,
+                CasterActorId,
+                TargetActorId,
+                sourceContextId,
+                frame,
+                in handle);
+            return source.IsValid;
+        }
+
+        public bool TryGetCombatExecutionContext(out MobaCombatExecutionContext context)
+        {
+            return MobaCombatContextBuilder.TryFromSource(this, out context);
+        }
+
+        public bool TryGetLineageContext(out MobaTriggerLineageContext lineageContext)
+        {
+            lineageContext = default;
+            if (!TryGetCombatContextSource(out var source)) return false;
+
+            lineageContext = source.ToLineageContext();
+            return true;
+        }
+
+        public bool TryGetExecutionSnapshot(out MobaTriggerExecutionSnapshot snapshot)
+        {
+            snapshot = default;
+            if (!TryGetCombatContextSource(out var source)) return false;
+
+            snapshot = source.ToExecutionSnapshot();
+            return snapshot.IsValid;
+        }
+
+        public bool TryGetSkillRuntimeHandle(out MobaSkillCastRuntimeHandle handle)
+        {
+            handle = RuntimeHandle.IsValid ? RuntimeHandle : this.GetSkillRuntimeHandle();
+            return handle.IsValid;
+        }
+
+        public bool TryGetOrigin(out MobaGameplayOrigin origin)
+        {
+            origin = default;
+            if (!TryGetCombatContextSource(out var source)) return false;
+
+            origin = source.ToOrigin();
+            return origin.IsValid;
+        }
+
+        public bool TryGetContextSource(out MobaContextSourceView source)
+        {
+            source = default;
+            if (!TryGetCombatContextSource(out var combatSource)) return false;
+
+            source = combatSource.ToContextSourceView(
+                MobaContextSourceResolveKind.DirectProvider,
+                MobaContextSourceBoundary.LiveRuntime);
+            return source.IsValid;
         }
 
         public void Reset()

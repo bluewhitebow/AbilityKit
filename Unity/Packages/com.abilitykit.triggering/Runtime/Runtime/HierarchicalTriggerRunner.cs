@@ -274,18 +274,18 @@ namespace AbilityKit.Triggering.Runtime
                 _lifecycle.OnScopeTransition(parentScope, ScopeName ?? "Current");
                 Parent.DispatchInternal(key, in args, parentControl, false);
 
-                // 检查是否需要停止子级执行
-                if (parentControl.StopPropagation || parentControl.Cancel)
+                // 检查是否需要停止子级执行。优先级软过滤不跨 scope 直接终止。
+                if (parentControl.IsHardStopped)
                 {
                     if (_options.ShortCircuitStopsParent)
                     {
-                        _lifecycle.OnShortCircuit(key, in args, -1, -1, -1, parentControl.StopPropagation ? ShortCircuitReason.StopPropagation : ShortCircuitReason.Cancel);
+                        _lifecycle.OnShortCircuit(key, in args, -1, -1, -1, parentControl.Cancel ? ShortCircuitReason.Cancel : ShortCircuitReason.StopPropagation);
                         return;
                     }
                 }
 
-                // 检查是否需要停止后续执行
-                if (control.StopPropagation || control.Cancel)
+                // 检查是否需要停止后续执行。优先级软过滤由本地 DispatchTriggers 判断。
+                if (control.IsHardStopped)
                 {
                     return;
                 }
@@ -295,7 +295,7 @@ namespace AbilityKit.Triggering.Runtime
             DispatchTriggers(key, in args, localTriggers, in execCtx, control);
 
             // 父级后执行（如果子级先执行）
-            if (!_options.ExecuteParentFirst && Parent != null && !control.StopPropagation && !control.Cancel)
+            if (!_options.ExecuteParentFirst && Parent != null && !control.IsHardStopped)
             {
                 var parentControl = new ExecutionControl();
                 var parentScope = Parent.ScopeName ?? "Parent";
@@ -411,14 +411,14 @@ namespace AbilityKit.Triggering.Runtime
                     _observer.OnActionFailed(key, in args, entry.Phase, entry.Priority, entry.Order, 0, entry.Trigger.GetType().Name, 0, 1, ex.Message, in execCtx);
                 }
 
-                if (control.StopPropagation || control.Cancel)
+                if (control.IsHardStopped)
                 {
                     wasInterrupted = true;
                     shortCircuitedCount++;
-                    var reason = control.StopPropagation ? ShortCircuitReason.StopPropagation : ShortCircuitReason.Cancel;
+                    var reason = control.Cancel ? ShortCircuitReason.Cancel : ShortCircuitReason.StopPropagation;
                     _lifecycle.OnShortCircuit(key, in args, entry.Phase, entry.Priority, entry.Order, reason);
                     _observer.OnShortCircuit(key, in args, entry.Phase, entry.Priority, entry.Order,
-                        control.StopPropagation ? ETriggerShortCircuitReason.StopPropagation : ETriggerShortCircuitReason.Cancel, in execCtx);
+                        control.Cancel ? ETriggerShortCircuitReason.Cancel : ETriggerShortCircuitReason.StopPropagation, in execCtx);
                     break;
                 }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Triggering.Registry;
@@ -18,6 +18,8 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         private static object _currentTriggerArgs;
 
         protected abstract string ActionName { get; }
+
+        public string ConfigActionName => ActionName;
 
         public ActionId ActionId => PlanActionRegisterUtil.GetActionId(ActionName);
 

@@ -4,7 +4,6 @@ using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Services.LogicWorld;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -44,7 +43,7 @@ namespace AbilityKit.Demo.Moba.Services
             }
 
             PlayerInputCommand first = inputs[0];
-            Log.Info($"[MobaBattleIOPort] Submit: Frame={frame.Value}, Count={inputs.Count}, FirstPlayer={first.Player.Value}, FirstOp={first.OpCode}");
+            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleIOPort), $"Submit: Frame={frame.Value}, Count={inputs.Count}, FirstPlayer={first.Player.Value}, FirstOp={first.OpCode}");
 
             LogicWorldInputSubmitResult result = _input.TrySubmit(frame, inputs);
             if (!result.Succeeded)

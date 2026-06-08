@@ -549,6 +549,7 @@ namespace ET.AbilityKit.Demo.ET.App
         private sealed class EtBattleSmokeCase
         {
             public string Name { get; set; } = "skill-damage-basic";
+            public bool DisableBuiltinSkillTest { get; set; }
             public List<EtBattleSmokeInputCase> Inputs { get; set; } = new List<EtBattleSmokeInputCase>
             {
                 new EtBattleSmokeInputCase { Type = "move", FrameOffset = 1, MoveX = 1f, MoveZ = 0f },
@@ -624,6 +625,7 @@ namespace ET.AbilityKit.Demo.ET.App
             private readonly HashSet<int> _spawnedActorIds = new HashSet<int>();
 
             private bool _inputsSubmitted;
+            private bool _builtinSkillTestDisabled;
             private float _targetX;
             private float _targetZ;
             private FrameSnapshotDispatcher? _subscribedDispatcher;
@@ -708,6 +710,7 @@ namespace ET.AbilityKit.Demo.ET.App
 
                 var battle = battleScene?.GetComponent<ETBattleComponent>();
                 HasBattleComponent = battle != null;
+                DisableBuiltinSkillTestIfRequested(battleScene);
 
                 if (battle?.BattleDriver is not ETMobaBattleDriver driver)
                 {
@@ -772,6 +775,23 @@ namespace ET.AbilityKit.Demo.ET.App
                        (!expected.RequireLocalSkillCooldown || (HasLocalSkillCooldown && MaxLocalSkillCooldownRemainingMs >= expected.MinLocalSkillCooldownRemainingMs)) &&
                        (!expected.RequireLocalManaConsumed || (HasLocalManaResource && LocalMaxManaSpent >= expected.MinLocalManaSpent && (expected.MaxLocalManaAfter <= 0f || LocalMinMana <= expected.MaxLocalManaAfter))) &&
                        MaxBattleFrame >= Math.Max(options.SmokeMinBattleFrames, InputTargetFrame + 1);
+            }
+
+            private void DisableBuiltinSkillTestIfRequested(global::ET.Scene? battleScene)
+            {
+                if (!_smokeCase.DisableBuiltinSkillTest || _builtinSkillTestDisabled || battleScene == null)
+                {
+                    return;
+                }
+
+                var skillTest = battleScene.GetComponent<ETBattleSkillTestComponent>();
+                if (skillTest == null)
+                {
+                    return;
+                }
+
+                skillTest.IsEnabled = false;
+                _builtinSkillTestDisabled = true;
             }
 
             private void TrySubmitProtocolInputs(global::ET.Scene battleScene, ETBattleComponent battle, ETMobaBattleDriver driver)

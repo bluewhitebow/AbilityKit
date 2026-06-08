@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Math;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Runtime;
@@ -271,17 +270,35 @@ namespace AbilityKit.Demo.Moba.Services
             switch (entry.Level)
             {
                 case SkillLogLevel.Error:
-                    Log.Error(entry.FormattedMessage);
+                    MobaRuntimeLog.Error(MobaRuntimeLogModule.Skill, GetPurpose(entry), entry.Type, entry.FormattedMessage);
                     break;
                 case SkillLogLevel.Warning:
-                    Log.Warning(entry.FormattedMessage);
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Skill, GetPurpose(entry), entry.Type, entry.FormattedMessage);
                     break;
                 case SkillLogLevel.Info:
+                    MobaRuntimeLog.Info(MobaRuntimeLogModule.Skill, GetPurpose(entry), entry.Type, entry.FormattedMessage);
+                    break;
                 case SkillLogLevel.Debug:
                 default:
-                    Log.Info(entry.FormattedMessage);
+                    MobaRuntimeLog.Debug(MobaRuntimeLogModule.Skill, GetPurpose(entry), entry.Type, entry.FormattedMessage);
                     break;
             }
+        }
+
+        private static MobaRuntimeLogPurpose GetPurpose(SkillLogEntry entry)
+        {
+            var type = entry != null ? entry.Type : null;
+            if (type == "SkillTick" || type == "SkillPhase" || type == "SkillTarget" || type == "TriggerEval")
+            {
+                return MobaRuntimeLogPurpose.Investigation;
+            }
+
+            if (type == "SkillFail" || type == "SkillInterrupt")
+            {
+                return MobaRuntimeLogPurpose.Rejection;
+            }
+
+            return MobaRuntimeLogPurpose.Runtime;
         }
     }
 

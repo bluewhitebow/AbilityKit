@@ -4,7 +4,6 @@ using AbilityKit.Ability.World.DI;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Math;
 
 
@@ -17,16 +16,15 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
         protected override void Execute(object triggerArgs, SpawnSummonArgs args, ExecCtx<IWorldResolver> ctx)
         {
-            if (!ctx.Context.TryResolve<MobaSummonService>(out var summonSvc) || summonSvc == null)
+            if (!TryResolveRequired(ctx, out MobaSummonService summonSvc))
             {
-                Log.Warning("[Plan] spawn_summon cannot resolve MobaSummonService");
                 return;
             }
 
             var input = MobaPlanActionInputResolver.ResolveSummon(triggerArgs, ctx);
             if (!input.HasCasterActor)
             {
-                Log.Warning("[Plan] spawn_summon requires caster actor");
+                LogRejected("requires caster actor");
                 return;
             }
 
@@ -39,19 +37,22 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (summonId <= 0)
             {
-                Log.Warning("[Plan] spawn_summon requires summon_id > 0");
+                LogRejected("requires summon_id > 0");
                 return;
             }
             var positionMode = (SpawnSummonPositionMode)args.PositionMode;
             if (!input.TryResolveSpawnPosition(positionMode, out var spawnPos))
             {
-                Log.Warning($"[Plan] spawn_summon cannot resolve spawn position. mode={positionMode}");
+                LogRejected($"cannot resolve spawn position. mode={positionMode}");
                 return;
             }
 
             var forward = input.HasAimDirection ? input.AimDirection : Vec3.Forward;
             var sourceContext = input.CreateSourceContext(casterActorId, summonId);
-            summonSvc.TrySummon(casterActorId, summonId, in spawnPos, in forward, in sourceContext);
+            if (summonSvc.TrySummon(casterActorId, summonId, in spawnPos, in forward, in sourceContext))
+            {
+                LogApplied($"caster={casterActorId} summonId={summonId}");
+            }
         }
     }
 }

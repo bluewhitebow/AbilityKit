@@ -29,6 +29,8 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly MobaSkillLoadoutService _loadout;
         private readonly MobaActorLookupService _actors;
         private readonly IMobaSkillPipelineLibrary _library;
+        private readonly IMobaBattleDiagnosticsService _diagnostics;
+        private readonly IMobaBattleExceptionPolicy _exceptions;
 
         private readonly Dictionary<int, SkillPipelineRunner> _runners = new Dictionary<int, SkillPipelineRunner>();
         private readonly Dictionary<int, int> _castSequenceByActor = new Dictionary<int, int>();
@@ -44,7 +46,9 @@ namespace AbilityKit.Demo.Moba.Services
             IUnitResolver units,
             MobaSkillLoadoutService loadout,
             MobaActorLookupService actors,
-            IMobaSkillPipelineLibrary library)
+            IMobaSkillPipelineLibrary library,
+            IMobaBattleDiagnosticsService diagnostics = null,
+            IMobaBattleExceptionPolicy exceptions = null)
         {
             _services = services ?? throw new ArgumentNullException(nameof(services));
             _clock = clock ?? throw new ArgumentNullException(nameof(clock));
@@ -54,13 +58,15 @@ namespace AbilityKit.Demo.Moba.Services
             _loadout = loadout ?? throw new ArgumentNullException(nameof(loadout));
             _actors = actors ?? throw new ArgumentNullException(nameof(actors));
             _library = library ?? throw new ArgumentNullException(nameof(library));
+            _diagnostics = diagnostics;
+            _exceptions = exceptions;
         }
 
         private SkillPipelineRunner GetOrCreateRunner(int actorId)
         {
             if (!_runners.TryGetValue(actorId, out var r) || r == null)
             {
-                r = new SkillPipelineRunner(actorId);
+                r = new SkillPipelineRunner(actorId, _diagnostics, _exceptions);
                 _runners[actorId] = r;
             }
 
@@ -410,7 +416,9 @@ namespace AbilityKit.Demo.Moba.Services
             var dt = _clock.DeltaTime;
             if (dt <= 0f)
             {
-                Log.Warning($"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}");
+                var message = $"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}";
+                if (_diagnostics != null) _diagnostics.Warning("skill.executor.invalidDeltaTime", message);
+                else Log.Warning(message);
                 return;
             }
 

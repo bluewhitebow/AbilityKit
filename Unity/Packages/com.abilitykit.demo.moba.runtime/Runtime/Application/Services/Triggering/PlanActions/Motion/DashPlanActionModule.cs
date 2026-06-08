@@ -1,5 +1,4 @@
 using System;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.MotionSystem.Core;
 using AbilityKit.Core.Common.MotionSystem.Generic;
 using AbilityKit.Core.Math;
@@ -27,7 +26,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (args.Speed <= 0f || args.DurationMs <= 0f)
             {
-                Log.Warning($"[Plan] dash requires positive speed and duration. speed={args.Speed} duration={args.DurationMs}");
+                LogRejected(ctx, $"requires positive speed and duration. speed={args.Speed} duration={args.DurationMs}");
                 return;
             }
 
@@ -36,27 +35,27 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             if (actorId <= 0)
             {
-                Log.Warning($"[Plan] dash cannot resolve actor. applyToCaster={args.ApplyToCaster}");
+                LogRejected(ctx, $"cannot resolve actor. applyToCaster={args.ApplyToCaster}");
                 return;
             }
 
             var registry = input.Actors;
             if (registry == null)
             {
-                Log.Warning($"[Plan] dash requires MobaActorRegistry service");
+                LogRejected(ctx, "requires MobaActorRegistry service");
                 return;
             }
 
             if (!registry.TryGet(actorId, out var entity) || entity == null || !entity.hasMotion)
             {
-                Log.Warning($"[Plan] dash requires actor has Motion component. actorId={actorId}");
+                LogRejected(ctx, $"requires actor has Motion component. actorId={actorId}");
                 return;
             }
 
             var m = entity.motion;
             if (!m.Initialized || m.Pipeline == null)
             {
-                Log.Warning($"[Plan] dash requires Motion initialized. actorId={actorId}");
+                LogRejected(ctx, $"requires Motion initialized. actorId={actorId}");
                 return;
             }
 

@@ -271,18 +271,18 @@ namespace AbilityKit.Triggering.Runtime
                     _observer.OnActionFailed(key, in args, entry.Phase, entry.Priority, entry.Order, 0, entry.Trigger.GetType().Name, 0, 1, ex.Message, in execCtx);
                 }
 
-                if (control.StopPropagation || control.Cancel)
+                if (control.IsHardStopped)
                 {
                     wasInterrupted = true;
                     shortCircuitedCount++;
-                    var reason = control.StopPropagation ? ShortCircuitReason.StopPropagation : ShortCircuitReason.Cancel;
+                    var reason = control.Cancel ? ShortCircuitReason.Cancel : ShortCircuitReason.StopPropagation;
                     _lifecycle.OnShortCircuit(key, in args, entry.Phase, entry.Priority, entry.Order, reason);
                     _observer.OnShortCircuit(key, in args, entry.Phase, entry.Priority, entry.Order,
-                        control.StopPropagation ? ETriggerShortCircuitReason.StopPropagation : ETriggerShortCircuitReason.Cancel, in execCtx);
+                        control.Cancel ? ETriggerShortCircuitReason.Cancel : ETriggerShortCircuitReason.StopPropagation, in execCtx);
 
-                    // --- Cue: Execute 被打断 ---
+                    // --- Cue: Execute 被硬停止打断 ---
                     var interruptCtx = BuildCueContext(key, in args, entry.Phase, entry.Priority, entry.Order, entry.Trigger,
-                        ShortCircuitReason.StopPropagation, control.InterruptSourceName ?? entry.Trigger.GetType().Name, 0, true, control);
+                        reason, control.InterruptSourceName ?? entry.Trigger.GetType().Name, control.InterruptTriggerId, true, control);
                     cue.OnInterrupted(in interruptCtx);
                     break;
                 }

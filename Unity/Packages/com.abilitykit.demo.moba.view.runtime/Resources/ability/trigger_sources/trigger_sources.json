@@ -393,7 +393,7 @@
                                              "reason_param":  0,
                                              "log":  true,
                                              "crit":  0,
-                                             "target_mode":  "Explicit",
+                                             "target_source":  2,
                                              "amount":  "=50.0"
                                          },
                                          {

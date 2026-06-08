@@ -1,10 +1,12 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 using AbilityKit.Core.Continuous;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.GameplayTags;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
 {
-    public sealed class MobaProjectileLaunchContinuous : IMobaTickableContinuous, IMobaContinuousRuntimeDebugSource, IMobaContextSourceProvider
+    public sealed class MobaProjectileLaunchContinuous : MobaContinuousRuntimeBase, IMobaTickableContinuous, IMobaContinuousRuntimeDebugSource, IMobaContextSourceProvider
     {
         private readonly MobaProjectileLaunchConfig _config;
         private readonly IMobaProjectileLaunchExecutor _executor;
@@ -26,71 +28,31 @@ namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
         public int LauncherId => Request.LauncherId;
         public int ProjectileId => Request.ProjectileId;
 
-        public IContinuousConfig Config => _config;
-        public ContinuousState State { get; private set; } = ContinuousState.Inactive;
-        public bool IsActive => State == ContinuousState.Active;
-        public bool IsTerminated => State == ContinuousState.Expired || State == ContinuousState.Aborted;
-        public bool IsPaused => State == ContinuousState.Paused;
-        public float ElapsedSeconds { get; private set; }
+        public override IContinuousConfig Config => _config;
 
-        public event Action<IContinuous, ContinuousEndReason> OnEnded;
-
-        public void Activate()
+        protected override bool OnActivating()
         {
-            if (State == ContinuousState.Active) return;
-            if (IsTerminated) return;
+            if (_started) return true;
 
-            State = ContinuousState.Activating;
-            if (!_started)
-            {
-                _started = true;
-                var request = Request;
-                if (!_executor.TryStartLaunch(in request, out _result) || !_result.Success)
-                {
-                    State = ContinuousState.Aborted;
-                    OnEnded?.Invoke(this, ContinuousEndReason.Interrupted);
-                    return;
-                }
-            }
-
-            State = ContinuousState.Active;
-        }
-
-        public void Pause()
-        {
-            if (State != ContinuousState.Active) return;
-            State = ContinuousState.Paused;
-        }
-
-        public void Resume()
-        {
-            if (State != ContinuousState.Paused) return;
-            State = ContinuousState.Active;
+            _started = true;
+            var request = Request;
+            return _executor.TryStartLaunch(in request, out _result) && _result.Success;
         }
 
         public void TickManaged(float deltaTimeSeconds)
         {
             if (!IsActive || deltaTimeSeconds <= 0f) return;
 
-            ElapsedSeconds += deltaTimeSeconds;
+            AdvanceElapsed(deltaTimeSeconds);
             if (_started && _executor.IsLaunchComplete(in _result))
             {
                 End(ContinuousEndReason.Completed);
             }
         }
 
-        public void End(ContinuousEndReason reason)
+        protected override void OnEnding(ContinuousEndReason reason)
         {
-            if (IsTerminated) return;
-
             StopLaunch(reason);
-            State = reason == ContinuousEndReason.Completed ? ContinuousState.Expired : ContinuousState.Aborted;
-            OnEnded?.Invoke(this, reason);
-        }
-
-        public void Abort(string reason)
-        {
-            End(ContinuousEndReason.Interrupted);
         }
 
         public bool TryGetRuntimeDebugInfo(out MobaContinuousRuntimeDebugInfo info)
@@ -133,20 +95,26 @@ namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
             }
         }
 
-        private sealed class MobaProjectileLaunchConfig : IContinuousConfig, IDurationConfig
+        private sealed class MobaProjectileLaunchConfig : MobaContinuousConfigBase
         {
             private readonly MobaProjectileLaunchContinuous _runtime;
 
             public MobaProjectileLaunchConfig(MobaProjectileLaunchContinuous runtime)
+                : base(
+                    runtime != null && runtime.Request.DurationMs > 0 ? runtime.Request.DurationMs / 1000f : 0f,
+                    new ContinuousTagRequirements(),
+                    Array.Empty<IMobaContinuousModifierSpec>())
             {
                 _runtime = runtime;
-                DurationSeconds = runtime.Request.DurationMs > 0 ? runtime.Request.DurationMs / 1000f : (float?)null;
             }
 
-            public string Id => $"projectile_launch:{_runtime.CasterActorId}:{_runtime.LauncherId}:{_runtime.ProjectileId}:{_runtime.GetHashCode()}";
-            public long OwnerId => _runtime.CasterActorId;
-            public bool CanBeInterrupted => true;
-            public float? DurationSeconds { get; }
+            public override string Id => $"projectile_launch:{_runtime.CasterActorId}:{_runtime.LauncherId}:{_runtime.ProjectileId}:{_runtime.GetHashCode()}";
+            public override long OwnerId => _runtime.CasterActorId;
+            public override bool CanBeInterrupted => true;
+            public override int OwnerActorId => _runtime.CasterActorId;
+            public override int ModifierSourceId => _runtime.GetHashCode();
+            public override GameplayTagSource TagSource => GameplayTagSource.System;
+            public override IReadOnlyList<int> IntervalEffectIds => Array.Empty<int>();
         }
     }
 }

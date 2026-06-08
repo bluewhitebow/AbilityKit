@@ -34,7 +34,16 @@ namespace AbilityKit.Demo.Moba.Services
         [WorldInject(required: false)] private MobaTraceRegistry _trace;
         [WorldInject(required: false)] private IMobaActorSpawnService _actorSpawn;
 
+        private enum SummonOverflowPolicy
+        {
+            ReplaceOldest = 0,
+            RejectNew = 1,
+            ReplaceNewest = 2,
+            AllowOverflow = 3,
+        }
+
         private readonly Dictionary<int, List<int>> _summonsByRootOwner = new Dictionary<int, List<int>>();
+        private readonly List<int> _queryBuffer = new List<int>(16);
 
         public bool TrySummon(int casterActorId, int summonId, in Vec3 pos)
         {
@@ -72,9 +81,15 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (_actorSpawn == null) return false;
 
-            var actorId = _actorIds.Next();
             var rootOwner = OwnerLinkUtil.ResolveRootOwner(caster);
             if (rootOwner <= 0) rootOwner = casterActorId;
+            if (!PrepareCapacityForSummon(rootOwner, summonId, summon.MaxAlivePerOwner, summon.OverflowPolicy))
+            {
+                Log.Warning($"[MobaSummonService] summon rejected by overflow policy. summonId={summonId} casterActorId={casterActorId} rootOwner={rootOwner} maxAlive={summon.MaxAlivePerOwner} policy={summon.OverflowPolicy}");
+                return false;
+            }
+
+            var actorId = _actorIds.Next();
 
             var spec = MobaConverter.ToSummonActorBuildSpec(actorId, summonId, summon, caster, in pos, hasForward, in forward);
             var request = MobaActorSpawnRequest.FromSpec(in spec);
@@ -111,7 +126,7 @@ namespace AbilityKit.Demo.Moba.Services
 
             TryInitSkillLoadout(entity, summon.SkillIds, summon.PassiveSkillIds);
 
-            TrackSummon(rootOwner, actorId, summon.MaxAlivePerOwner, summon.OverflowPolicy);
+            TrackSummon(rootOwner, actorId);
 
             PublishSummonEvent(MobaSummonTriggering.Events.Spawned, rootOwner, casterActorId, actorId, summonId, (int)SummonDespawnReason.None, in spawnSourceContext);
             PublishSummonEvent(MobaSummonTriggering.Events.SpawnedByOwner(rootOwner), rootOwner, casterActorId, actorId, summonId, (int)SummonDespawnReason.None, in spawnSourceContext);
@@ -180,7 +195,57 @@ namespace AbilityKit.Demo.Moba.Services
             return true;
         }
 
-        private void TrackSummon(int rootOwnerActorId, int summonActorId, int maxAlivePerOwner, int overflowPolicy)
+        public int GetAliveCount(int rootOwnerActorId, int summonId = 0)
+        {
+            _queryBuffer.Clear();
+            TryGetSummons(rootOwnerActorId, _queryBuffer, summonId);
+            return _queryBuffer.Count;
+        }
+
+        public bool TryGetSummons(int rootOwnerActorId, List<int> results, int summonId = 0)
+        {
+            if (results == null) return false;
+            results.Clear();
+            if (rootOwnerActorId <= 0) return false;
+            if (!_summonsByRootOwner.TryGetValue(rootOwnerActorId, out var list) || list == null) return false;
+
+            CompactTrackedSummons(rootOwnerActorId, list);
+            for (var i = 0; i < list.Count; i++)
+            {
+                var actorId = list[i];
+                if (!IsTrackedSummon(actorId, summonId)) continue;
+                results.Add(actorId);
+            }
+
+            return results.Count > 0;
+        }
+
+        public int RemoveSummons(int rootOwnerActorId, int summonId, bool removeAll, SummonDespawnReason reason)
+        {
+            if (rootOwnerActorId <= 0) return 0;
+            if (!_summonsByRootOwner.TryGetValue(rootOwnerActorId, out var list) || list == null) return 0;
+
+            CompactTrackedSummons(rootOwnerActorId, list);
+            _queryBuffer.Clear();
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                var actorId = list[i];
+                if (!IsTrackedSummon(actorId, summonId)) continue;
+                _queryBuffer.Add(actorId);
+                if (!removeAll) break;
+            }
+
+            var removed = 0;
+            for (var i = 0; i < _queryBuffer.Count; i++)
+            {
+                if (TryDespawn(_queryBuffer[i], reason)) removed++;
+            }
+
+            _queryBuffer.Clear();
+            return removed;
+        }
+
+        private void TrackSummon(int rootOwnerActorId, int summonActorId)
         {
             if (rootOwnerActorId <= 0) return;
 
@@ -190,18 +255,35 @@ namespace AbilityKit.Demo.Moba.Services
                 _summonsByRootOwner[rootOwnerActorId] = list;
             }
 
-            list.Add(summonActorId);
+            if (!list.Contains(summonActorId)) list.Add(summonActorId);
+        }
 
-            if (maxAlivePerOwner <= 0) return;
-            if (list.Count <= maxAlivePerOwner) return;
+        private bool PrepareCapacityForSummon(int rootOwnerActorId, int summonId, int maxAlivePerOwner, int overflowPolicy)
+        {
+            if (rootOwnerActorId <= 0) return false;
+            if (maxAlivePerOwner <= 0) return true;
 
-            var removeCount = list.Count - maxAlivePerOwner;
-            for (int i = 0; i < removeCount; i++)
+            if (!_summonsByRootOwner.TryGetValue(rootOwnerActorId, out var list) || list == null)
             {
-                if (list.Count == 0) break;
-                var oldest = list[0];
-                list.RemoveAt(0);
-                TryDespawn(oldest, SummonDespawnReason.ReplacedByLimit);
+                return true;
+            }
+
+            CompactTrackedSummons(rootOwnerActorId, list);
+            var count = CountTrackedSummons(list, summonId);
+            if (count < maxAlivePerOwner) return true;
+
+            var policy = (SummonOverflowPolicy)overflowPolicy;
+            switch (policy)
+            {
+                case SummonOverflowPolicy.RejectNew:
+                    return false;
+                case SummonOverflowPolicy.AllowOverflow:
+                    return true;
+                case SummonOverflowPolicy.ReplaceNewest:
+                    return TryDespawn(FindNewestTrackedSummon(list, summonId), SummonDespawnReason.ReplacedByLimit);
+                case SummonOverflowPolicy.ReplaceOldest:
+                default:
+                    return TryDespawn(FindOldestTrackedSummon(list, summonId), SummonDespawnReason.ReplacedByLimit);
             }
         }
 
@@ -210,6 +292,66 @@ namespace AbilityKit.Demo.Moba.Services
             if (rootOwnerActorId <= 0) return;
             if (!_summonsByRootOwner.TryGetValue(rootOwnerActorId, out var list) || list == null) return;
             list.Remove(summonActorId);
+            if (list.Count == 0) _summonsByRootOwner.Remove(rootOwnerActorId);
+        }
+
+        private void CompactTrackedSummons(int rootOwnerActorId, List<int> list)
+        {
+            if (list == null) return;
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                if (IsTrackedSummon(list[i], 0)) continue;
+                list.RemoveAt(i);
+            }
+
+            if (list.Count == 0 && rootOwnerActorId > 0)
+            {
+                _summonsByRootOwner.Remove(rootOwnerActorId);
+            }
+        }
+
+        private int CountTrackedSummons(List<int> list, int summonId)
+        {
+            if (list == null || list.Count == 0) return 0;
+            var count = 0;
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (IsTrackedSummon(list[i], summonId)) count++;
+            }
+
+            return count;
+        }
+
+        private int FindOldestTrackedSummon(List<int> list, int summonId)
+        {
+            if (list == null) return 0;
+            for (var i = 0; i < list.Count; i++)
+            {
+                var actorId = list[i];
+                if (IsTrackedSummon(actorId, summonId)) return actorId;
+            }
+
+            return 0;
+        }
+
+        private int FindNewestTrackedSummon(List<int> list, int summonId)
+        {
+            if (list == null) return 0;
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                var actorId = list[i];
+                if (IsTrackedSummon(actorId, summonId)) return actorId;
+            }
+
+            return 0;
+        }
+
+        private bool IsTrackedSummon(int summonActorId, int summonId)
+        {
+            if (summonActorId <= 0 || _registry == null) return false;
+            if (!_registry.TryGet(summonActorId, out var e) || e == null) return false;
+            if (!e.hasSummonMeta || e.summonMeta == null) return false;
+            return summonId <= 0 || e.summonMeta.SummonId == summonId;
         }
 
         private void PublishSummonEvent(string eventId, int rootOwnerActorId, int ownerActorId, int summonActorId, int summonId, int reason, in SummonSourceContext sourceContext)

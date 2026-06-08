@@ -65,14 +65,18 @@ namespace AbilityKit.Demo.Moba.Services
         }
 
         private readonly int _actorId;
+        private readonly IMobaBattleDiagnosticsService _diagnostics;
+        private readonly IMobaBattleExceptionPolicy _exceptions;
         private readonly List<Entry> _running = new List<Entry>(4);
         private readonly List<RunningSnapshot> _ended = new List<RunningSnapshot>(2);
 
         public string LastFailReason { get; private set; }
 
-        public SkillPipelineRunner(int actorId)
+        public SkillPipelineRunner(int actorId, IMobaBattleDiagnosticsService diagnostics = null, IMobaBattleExceptionPolicy exceptions = null)
         {
             _actorId = actorId;
+            _diagnostics = diagnostics;
+            _exceptions = exceptions;
         }
 
         public int ActorId => _actorId;
@@ -340,8 +344,7 @@ namespace AbilityKit.Demo.Moba.Services
             {
                 SkillLogger.Instance.LogSkillStage(entry.TriggerContext.CasterActorId, entry.TriggerContext.SkillId, instanceId, "PreCast", "Completed");
                 MobaSkillTriggering.Publish(MobaSkillTriggering.Events.PreCastComplete, entry.TriggerContext);
-                try { entry.Context?.RunAndClearCleanups(); }
-                catch { }
+                RunCleanups(in entry, "precast.complete.immediate");
                 // Immediately chain to Cast.
                 return StartCast(ref entry);
             }
@@ -351,8 +354,7 @@ namespace AbilityKit.Demo.Moba.Services
             MobaSkillTriggering.Publish(MobaSkillTriggering.Events.PreCastFail, entry.TriggerContext, entry.FailReason);
 
             TryEndTraceContext(entry, TraceLifecycleReason.Cancelled);
-            try { entry.Context?.RunAndClearCleanups(); }
-            catch { }
+            RunCleanups(in entry, "precast.failed.immediate");
             return false;
         }
 
@@ -398,8 +400,7 @@ namespace AbilityKit.Demo.Moba.Services
                 TryEndTraceContext(entry, TraceLifecycleReason.Completed);
             }
 
-            try { entry.Context?.RunAndClearCleanups(); }
-            catch { }
+            RunCleanups(in entry, state == EAbilityPipelineState.Completed ? "cast.complete.immediate" : "cast.failed.immediate");
 
             return state == EAbilityPipelineState.Completed;
         }
@@ -567,8 +568,7 @@ namespace AbilityKit.Demo.Moba.Services
 
                 TryEndTraceContext(e, TraceLifecycleReason.Cancelled);
 
-                try { e.Context?.RunAndClearCleanups(); }
-                catch { }
+                RunCleanups(e.Context, "cancelAll");
 
                 TryAddEndedSnapshot(in e, SkillCastStage.Cancelled);
             }
@@ -630,8 +630,7 @@ namespace AbilityKit.Demo.Moba.Services
             TryCancelSkillRuntime(in e, MobaSkillRuntimeEndReason.Cancelled);
             TryEndTraceContext(e, TraceLifecycleReason.Cancelled);
 
-            try { e.Context?.RunAndClearCleanups(); }
-            catch { }
+            RunCleanups(e.Context, reason);
             TryAddEndedSnapshot(in e, SkillCastStage.Cancelled);
 
             _running.RemoveAt(index);
@@ -640,6 +639,12 @@ namespace AbilityKit.Demo.Moba.Services
         public void Step(float deltaTime)
         {
             if (_running.Count == 0) return;
+
+            var diagnostics = _diagnostics;
+            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
+            var runningAtStart = _running.Count;
+            var ticked = 0;
+            var ended = 0;
 
             for (int i = _running.Count - 1; i >= 0; i--)
             {
@@ -653,6 +658,7 @@ namespace AbilityKit.Demo.Moba.Services
 
                 if (p.State == EAbilityPipelineState.Executing)
                 {
+                    ticked++;
                     entry.Context.AdvanceTime(deltaTime);
                     p.Tick(deltaTime);
 
@@ -675,8 +681,7 @@ namespace AbilityKit.Demo.Moba.Services
                     {
                         SkillLogger.Instance.LogSkillStage(entry.Context.CasterActorId, entry.Context.SkillId, instanceId, "PreCast", "Completed_ChainingToCast");
                         MobaSkillTriggering.Publish(MobaSkillTriggering.Events.PreCastComplete, entry.TriggerContext);
-                        try { entry.Context?.RunAndClearCleanups(); }
-                        catch { }
+                        RunCleanups(entry.Context, "precast.complete");
                         // Chain to Cast.
                         if (StartCast(ref entry))
                         {
@@ -692,8 +697,7 @@ namespace AbilityKit.Demo.Moba.Services
 
                         TryEndTraceContext(entry, TraceLifecycleReason.Completed);
 
-                        try { entry.Context?.RunAndClearCleanups(); }
-                        catch { }
+                        RunCleanups(entry.Context, "cast.complete");
 
                         TryAddEndedSnapshot(in entry, SkillCastStage.Completed);
                     }
@@ -717,15 +721,118 @@ namespace AbilityKit.Demo.Moba.Services
 
                         TryEndTraceContext(entry, TraceLifecycleReason.Cancelled);
 
-                        try { entry.Context?.RunAndClearCleanups(); }
-                        catch { }
+                        RunCleanups(entry.Context, "pipeline.failed");
 
                         var terminal = entry.Context != null && entry.Context.IsAborted ? SkillCastStage.Cancelled : SkillCastStage.Failed;
                         TryAddEndedSnapshot(in entry, terminal);
                     }
 
                     _running.RemoveAt(i);
+                    ended++;
                 }
+            }
+
+            if (diagnostics != null)
+            {
+                diagnostics.Sample("moba.skill.runner.running", runningAtStart);
+                diagnostics.Sample("moba.skill.runner.ticked", ticked);
+                diagnostics.Sample("moba.skill.runner.ended", ended);
+                diagnostics.RecordDuration(
+                    MobaBattleDiagnosticMetric.SkillRunnerStep,
+                    start,
+                    MobaBattleDiagnosticsDefaults.SkillRunnerStepWarnMs,
+                    $"actor={_actorId} running={runningAtStart} ticked={ticked} ended={ended} remaining={_running.Count}");
+            }
+        }
+
+        private void RunCleanups(SkillPipelineContext context, string reason)
+        {
+            try
+            {
+                context?.RunAndClearCleanups();
+            }
+            catch (Exception ex)
+            {
+                ReportCleanupException(_exceptions, _diagnostics, ex, _actorId, context != null ? context.SkillId : 0, context != null ? context.RuntimeId : 0L, reason);
+            }
+        }
+
+        private static void RunCleanups(in Entry entry, string reason)
+        {
+            try
+            {
+                entry.Context?.RunAndClearCleanups();
+            }
+            catch (Exception ex)
+            {
+                var exceptions = ResolveExceptions(in entry);
+                var diagnostics = exceptions == null ? ResolveDiagnostics(in entry) : null;
+                var actorId = entry.Context != null ? entry.Context.CasterActorId : entry.Request.CasterActorId;
+                var skillId = entry.Context != null ? entry.Context.SkillId : entry.Request.SkillId;
+                var runtimeId = entry.Context != null ? entry.Context.RuntimeId : 0L;
+                ReportCleanupException(exceptions, diagnostics, ex, actorId, skillId, runtimeId, reason);
+            }
+        }
+
+        private static IMobaBattleExceptionPolicy ResolveExceptions(in Entry entry)
+        {
+            try
+            {
+                return entry.Request.WorldServices != null
+                    ? entry.Request.WorldServices.Resolve<IMobaBattleExceptionPolicy>()
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static IMobaBattleDiagnosticsService ResolveDiagnostics(in Entry entry)
+        {
+            try
+            {
+                return entry.Request.WorldServices != null
+                    ? entry.Request.WorldServices.Resolve<IMobaBattleDiagnosticsService>()
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void ReportCleanupException(IMobaBattleDiagnosticsService diagnostics, Exception ex, int actorId, string reason)
+        {
+            ReportCleanupException(null, diagnostics, ex, actorId, 0, 0L, reason);
+        }
+
+        private static void ReportCleanupException(IMobaBattleExceptionPolicy exceptions, IMobaBattleDiagnosticsService diagnostics, Exception ex, int actorId, int skillId, long runtimeId, string reason)
+        {
+            if (exceptions != null)
+            {
+                exceptions.Handle(
+                    ex,
+                    new MobaBattleExceptionContext(
+                        MobaBattleExceptionDomain.Cleanup,
+                        "skill.runner.cleanup",
+                        actorId: actorId,
+                        skillId: skillId,
+                        runtimeId: runtimeId,
+                        detail: "reason=" + reason),
+                    MobaBattleExceptionSeverity.Recoverable);
+            }
+            else if (diagnostics != null)
+            {
+                diagnostics.Exception(
+                    "skill.runner.cleanup",
+                    ex,
+                    $"Skill cleanup failed. actor={actorId} reason={reason}");
+                diagnostics.Counter("moba.skill.runner.cleanupExceptions");
+            }
+            else
+            {
+                Log.Exception(ex, $"[SkillPipelineRunner] Skill cleanup failed. actor={actorId} reason={reason}");
             }
         }
 

@@ -10,8 +10,23 @@ namespace AbilityKit.Game.Flow
         {
             try
             {
-                _handles.RemoteDriven.Runtime?.DestroyWorld(new WorldId(_plan.WorldId));
-                _handles.Confirmed.Runtime?.DestroyWorld(new WorldId((_plan.WorldId ?? "room_1") + "__confirmed"));
+                if (_handles.RemoteDriven.WorldRuntime != null)
+                {
+                    _handles.RemoteDriven.WorldRuntime.DestroyWorld();
+                }
+                else
+                {
+                    _handles.RemoteDriven.Runtime?.DestroyWorld(new WorldId(_plan.WorldId));
+                }
+
+                if (_handles.Confirmed.WorldRuntime != null)
+                {
+                    _handles.Confirmed.WorldRuntime.DestroyWorld();
+                }
+                else
+                {
+                    _handles.Confirmed.Runtime?.DestroyWorld(new WorldId((_plan.WorldId ?? "room_1") + "__confirmed"));
+                }
             }
             catch (Exception ex)
             {
@@ -22,7 +37,6 @@ namespace AbilityKit.Game.Flow
         private void DisposeConfirmedView()
         {
             DetachConfirmedViewFeature();
-            DisposeConfirmedViewSubscriptions();
             DisposeConfirmedViewSnapshotPipeline();
             DisposeConfirmedViewContext();
         }
@@ -36,56 +50,34 @@ namespace AbilityKit.Game.Flow
             }
         }
 
-        private void DisposeConfirmedViewSubscriptions()
-        {
-            _confirmedViewSubLobby?.Dispose();
-            _confirmedViewSubLobby = null;
-            _confirmedViewSubActorTransform?.Dispose();
-            _confirmedViewSubActorTransform = null;
-            _confirmedViewSubStateHash?.Dispose();
-            _confirmedViewSubStateHash = null;
-            _confirmedViewSubActorSpawn?.Dispose();
-            _confirmedViewSubActorSpawn = null;
-        }
-
         private void DisposeConfirmedViewSnapshotPipeline()
         {
-            _confirmedViewCmdHandler?.Dispose();
-            _confirmedViewPipeline?.Dispose();
-            _confirmedViewSnapshots?.Dispose();
-            _confirmedViewCmdHandler = null;
-            _confirmedViewPipeline = null;
-            _confirmedViewSnapshots = null;
+            var runtime = _confirmedViewSnapshotRuntime;
+            _confirmedViewSnapshotRuntime = null;
+
+            if (runtime == null) return;
+
+            try
+            {
+                runtime.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+            }
         }
 
         private void DisposeConfirmedViewContext()
         {
-            if (_confirmedViewCtx != null)
-            {
-                _confirmedViewCtx.FrameSnapshots = null;
-                _confirmedViewCtx.SnapshotPipeline = null;
-                _confirmedViewCtx.CmdHandler = null;
-
-                if (_confirmedViewCtx.EntityNode.IsValid)
-                {
-                    DestroyEntityTree(_confirmedViewCtx.EntityNode);
-                }
-                _confirmedViewCtx.EntityLookup?.Clear();
-                BattleContext.Return(_confirmedViewCtx);
-                _confirmedViewCtx = null;
-            }
+            ConfirmedViewContextDisposer.Dispose(_confirmedViewCtx, DestroyEntityTree);
+            _confirmedViewCtx = null;
         }
 
         private void DisposeRemoteDrivenWorld()
         {
-            _remoteDrivenWorld = null;
-            _remoteDrivenRuntime = null;
-            _remoteDrivenWorlds = null;
+            _handles.RemoteDriven.ClearWorldRuntime();
             _remoteDrivenLastTickedFrame = 0;
-            _remoteDrivenInputSource?.Dispose();
-            _remoteDrivenInputSource = null;
-            _remoteDrivenConsumable = null;
-            _remoteDrivenSink = null;
+            _handles.RemoteDriven.DisposeInput();
         }
 
         private void DisposeConfirmedWorld()
@@ -98,41 +90,47 @@ namespace AbilityKit.Game.Flow
 
         private void ClearConfirmedWorldRuntime()
         {
-            _confirmedWorld = null;
-            _confirmedRuntime = null;
-            _confirmedWorlds = null;
+            _handles.Confirmed.ClearWorldRuntime();
             _confirmedLastTickedFrame = 0;
         }
 
         private void DisposeConfirmedInput()
         {
-            _confirmedInputSource?.Dispose();
-            _confirmedInputSource = null;
-            _confirmedConsumable = null;
-            _confirmedSink = null;
+            _handles.Confirmed.DisposeInput();
         }
 
         private void DisposeConfirmedViewEventPipeline()
         {
-            _confirmedSnapshotViewAdapter?.Dispose();
+            var pipeline = _confirmedViewEventPipeline;
+            _confirmedViewEventPipeline = null;
+
+            if (pipeline != null)
+            {
+                try
+                {
+                    pipeline.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex);
+                }
+            }
+            else
+            {
+                _confirmedSnapshotViewAdapter?.Dispose();
+                _confirmedTriggerBridge?.Dispose();
+                _confirmedSnapshots?.Dispose();
+            }
+
             _confirmedSnapshotViewAdapter = null;
-
-            _confirmedTriggerBridge?.Dispose();
             _confirmedTriggerBridge = null;
-
             _confirmedViewEventSink = null;
-            _confirmedSnapshots?.Dispose();
             _confirmedSnapshots = null;
         }
 
         private void ClearConfirmedDebugContext()
         {
-            BattleFlowDebugProvider.ConfirmedAuthorityWorldStats = null;
-
-            if (_ctx != null)
-            {
-                _ctx.PredictionStats = null;
-            }
+            ConfirmedAuthorityDebugStatsPublisher.Clear(_ctx);
         }
 
         private void DisposeNetworkIoDispatcher()

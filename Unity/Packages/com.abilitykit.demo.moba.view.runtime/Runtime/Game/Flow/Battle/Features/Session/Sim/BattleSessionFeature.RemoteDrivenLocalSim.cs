@@ -1,6 +1,4 @@
-using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
-using AbilityKit.Ability.World.Management;
 using AbilityKit.Network.Abstractions;
 
 namespace AbilityKit.Game.Flow
@@ -8,12 +6,6 @@ namespace AbilityKit.Game.Flow
     public sealed partial class BattleSessionFeature
     {
         private const int MaxRemoteDrivenCatchUpStepsPerUpdate = 5;
-
-        private AbilityKit.Ability.World.Management.IWorldManager _remoteDrivenWorlds
-        {
-            get => _handles.RemoteDriven.Worlds;
-            set => _handles.RemoteDriven.Worlds = value;
-        }
 
         private AbilityKit.Ability.Host.Framework.HostRuntime _remoteDrivenRuntime
         {

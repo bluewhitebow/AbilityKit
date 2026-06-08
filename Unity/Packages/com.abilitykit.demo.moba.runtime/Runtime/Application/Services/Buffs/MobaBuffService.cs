@@ -42,6 +42,8 @@ namespace AbilityKit.Demo.Moba.Services
         [WorldInject(required: false)] private IMobaContinuousTagTemplateRegistry _tagTemplates;
         [WorldInject(required: false)] private IContinuousManager _continuous;
         [WorldInject(required: false)] private MobaSkillCastRuntimeService _skillRuntimes;
+        [WorldInject(required: false)] private IMobaBattleDiagnosticsService _diagnostics;
+        [WorldInject(required: false)] private IMobaBattleExceptionPolicy _exceptions;
         private BuffLifecycleExecutor _lifecycle;
         private long _nextCommandSeq;
         private readonly List<BuffCommand> _pending = new List<BuffCommand>(32);
@@ -105,6 +107,40 @@ namespace AbilityKit.Demo.Moba.Services
             return true;
         }
 
+        public int RemoveBuffsImmediate(int targetActorId, int buffId, int sourceActorId, bool removeAll, TraceLifecycleReason reason)
+        {
+            if (targetActorId <= 0) return 0;
+
+            var target = TryGetActorEntity(targetActorId);
+            if (target == null || !target.hasBuffs || target.buffs.Active == null || target.buffs.Active.Count == 0)
+            {
+                return 0;
+            }
+
+            var active = target.buffs.Active;
+            var queued = 0;
+            for (var i = active.Count - 1; i >= 0; i--)
+            {
+                var runtime = active[i];
+                if (runtime == null) continue;
+                if (buffId > 0 && runtime.BuffId != buffId) continue;
+                if (sourceActorId > 0 && runtime.SourceId != sourceActorId) continue;
+
+                var removeSourceId = sourceActorId > 0 ? sourceActorId : runtime.SourceId;
+                if (!EnqueueRemove(targetActorId, runtime.BuffId, removeSourceId, reason)) continue;
+
+                queued++;
+                if (!removeAll) break;
+            }
+
+            if (queued > 0)
+            {
+                DrainPending(maxCommands: Math.Max(256, queued + 32));
+            }
+
+            return queued;
+        }
+
         public void DrainPending(int maxCommands)
         {
             if (maxCommands <= 0) return;
@@ -112,16 +148,29 @@ namespace AbilityKit.Demo.Moba.Services
             // Protect against re-entrancy if drain triggers effects that call ApplyBuffImmediate again.
             if (_draining > 0) return;
 
+            var diagnostics = _diagnostics;
+            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
+            var pendingAtStart = _pending.Count;
+            var executed = 0;
+
             _draining++;
             try
             {
-                var executed = 0;
                 var cursor = 0;
                 while (cursor < _pending.Count)
                 {
                     if (executed >= maxCommands)
                     {
-                        Log.Warning($"[MobaBuffService] DrainPending exceeded maxCommands={maxCommands}. pending={_pending.Count}.");
+                        var message = $"[MobaBuffService] DrainPending exceeded maxCommands={maxCommands}. pending={_pending.Count}.";
+                        if (diagnostics != null)
+                        {
+                            diagnostics.Warning("buff.drain.maxCommands", message);
+                            diagnostics.Counter("moba.buff.drain.maxCommandsExceeded");
+                        }
+                        else
+                        {
+                            Log.Warning(message);
+                        }
                         break;
                     }
 
@@ -142,7 +191,30 @@ namespace AbilityKit.Demo.Moba.Services
                     }
                     catch (Exception ex)
                     {
-                        Log.Exception(ex, $"[MobaBuffService] Execute buff command failed. kind={cmd.Kind} buffId={cmd.BuffId}");
+                        var exceptions = _exceptions;
+                        if (exceptions != null)
+                        {
+                            exceptions.Handle(
+                                ex,
+                                new MobaBattleExceptionContext(
+                                    MobaBattleExceptionDomain.Buff,
+                                    "command.execute",
+                                    actorId: cmd.ApplyRequest != null ? cmd.ApplyRequest.TargetActorId : cmd.RemoveRequest != null ? cmd.RemoveRequest.TargetActorId : 0,
+                                    detail: $"kind={cmd.Kind} buffId={cmd.BuffId}"),
+                                MobaBattleExceptionSeverity.Recoverable);
+                        }
+                        else if (diagnostics != null)
+                        {
+                            diagnostics.Exception(
+                                "buff.command.execute",
+                                ex,
+                                $"Execute buff command failed. kind={cmd.Kind} buffId={cmd.BuffId}");
+                            diagnostics.Counter("moba.buff.command.exceptions");
+                        }
+                        else
+                        {
+                            Log.Exception(ex, $"[MobaBuffService] Execute buff command failed. kind={cmd.Kind} buffId={cmd.BuffId}");
+                        }
                     }
 
                     executed++;
@@ -156,6 +228,17 @@ namespace AbilityKit.Demo.Moba.Services
             finally
             {
                 _draining--;
+                if (diagnostics != null)
+                {
+                    diagnostics.Sample("moba.buff.drain.pending", pendingAtStart);
+                    diagnostics.Sample("moba.buff.drain.executed", executed);
+                    diagnostics.Gauge("moba.buff.pending", _pending.Count);
+                    diagnostics.RecordDuration(
+                        MobaBattleDiagnosticMetric.BuffDrain,
+                        start,
+                        MobaBattleDiagnosticsDefaults.BuffDrainWarnMs,
+                        $"pending={pendingAtStart} executed={executed} remaining={_pending.Count}");
+                }
             }
         }
 

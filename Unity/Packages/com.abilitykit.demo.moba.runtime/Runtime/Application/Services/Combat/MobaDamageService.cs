@@ -11,11 +11,13 @@ namespace AbilityKit.Demo.Moba.Services
     {
         private readonly MobaActorLookupService _actors;
         private readonly MobaDamageEventSnapshotService _snapshots;
+        private readonly MobaCombatRulesService _rules;
 
-        public MobaDamageService(MobaActorLookupService actors, MobaDamageEventSnapshotService snapshots)
+        public MobaDamageService(MobaActorLookupService actors, MobaDamageEventSnapshotService snapshots, MobaCombatRulesService rules = null)
         {
             _actors = actors ?? throw new ArgumentNullException(nameof(actors));
             _snapshots = snapshots ?? throw new ArgumentNullException(nameof(snapshots));
+            _rules = rules;
         }
 
         public float ApplyDamage(int attackerActorId, int targetActorId, int damageType, float value, int reasonKind = 0, int reasonParam = 0)
@@ -23,6 +25,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (targetActorId <= 0) return 0f;
             if (value <= 0f) return 0f;
 
+            if (_rules != null && !_rules.CanReceiveDamage(attackerActorId, targetActorId).Passed) return 0f;
             if (!_actors.TryGetActorEntity(targetActorId, out var target) || target == null) return 0f;
 
             var attrs = target.GetMobaAttrs();
@@ -43,6 +46,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (targetActorId <= 0) return 0f;
             if (value <= 0f) return 0f;
 
+            if (_rules != null && (!_rules.TryGetActor(targetActorId, out _) || !_rules.IsAlive(targetActorId))) return 0f;
             if (!_actors.TryGetActorEntity(targetActorId, out var target) || target == null) return 0f;
 
             var attrs = target.GetMobaAttrs();

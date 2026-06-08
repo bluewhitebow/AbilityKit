@@ -32,7 +32,8 @@
         "AbilityKit.Combat.Collision.Abstractions",
         "AbilityKit.Triggering",
         "AbilityKit.Pipeline",
-        "AbilityKit.Trace"
+        "AbilityKit.Trace",
+        "AbilityKit.Diagnostics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

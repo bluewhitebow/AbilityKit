@@ -49,26 +49,18 @@ namespace AbilityKit.Game.Flow
                 feed: packet =>
                 {
                     _confirmedSnapshots?.Feed(packet);
-                    _confirmedViewSnapshots?.Feed(packet);
+                    _confirmedViewSnapshotRuntime?.Snapshots?.Feed(packet);
                 });
 
             _confirmedInputSource.TrimBefore(_confirmedLastTickedFrame - 120);
 
-            if (BattleFlowDebugProvider.ConfirmedAuthorityWorldStats != null)
-            {
-                var s = BattleFlowDebugProvider.ConfirmedAuthorityWorldStats;
-                s.ConfirmedFrame = confirmedFrame;
-                s.PredictedFrame = predictedFrame;
-                s.AuthorityInputTargetFrame = inputTargetFrame;
-                s.AuthorityDriveTargetFrame = driveTargetFrame;
-                s.AuthorityLastTickedFrame = _confirmedLastTickedFrame;
-
-                if (_confirmedViewEventSink != null)
-                {
-                    s.ViewEventTotal = _confirmedViewEventSink.Total;
-                    s.RecentViewEvents = _confirmedViewEventSink.GetRecentLines();
-                }
-            }
+            ConfirmedAuthorityDebugStatsPublisher.Update(
+                confirmedFrame,
+                predictedFrame,
+                inputTargetFrame,
+                driveTargetFrame,
+                _confirmedLastTickedFrame,
+                _confirmedViewEventSink);
         }
     }
 }

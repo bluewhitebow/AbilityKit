@@ -100,6 +100,10 @@ namespace AbilityKit.Demo.Moba.Services
             return FromLineageContext(in lineageContext, in skillRuntimeHandle);
         }
 
+        /// <summary>
+        /// Bridge API for payloads that still carry only actor/config/context primitives.
+        /// Prefer FromLineageContext, FromTraceContext, or propagating an existing origin in new runtime code.
+        /// </summary>
         public static MobaGameplayOrigin FromLegacy(
             int sourceActorId,
             int targetActorId,

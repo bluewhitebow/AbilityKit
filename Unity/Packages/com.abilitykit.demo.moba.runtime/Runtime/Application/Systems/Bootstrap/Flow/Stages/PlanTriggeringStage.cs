@@ -41,7 +41,7 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                     effects.InitializePlanActions();
 
                     services.TryResolve<MobaEventSubscriptionRegistry>(out var eventRegistry);
-                    MobaGameplayTriggerValidator.Validate(db, eventRegistry);
+                    RunRuntimeValidation(services);
 
                     if (services.TryResolve<TriggerRunner<IWorldResolver>>(out var runner) && runner != null)
                     {
@@ -57,6 +57,32 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
             catch (Exception ex)
             {
                 Log.Exception(ex, "[PlanTriggeringStage] PlanTriggering init exception");
+            }
+        }
+
+        private static void RunRuntimeValidation(IWorldResolver services)
+        {
+            if (services == null) return;
+
+            if (!services.TryResolve<IMobaRuntimeValidationRegistry>(out var registry) || registry == null)
+            {
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(PlanTriggeringStage), "Runtime validation skipped: registry not resolved.");
+                return;
+            }
+
+            registry.Register(new MobaGameplayTriggerRuntimeValidator());
+
+            if (!services.TryResolve<IMobaRuntimeValidationRunner>(out var runner) || runner == null)
+            {
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(PlanTriggeringStage), "Runtime validation skipped: runner not resolved.");
+                return;
+            }
+
+            var context = new MobaRuntimeValidationContext(services, nameof(PlanTriggeringStage));
+            var report = runner.ValidateAll(in context);
+            if (report != null && report.ShouldBlockStartup)
+            {
+                MobaRuntimeLog.Error(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(PlanTriggeringStage), "Runtime validation has blocking errors. " + report.FormatSummary());
             }
         }
 

@@ -1,0 +1,144 @@
+using System;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
+
+namespace AbilityKit.Demo.Moba.Services
+{
+    public enum MobaBattleExceptionSeverity
+    {
+        Trace = 0,
+        Warning = 1,
+        Recoverable = 2,
+        Critical = 3,
+        Fatal = 4,
+    }
+
+    public enum MobaBattleExceptionDomain
+    {
+        Unknown = 0,
+        Bootstrap = 1,
+        WorldSystem = 2,
+        Service = 3,
+        Skill = 4,
+        Buff = 5,
+        Projectile = 6,
+        Damage = 7,
+        Triggering = 8,
+        Cleanup = 9,
+        Snapshot = 10,
+        Input = 11,
+        Summon = 12,
+    }
+
+    public readonly struct MobaBattleExceptionContext
+    {
+        public readonly MobaBattleExceptionDomain Domain;
+        public readonly string Operation;
+        public readonly int ActorId;
+        public readonly int SkillId;
+        public readonly long RuntimeId;
+        public readonly string Detail;
+
+        public MobaBattleExceptionContext(
+            MobaBattleExceptionDomain domain,
+            string operation,
+            int actorId = 0,
+            int skillId = 0,
+            long runtimeId = 0L,
+            string detail = null)
+        {
+            Domain = domain;
+            Operation = operation;
+            ActorId = actorId;
+            SkillId = skillId;
+            RuntimeId = runtimeId;
+            Detail = detail;
+        }
+
+        public string BuildKey(MobaBattleExceptionSeverity severity)
+        {
+            var operation = string.IsNullOrEmpty(Operation) ? "unknown" : Operation;
+            return "exception:" + Domain + ":" + severity + ":" + operation;
+        }
+
+        public string BuildMessage(MobaBattleExceptionSeverity severity)
+        {
+            var operation = string.IsNullOrEmpty(Operation) ? "unknown" : Operation;
+            var message = $"Battle exception. severity={severity} domain={Domain} operation={operation}";
+            if (ActorId != 0) message += $" actor={ActorId}";
+            if (SkillId != 0) message += $" skill={SkillId}";
+            if (RuntimeId != 0L) message += $" runtime={RuntimeId}";
+            if (!string.IsNullOrEmpty(Detail)) message += " " + Detail;
+            return message;
+        }
+    }
+
+    public interface IMobaBattleExceptionPolicy
+    {
+        void Handle(Exception exception, in MobaBattleExceptionContext context, MobaBattleExceptionSeverity severity);
+        bool TryHandle(Exception exception, in MobaBattleExceptionContext context, MobaBattleExceptionSeverity severity);
+    }
+
+    [WorldService(typeof(IMobaBattleExceptionPolicy), WorldLifetime.Scoped)]
+    [WorldService(typeof(MobaBattleExceptionPolicyService), WorldLifetime.Scoped)]
+    public sealed class MobaBattleExceptionPolicyService : IMobaBattleExceptionPolicy, IService
+    {
+        [WorldInject(required: false)] private IMobaBattleDiagnosticsService _diagnostics;
+
+        public void Handle(Exception exception, in MobaBattleExceptionContext context, MobaBattleExceptionSeverity severity)
+        {
+            if (!TryHandle(exception, in context, severity) && IsFatal(severity))
+            {
+                throw exception;
+            }
+        }
+
+        public bool TryHandle(Exception exception, in MobaBattleExceptionContext context, MobaBattleExceptionSeverity severity)
+        {
+            if (exception == null) return false;
+
+            var key = context.BuildKey(severity);
+            var message = context.BuildMessage(severity);
+            var maxCount = GetMaxCount(severity);
+
+            if (_diagnostics != null)
+            {
+                _diagnostics.Exception(key, exception, message, maxCount);
+                _diagnostics.Counter("moba.exception." + context.Domain);
+                _diagnostics.Counter("moba.exception." + severity);
+                return true;
+            }
+
+            AbilityKit.Core.Common.Log.Log.Exception(exception, "[MobaExceptionPolicy] " + message);
+            return true;
+        }
+
+        public void Dispose()
+        {
+        }
+
+        private static int GetMaxCount(MobaBattleExceptionSeverity severity)
+        {
+            switch (severity)
+            {
+                case MobaBattleExceptionSeverity.Trace:
+                    return 1;
+                case MobaBattleExceptionSeverity.Warning:
+                    return MobaBattleDiagnosticsDefaults.DefaultWarningLimit;
+                case MobaBattleExceptionSeverity.Recoverable:
+                    return MobaBattleDiagnosticsDefaults.DefaultExceptionLimit;
+                case MobaBattleExceptionSeverity.Critical:
+                case MobaBattleExceptionSeverity.Fatal:
+                    return 0;
+                default:
+                    return MobaBattleDiagnosticsDefaults.DefaultExceptionLimit;
+            }
+        }
+
+        private static bool IsFatal(MobaBattleExceptionSeverity severity)
+        {
+            return severity == MobaBattleExceptionSeverity.Fatal;
+        }
+    }
+}

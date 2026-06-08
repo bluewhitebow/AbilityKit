@@ -34,6 +34,7 @@ namespace AbilityKit.Demo.Moba.Services
         public const int Attribute = 1;
         public const int StateMachineParameter = 2;
         public const int StateFlag = 3;
+        public const int SkillParameter = 4;
         public const int Custom = 255;
     }
 

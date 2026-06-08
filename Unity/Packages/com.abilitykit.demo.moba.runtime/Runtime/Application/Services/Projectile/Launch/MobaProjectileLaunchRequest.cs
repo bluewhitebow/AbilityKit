@@ -11,6 +11,7 @@ namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
             ProjectileMO projectile,
             int countPerShot,
             float fanAngleDeg,
+            int durationMs,
             in Vec3 spawnPosition,
             in Vec3 direction,
             in ProjectileSourceContext sourceContext)
@@ -20,6 +21,7 @@ namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
             Projectile = projectile;
             CountPerShot = countPerShot;
             FanAngleDeg = fanAngleDeg;
+            DurationMs = durationMs < 0 ? 0 : durationMs;
             SpawnPosition = spawnPosition;
             Direction = direction;
             SourceContext = sourceContext;
@@ -30,12 +32,12 @@ namespace AbilityKit.Demo.Moba.Services.Projectile.Launch
         public ProjectileMO Projectile { get; }
         public int CountPerShot { get; }
         public float FanAngleDeg { get; }
+        public int DurationMs { get; }
         public Vec3 SpawnPosition { get; }
         public Vec3 Direction { get; }
         public ProjectileSourceContext SourceContext { get; }
 
         public int LauncherId => Launcher != null ? Launcher.Id : 0;
         public int ProjectileId => Projectile != null ? Projectile.Id : 0;
-        public int DurationMs => Launcher != null ? Launcher.DurationMs : 0;
     }
 }

@@ -2,7 +2,6 @@
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Coordinator;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Generic;
 using AbilityKit.Ability.Host;
 using AbilityKit.Protocol.Moba;
@@ -17,12 +16,15 @@ namespace AbilityKit.Demo.Moba.Services
     /// <summary>
     /// Legacy fallback that converts spawn data into a game-start request.
     /// The formal MOBA startup path provides WorldInitData before bootstrap and uses StartGameStage.
+    /// Keep enabled only for generated-project compatibility or smoke tests that still call ISpawnService directly.
     /// </summary>
     [WorldService(typeof(MobaSpawnService))]
     [WorldService(typeof(ILogicWorldSpawnService))]
     [WorldService(typeof(ISpawnService))]
     public sealed class MobaSpawnService : ILogicWorldSpawnService, ISpawnService
     {
+        public static bool EnableLegacySpawnFallback { get; set; } = true;
+
         [WorldInject] private IMobaGameStartPort _gameStart;
 
         public bool CreateSpawns(PlayerSpawnData[] spawns)
@@ -34,17 +36,23 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (spawns == null || spawns.Length == 0)
             {
-                Log.Warning("[MobaSpawnService] No spawns to create");
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(MobaSpawnService), "No spawns to create");
+                return false;
+            }
+
+            if (!EnableLegacySpawnFallback)
+            {
+                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Rejection, nameof(MobaSpawnService), "Legacy spawn fallback is disabled; provide WorldInitData and start through StartGameStage.");
                 return false;
             }
 
             if (_gameStart == null)
             {
-                Log.Error("[MobaSpawnService] IMobaGameStartPort not found, cannot create spawns");
+                MobaRuntimeLog.Error(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(MobaSpawnService), "IMobaGameStartPort not found, cannot create spawns");
                 return false;
             }
 
-            Log.Warning("[MobaSpawnService] Legacy spawn fallback is starting battle directly; prefer create-world init payload");
+            MobaRuntimeLog.WarningOnce("moba.spawn.legacyFallback", MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(MobaSpawnService), "Legacy spawn fallback is starting battle directly; prefer create-world init payload.");
 
             try
             {
@@ -62,18 +70,18 @@ namespace AbilityKit.Demo.Moba.Services
 
                 if (result.Succeeded)
                 {
-                    Log.Info($"[MobaSpawnService] Legacy spawn fallback started battle with {spawns.Length} spawns");
+                    MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Lifecycle, nameof(MobaSpawnService), $"Legacy spawn fallback started battle with {spawns.Length} spawns");
                 }
                 else
                 {
-                    Log.Warning($"[MobaSpawnService] Legacy spawn fallback did not start battle. {result}");
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Rejection, nameof(MobaSpawnService), $"Legacy spawn fallback did not start battle. {result}");
                 }
 
                 return result.Succeeded;
             }
             catch (Exception ex)
             {
-                Log.Exception(ex, "[MobaSpawnService] CreateLogicWorldSpawns failed");
+                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Exception, nameof(MobaSpawnService), "CreateLogicWorldSpawns failed");
                 return false;
             }
         }

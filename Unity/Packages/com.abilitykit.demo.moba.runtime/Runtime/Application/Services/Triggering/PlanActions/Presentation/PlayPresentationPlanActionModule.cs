@@ -7,7 +7,6 @@ using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.Triggering.Definitions;
 using AbilityKit.Demo.Moba.Services;
-using AbilityKit.Core.Common.Log;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Core.Math;
 using AbilityKit.Triggering.Eventing;
@@ -27,13 +26,13 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (args.TemplateId <= 0)
             {
-                Log.Warning("[Plan] play_presentation requires templateId > 0");
+                LogRejected(ctx, "requires templateId > 0");
                 return;
             }
 
             if (!ctx.Context.TryResolve<AbilityKit.Triggering.Eventing.IEventBus>(out var bus) || bus == null)
             {
-                Log.Warning("[Plan] play_presentation cannot resolve IEventBus");
+                LogRejected(ctx, "cannot resolve IEventBus");
                 return;
             }
 

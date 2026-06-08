@@ -1,6 +1,7 @@
 using AbilityKit.Ability.World;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
+using AbilityKit.Core.Continuous;
 using AbilityKit.Demo.Moba.Services;
 
 namespace AbilityKit.Demo.Moba.Systems
@@ -9,7 +10,7 @@ namespace AbilityKit.Demo.Moba.Systems
     public sealed class MobaContinuousTickSystem : WorldSystemBase
     {
         private IWorldClock _clock;
-        private MobaContinuousManager _continuous;
+        private IContinuousManager _continuous;
 
         public MobaContinuousTickSystem(global::Entitas.IContexts contexts, IWorldResolver services)
             : base(contexts, services)
@@ -29,7 +30,10 @@ namespace AbilityKit.Demo.Moba.Systems
             var dt = _clock.DeltaTime;
             if (dt <= 0f) return;
 
-            _continuous.Tick(dt);
+            if (_continuous is MobaContinuousManager mobaContinuous)
+            {
+                mobaContinuous.Tick(dt);
+            }
         }
     }
 }

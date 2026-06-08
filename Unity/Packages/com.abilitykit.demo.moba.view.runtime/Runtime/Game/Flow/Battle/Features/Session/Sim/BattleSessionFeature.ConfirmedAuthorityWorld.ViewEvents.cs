@@ -3,45 +3,30 @@ using AbilityKit.Game.Flow.Battle.ViewEvents;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot;
 using AbilityKit.Game.Flow.Battle.ViewEvents.Triggering;
 
+using System;
+using AbilityKit.Ability.Host;
+using AbilityKit.Ability.Triggering;
+using AbilityKit.Protocol.Moba;
+using AbilityKit.Protocol.Moba.StateSync;
+
 namespace AbilityKit.Game.Flow
 {
     public sealed partial class BattleSessionFeature
     {
         private void EnsureConfirmedAuthorityViewEventPipeline()
         {
-            // Build an independent snapshot/view-event pipeline for confirmed authority world.
             if (_session == null) return;
 
-            _confirmedSnapshots = new FrameSnapshotDispatcher();
-            // Debug-only: register decoders so BattleSnapshotViewAdapter can decode payloads.
-            // Do NOT register cmd handlers here to avoid applying snapshots to the main battle entity world.
-            AbilityKit.Game.Flow.Snapshot.BattleSnapshotRegistry.RegisterAll(
-                dispatcherDecoders: _confirmedSnapshots,
-                pipelineDecoders: _confirmedSnapshots,
-                pipeline: new NullSnapshotPipelineStageRegistry(),
-                cmd: new NullSnapshotCmdHandlerRegistry());
+            _confirmedViewEventPipeline = ConfirmedViewEventPipelineFactory.Create(
+                _confirmedWorld,
+                _plan.ViewEventSourceMode,
+                maxDebugLines: 32);
 
-            AbilityKit.Game.Flow.Snapshot.SharedSnapshotRegistry.RegisterAll(
-                dispatcherDecoders: _confirmedSnapshots,
-                pipelineDecoders: _confirmedSnapshots,
-                pipeline: new NullSnapshotPipelineStageRegistry(),
-                cmd: new NullSnapshotCmdHandlerRegistry());
-
-            _confirmedViewEventSink = new DebugBattleViewEventSink(maxLines: 32);
-
-            var mode = _plan.ViewEventSourceMode;
-            if (mode == BattleViewEventSourceMode.SnapshotOnly || mode == BattleViewEventSourceMode.Hybrid)
-            {
-                _confirmedSnapshotViewAdapter = new BattleSnapshotViewAdapter(_confirmedSnapshots, _confirmedViewEventSink);
-            }
-
-            if (mode == BattleViewEventSourceMode.TriggerOnly || mode == BattleViewEventSourceMode.Hybrid)
-            {
-                if (_confirmedWorld?.Services != null && _confirmedWorld.Services.TryResolve(out AbilityKit.Ability.Triggering.IEventBus bus) && bus != null)
-                {
-                    _confirmedTriggerBridge = new BattleTriggerEventViewBridge(bus, _confirmedViewEventSink);
-                }
-            }
+            _confirmedSnapshots = _confirmedViewEventPipeline.Snapshots;
+            _confirmedViewEventSink = _confirmedViewEventPipeline.EventSink;
+            _confirmedSnapshotViewAdapter = _confirmedViewEventPipeline.SnapshotViewAdapter;
+            _confirmedTriggerBridge = _confirmedViewEventPipeline.TriggerBridge;
         }
+
     }
 }

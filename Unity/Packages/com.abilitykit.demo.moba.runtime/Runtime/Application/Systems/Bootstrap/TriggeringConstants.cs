@@ -33,6 +33,12 @@ namespace AbilityKit.Demo.Moba.Systems
             public const string ShootProjectile = "shoot_projectile";
             public const string AddBuff = "add_buff";
             public const string RemoveBuff = "remove_buff";
+            public const string CancelSkill = "cancel_skill";
+            public const string AddShield = "add_shield";
+            public const string RemoveShield = "remove_shield";
+            public const string RemoveSummon = "remove_summon";
+            public const string RemoveArea = "remove_area";
+            public const string SpawnArea = "spawn_area";
             public const string PlayEffect = "play_effect";
             public const string PlaySound = "play_sound";
             public const string Heal = "heal";
@@ -117,6 +123,13 @@ namespace AbilityKit.Demo.Moba.Systems
         public static ActionId DebugLogId => GetActionId(Actions.DebugLog);
         public static ActionId ShootProjectileId => GetActionId(Actions.ShootProjectile);
         public static ActionId AddBuffId => GetActionId(Actions.AddBuff);
+        public static ActionId RemoveBuffId => GetActionId(Actions.RemoveBuff);
+        public static ActionId CancelSkillId => GetActionId(Actions.CancelSkill);
+        public static ActionId AddShieldId => GetActionId(Actions.AddShield);
+        public static ActionId RemoveShieldId => GetActionId(Actions.RemoveShield);
+        public static ActionId RemoveSummonId => GetActionId(Actions.RemoveSummon);
+        public static ActionId RemoveAreaId => GetActionId(Actions.RemoveArea);
+        public static ActionId SpawnAreaId => GetActionId(Actions.SpawnArea);
         public static ActionId SpawnSummonId => GetActionId(Actions.SpawnSummon);
         public static ActionId PlayPresentationId => GetActionId(Actions.PlayPresentation);
         public static ActionId EndGameId => GetActionId(Actions.EndGame);

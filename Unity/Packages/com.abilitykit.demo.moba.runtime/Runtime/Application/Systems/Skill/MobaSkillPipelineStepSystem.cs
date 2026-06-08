@@ -15,9 +15,9 @@ namespace AbilityKit.Demo.Moba.Systems
         private IMobaSkillPipelineLibrary _pipelines;
         private IWorldClock _clock;
 
+        private IMobaBattleDiagnosticsService _diagnostics;
+        private IMobaBattleExceptionPolicy _exceptions;
         private global::Entitas.IGroup<global::ActorEntity> _group;
-        private int _executeLogCount;
-        private int _stepLogCount;
 
         public MobaSkillPipelineStepSystem(global::Entitas.IContexts contexts, IWorldResolver services)
             : base(contexts, services)
@@ -28,6 +28,8 @@ namespace AbilityKit.Demo.Moba.Systems
         {
             Services.TryResolve(out _skills);
             Services.TryResolve(out _clock);
+            Services.TryResolve(out _diagnostics);
+            Services.TryResolve(out _exceptions);
             _group = Contexts.Actor().GetGroup(ActorMatcher.AllOf(ActorComponentsLookup.ActorId));
             if (_skills == null || _clock == null || _group == null)
             {
@@ -37,39 +39,72 @@ namespace AbilityKit.Demo.Moba.Systems
 
         protected override void OnExecute()
         {
+            var diagnostics = _diagnostics;
             if (_skills == null || _clock == null)
             {
-                if (_executeLogCount++ < 3)
-                {
-                    Log.Warning($"[MobaSkillPipelineStepSystem] Skip execute: hasSkills={_skills != null}, hasClock={_clock != null}");
-                }
+                var message = $"[MobaSkillPipelineStepSystem] Skip execute: hasSkills={_skills != null}, hasClock={_clock != null}";
+                if (diagnostics != null) diagnostics.Warning("skill.pipeline.missingDependencies", message);
+                else Log.Warning(message);
                 return;
             }
 
             if (_clock.DeltaTime <= 0f)
             {
-                if (_executeLogCount++ < 3)
-                {
-                    Log.Warning($"[MobaSkillPipelineStepSystem] Skip execute: deltaTime={_clock.DeltaTime:0.####}");
-                }
+                var message = $"[MobaSkillPipelineStepSystem] Skip execute: deltaTime={_clock.DeltaTime:0.####}";
+                if (diagnostics != null) diagnostics.Warning("skill.pipeline.invalidDeltaTime", message);
+                else Log.Warning(message);
                 return;
             }
 
             var entities = _group.GetEntities();
             if (entities == null || entities.Length == 0)
             {
-                if (_executeLogCount++ < 3)
-                {
-                    Log.Warning("[MobaSkillPipelineStepSystem] Skip execute: actor group empty.");
-                }
+                if (diagnostics != null) diagnostics.Warning("skill.pipeline.emptyGroup", "[MobaSkillPipelineStepSystem] Skip execute: actor group empty.");
+                else Log.Warning("[MobaSkillPipelineStepSystem] Skip execute: actor group empty.");
                 return;
             }
 
+            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
+            var stepped = 0;
             for (int i = 0; i < entities.Length; i++)
             {
                 var e = entities[i];
                 if (e == null || !e.hasActorId) continue;
-                _skills.Step(e.actorId.Value);
+                var actorId = e.actorId.Value;
+                try
+                {
+                    _skills.Step(actorId);
+                    stepped++;
+                }
+                catch (Exception ex)
+                {
+                    var exceptions = _exceptions;
+                    if (exceptions != null)
+                    {
+                        exceptions.Handle(
+                            ex,
+                            new MobaBattleExceptionContext(
+                                MobaBattleExceptionDomain.WorldSystem,
+                                "skill.pipeline.step",
+                                actorId: actorId),
+                            MobaBattleExceptionSeverity.Recoverable);
+                    }
+                    else
+                    {
+                        Log.Exception(ex, $"[MobaSkillPipelineStepSystem] Skill pipeline step failed. actor={actorId}");
+                    }
+                }
+            }
+
+            if (diagnostics != null)
+            {
+                diagnostics.Sample("moba.skill.pipeline.actorCandidates", entities.Length);
+                diagnostics.Sample("moba.skill.pipeline.stepped", stepped);
+                diagnostics.RecordDuration(
+                    MobaBattleDiagnosticMetric.SkillPipelineStep,
+                    start,
+                    MobaBattleDiagnosticsDefaults.SkillPipelineStepWarnMs,
+                    $"candidates={entities.Length} stepped={stepped}");
             }
         }
     }
