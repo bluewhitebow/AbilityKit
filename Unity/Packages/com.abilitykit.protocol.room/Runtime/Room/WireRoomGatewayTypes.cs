@@ -49,6 +49,13 @@ namespace AbilityKit.Protocol.Room
         [MemoryPackOrder(3)] public string RoomId { get; set; }
     }
 
+    public enum WireRoomJoinKind
+    {
+        TeamLobby = 0,
+        Reconnect = 1,
+        LateJoin = 2
+    }
+
     [MemoryPackable]
     public partial struct WireJoinRoomRes
     {
@@ -58,6 +65,8 @@ namespace AbilityKit.Protocol.Room
         [MemoryPackOrder(3)] public WireRoomSnapshot Snapshot { get; set; }
         [MemoryPackOrder(4)] public WireWorldStartAnchor WorldStartAnchor { get; set; }
         [MemoryPackOrder(5)] public string Message { get; set; }
+        [MemoryPackOrder(6)] public WireRoomJoinKind JoinKind { get; set; }
+        [MemoryPackOrder(7)] public long ServerNowTicks { get; set; }
     }
 
     [MemoryPackable]
@@ -135,6 +144,10 @@ namespace AbilityKit.Protocol.Room
         [MemoryPackOrder(0)] public bool Success { get; set; }
         [MemoryPackOrder(1)] public int AcceptedFrame { get; set; }
         [MemoryPackOrder(2)] public string Message { get; set; }
+        [MemoryPackOrder(3)] public int CurrentFrame { get; set; }
+        [MemoryPackOrder(4)] public string Status { get; set; }
+        [MemoryPackOrder(5)] public bool ShouldResync { get; set; }
+        [MemoryPackOrder(6)] public long ServerTicks { get; set; }
     }
 
     [MemoryPackable]
@@ -218,6 +231,7 @@ namespace AbilityKit.Protocol.Room
         [MemoryPackOrder(2)] public List<WireRoomPlayerSnapshot>? Players { get; set; }
         [MemoryPackOrder(3)] public bool CanStart { get; set; }
         [MemoryPackOrder(4)] public string BattleId { get; set; }
+        [MemoryPackOrder(5)] public ulong WorldId { get; set; }
     }
 
     [MemoryPackable]

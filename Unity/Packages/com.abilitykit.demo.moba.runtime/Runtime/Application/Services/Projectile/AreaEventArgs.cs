@@ -81,7 +81,7 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
                     in lineageContext,
                     MobaContextSourceResolveKind.DirectProvider,
                     MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "Area",
+                    runtimeKind: MobaRuntimeKindNames.Area,
                     runtimeConfigId: TemplateId);
                 return source.IsValid;
             }

@@ -136,7 +136,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             options = options ?? TriggerPlanDirectoryLoadOptions.Default;
             var parseOptions = options.ToParseOptions();
             var parser = new TriggerPlanJsonParser();
-            var db = new TriggerPlanJsonDatabase();
+            var db = new TriggerPlanJsonDatabase { CueFactory = options.CueFactory };
             var mergedDto = new TriggerPlanJsonDatabase.TriggerPlanDatabaseDto
             {
                 FormatVersion = 1,

@@ -17,7 +17,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 鎵垮彈浼ゅ鐨凱lan Action妯″潡
     /// 浣跨敤寮虹被鍨嬪弬鏁?Schema API
     /// </summary>
-    [PlanActionModule(order: 12)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.TakeDamage)]
     public sealed class TakeDamagePlanActionModule : MobaPlanActionModuleBase<TakeDamageArgs, TakeDamagePlanActionModule>
     {
         protected override IActionSchema<TakeDamageArgs, IWorldResolver> Schema => TakeDamageSchema.Instance;

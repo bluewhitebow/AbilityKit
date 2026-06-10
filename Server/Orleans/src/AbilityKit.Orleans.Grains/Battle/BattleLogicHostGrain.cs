@@ -91,6 +91,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
             TimeSpan.TicksPerSecond,
             0,
             1.0 / _tickRate);
+        initParams.WorldStartAnchor = _worldStartAnchor;
         _battleHostState.Initialize(_worldId, _battleId, _tickRate);
 
         _logger.LogInformation(

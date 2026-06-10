@@ -124,6 +124,26 @@ namespace AbilityKit.Demo.Moba.Share
         }
 
         /// <summary>
+        /// 处理表现 Cue 快照
+        /// </summary>
+        public virtual void OnPresentationCueSnapshot(in FrameSnapshotData snapshot)
+        {
+            if (snapshot.PresentationCues == null || snapshot.PresentationCues.Count == 0)
+            {
+                return;
+            }
+
+            var cues = snapshot.PresentationCues;
+            for (int i = 0; i < cues.Count; i++)
+            {
+                var cue = cues[i];
+                OnPresentationCue(in cue);
+            }
+
+            LastProcessedFrame = snapshot.FrameIndex;
+        }
+
+        /// <summary>
         /// 处理状态哈希快照
         /// </summary>
         public virtual void OnStateHashSnapshot(in FrameSnapshotData snapshot)
@@ -212,6 +232,13 @@ namespace AbilityKit.Demo.Moba.Share
         /// 伤害事件处理（子类实现）
         /// </summary>
         protected abstract void OnDamageEvent(int attackerId, int targetId, int sourceId, int damageType, int damageValue, int targetHpAfter, bool isKill);
+
+        /// <summary>
+        /// 表现 Cue 处理（子类可覆盖）
+        /// </summary>
+        protected virtual void OnPresentationCue(in PresentationCueData data)
+        {
+        }
 
         /// <summary>
         /// 状态哈希处理（子类实现）

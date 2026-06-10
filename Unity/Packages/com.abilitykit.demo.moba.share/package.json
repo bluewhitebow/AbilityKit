@@ -1,6 +1,6 @@
-{
+﻿{
     "name": "com.abilitykit.demo.moba.share",
-    "version": "1.0.0",
+    "version": "0.0.1",
     "displayName": "AbilityKit Demo MOBA Shared",
     "description": "Platform-agnostic shared interfaces for MOBA demo across multiple presentation layers",
     "unity": "2022.3",

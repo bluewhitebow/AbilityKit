@@ -1,4 +1,5 @@
 using AbilityKit.Ability.Triggering;
+using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Protocol.Moba.StateSync;
 
@@ -35,6 +36,11 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         public string FormatDamages(MobaDamageEventSnapshotEntry[] entries)
         {
             return entries != null ? $"Damage: n={entries.Length}" : null;
+        }
+
+        public string FormatPresentationCues(PresentationCueData[] entries)
+        {
+            return entries != null ? $"PresentationCue: n={entries.Length}" : null;
         }
     }
 }

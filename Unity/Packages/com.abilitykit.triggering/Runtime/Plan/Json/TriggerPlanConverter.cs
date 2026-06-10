@@ -13,7 +13,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
     /// </summary>
     internal sealed class TriggerPlanConverter
     {
-        internal TriggerPlan<object> Convert(TriggerPlanJsonDatabase.TriggerPlanDto dto)
+        internal TriggerPlan<object> Convert(TriggerPlanJsonDatabase.TriggerPlanDto dto, ITriggerCue cue = null)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
 
@@ -28,7 +28,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                     triggerId: dto.TriggerId,
                     actions: actions,
                     interruptPriority: 0,
-                    cue: null,
+                    cue: cue,
                     schedule: default,
                     executionControl: ConvertExecutionControl(dto.ExecutionControl));
             }
@@ -43,7 +43,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                     predicateExpr: expr,
                     actions: actions,
                     interruptPriority: 0,
-                    cue: null,
+                    cue: cue,
                     schedule: default,
                     executionControl: ConvertExecutionControl(dto.ExecutionControl));
             }

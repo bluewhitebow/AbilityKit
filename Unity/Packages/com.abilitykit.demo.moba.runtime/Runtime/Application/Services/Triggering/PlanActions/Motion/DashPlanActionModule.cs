@@ -17,7 +17,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 冲刺位移的Plan Action模块
     /// 使用 FixedDeltaMotionSource 实现朝指定方向的冲刺
     /// </summary>
-    [PlanActionModule(order: 13)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.Dash)]
     public sealed class DashPlanActionModule : MobaPlanActionModuleBase<DashArgs, DashPlanActionModule>
     {
         protected override IActionSchema<DashArgs, IWorldResolver> Schema => DashSchema.Instance;

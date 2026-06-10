@@ -19,7 +19,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 发射投射物的Plan Action模块
     /// 使用强类型参�?Schema API
     /// </summary>
-    [PlanActionModule(order: 10)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.ShootProjectile)]
     public sealed class ShootProjectilePlanActionModule : MobaPlanActionModuleBase<ShootProjectileArgs, ShootProjectilePlanActionModule>
     {
         protected override IActionSchema<ShootProjectileArgs, IWorldResolver> Schema => ShootProjectileSchema.Instance;

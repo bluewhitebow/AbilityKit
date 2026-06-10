@@ -38,6 +38,7 @@ namespace AbilityKit.Demo.Moba.Share
             _subscriptions.Add(_snapshots.Subscribe<ProjectileEventData[]>(MobaOpCodes.Snapshot.ProjectileEvent, OnProjectileEventSnapshot));
             _subscriptions.Add(_snapshots.Subscribe<AreaEventData[]>(MobaOpCodes.Snapshot.AreaEvent, OnAreaEventSnapshot));
             _subscriptions.Add(_snapshots.Subscribe<DamageEventData[]>(MobaOpCodes.Snapshot.DamageEvent, OnDamageEventSnapshot));
+            _subscriptions.Add(_snapshots.Subscribe<PresentationCueData[]>(MobaOpCodes.Snapshot.PresentationCue, OnPresentationCueSnapshot));
             _subscriptions.Add(_snapshots.Subscribe<StateHashData>(MobaOpCodes.Snapshot.StateHash, OnStateHashSnapshot));
         }
 
@@ -89,6 +90,16 @@ namespace AbilityKit.Demo.Moba.Share
                 SnapshotType.Delta, 
                 damageEvents: data);
             _sink.OnDamageEventSnapshot(in snapshot);
+        }
+
+        private void OnPresentationCueSnapshot(int frameIndex, PresentationCueData[] data)
+        {
+            var snapshot = new FrameSnapshotData(
+                frameIndex,
+                timestamp: 0,
+                SnapshotType.Delta,
+                presentationCues: data);
+            _sink.OnPresentationCueSnapshot(in snapshot);
         }
 
         private void OnStateHashSnapshot(int frameIndex, StateHashData data)

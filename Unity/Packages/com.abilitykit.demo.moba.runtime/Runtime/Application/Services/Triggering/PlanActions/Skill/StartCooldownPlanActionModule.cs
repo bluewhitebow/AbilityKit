@@ -8,7 +8,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 10)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.StartCooldown)]
     public sealed class StartCooldownPlanActionModule : MobaPlanActionModuleBase<StartCooldownArgs, StartCooldownPlanActionModule>
     {
         protected override IActionSchema<StartCooldownArgs, IWorldResolver> Schema => StartCooldownSchema.Instance;

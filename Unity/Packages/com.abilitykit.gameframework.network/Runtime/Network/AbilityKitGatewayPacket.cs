@@ -18,6 +18,10 @@ namespace AbilityKit.GameFramework.Network
 
         public ArraySegment<byte> Payload { get; }
 
+        public override void Clear()
+        {
+        }
+
         private static ArraySegment<byte> Copy(ArraySegment<byte> source)
         {
             if (source.Array == null || source.Count <= 0)

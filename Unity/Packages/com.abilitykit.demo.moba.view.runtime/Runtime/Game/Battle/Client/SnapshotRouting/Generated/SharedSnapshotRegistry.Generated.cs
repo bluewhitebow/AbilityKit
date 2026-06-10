@@ -57,6 +57,14 @@ namespace AbilityKit.Game.Flow.Snapshot
             pipelineDecoders.RegisterDecoder<AbilityKit.Protocol.Moba.StateSync.MobaDamageEventSnapshotEntry[]>(
                 AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.DamageEvent,
                 AbilityKit.Game.Flow.Snapshot.SharedSnapshotDeclarations.DecodeDamageEvents);
+
+            dispatcherDecoders.RegisterDecoder<AbilityKit.Protocol.Moba.StateSync.MobaPresentationCueSnapshotEntry[]>(
+                AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.PresentationCue,
+                AbilityKit.Game.Flow.Snapshot.SharedSnapshotDeclarations.DecodePresentationCues);
+
+            pipelineDecoders.RegisterDecoder<AbilityKit.Protocol.Moba.StateSync.MobaPresentationCueSnapshotEntry[]>(
+                AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.PresentationCue,
+                AbilityKit.Game.Flow.Snapshot.SharedSnapshotDeclarations.DecodePresentationCues);
         }
     }
 }

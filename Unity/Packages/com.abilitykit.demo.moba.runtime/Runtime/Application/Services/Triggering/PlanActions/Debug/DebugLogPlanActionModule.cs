@@ -12,7 +12,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 调试日志Plan Action模块
     /// 使用强类型参�?Schema API
     /// </summary>
-    [PlanActionModule(order: 0)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.DebugLog)]
     public sealed class DebugLogPlanActionModule : MobaPlanActionModuleBase<DebugLogArgs, DebugLogPlanActionModule>
     {
         protected override IActionSchema<DebugLogArgs, IWorldResolver> Schema => DebugLogSchema.Instance;

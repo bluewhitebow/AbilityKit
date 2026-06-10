@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AbilityKit.Orleans.Gateway.Abstractions;
 using AbilityKit.Orleans.Gateway.Serialization;
 using AbilityKit.Protocol.GatewayTimeSync;
@@ -18,8 +17,8 @@ public sealed class TimeSyncHandler : GatewayRequestHandlerBase
     {
         var req = WireTimeSyncBinary.DeserializeTimeSyncReq(request.Payload);
 
-        var serverNowTicks = Stopwatch.GetTimestamp();
-        var serverFreq = Stopwatch.Frequency;
+        var serverNowTicks = DateTime.UtcNow.Ticks;
+        var serverFreq = TimeSpan.TicksPerSecond;
 
         var res = new WireTimeSyncRes(req.ClientSendTicks, serverNowTicks, serverFreq);
         var respPayload = WireTimeSyncBinary.Serialize(in res);

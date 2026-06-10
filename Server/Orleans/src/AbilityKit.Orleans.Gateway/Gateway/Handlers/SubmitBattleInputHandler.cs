@@ -55,7 +55,11 @@ public sealed class SubmitBattleInputHandler : GatewayRequestHandlerBase
             {
                 Success = submit.Accepted,
                 AcceptedFrame = submit.AcceptedFrame,
-                Message = submit.Message
+                Message = submit.Message,
+                CurrentFrame = submit.CurrentFrame,
+                Status = submit.Status,
+                ShouldResync = !submit.Accepted,
+                ServerTicks = DateTime.UtcNow.Ticks
             };
             var responsePayload = WireRoomGatewayBinary.Serialize(in wire);
             return GatewayResponse.Ok(request.Seq, responsePayload.ToArray());

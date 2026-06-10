@@ -38,10 +38,17 @@ public sealed class ShooterClientGatewayLauncherTests
         Assert.True(launched.Session.HasGateway);
         Assert.Equal(0, launched.Session.CurrentFrame);
         Assert.Equal(0, presentation.ViewModel.Frame);
+        Assert.Equal(9041ul, runtime.StartSpec.WorldId);
+        Assert.True(runtime.StartSpec.HasWorldStartAnchor);
+        Assert.Equal(transport.StartServerTicks, runtime.StartSpec.StartServerTicks);
+        Assert.Equal(transport.ServerTickFrequency, runtime.StartSpec.ServerTickFrequency);
+        Assert.Equal(transport.StartFrame, runtime.StartSpec.StartFrame);
+        Assert.Equal(transport.FixedDeltaSeconds, runtime.StartSpec.FixedDeltaSeconds);
         Assert.Equal("room-launch", launched.Flow.RoomId);
         Assert.Equal("battle-launch", launched.Flow.BattleId);
         Assert.Equal(9041ul, launched.Flow.WorldId);
         Assert.Equal(41u, launched.Flow.PlayerId);
+        Assert.Equal(ShooterRoomGatewayEntryKind.TeamLobby, launched.Flow.EntryKind);
         Assert.Equal(launched.Session, launched.Battle.Session);
         Assert.Equal("battle-launch", launched.Battle.BattleId);
         Assert.Equal(5, transport.OpCodes.Count);
@@ -61,5 +68,52 @@ public sealed class ShooterClientGatewayLauncherTests
         Assert.Equal(9041ul, wire.WorldId);
         Assert.Equal(launched.Session.CurrentFrame, wire.Frame);
         Assert.Equal(41u, wire.PlayerId);
+    }
+
+    [Fact]
+    public async Task ClientGatewayLauncherCatchesUpSessionToFlowTargetFrame()
+    {
+        var runtime = new ShooterBattleRuntimePort();
+        var presentation = new ShooterPresentationFacade();
+        var transport = new ScriptedShooterGatewayLaunchTransport
+        {
+            StartServerNowTicks = 123456L + 1500000L
+        };
+        var launcher = new ShooterClientGatewayLauncher(transport);
+        var start = new ShooterStartGamePayload(
+            "launcher-catch-up-session",
+            30,
+            4904,
+            new[]
+            {
+                new ShooterStartPlayer(41, "P41", 0f, 0f),
+                new ShooterStartPlayer(42, "P42", 5f, 0f)
+            });
+
+        var launched = await launcher.CreateReadyStartAndSubscribeAsync(
+            runtime,
+            presentation,
+            start,
+            "session-token",
+            ShooterRoomLaunchSpec.CreateDefault("client-launcher"),
+            playerId: 41u);
+
+        Assert.Equal(4, launched.Flow.TargetFrame);
+        Assert.Equal(4, launched.Flow.CatchUpFrames);
+        Assert.Equal(launched.Flow.TargetFrame, launched.Session.CurrentFrame);
+        Assert.Equal(launched.Flow.TargetFrame, presentation.ViewModel.Frame);
+
+        Assert.Equal(9041ul, runtime.StartSpec.WorldId);
+        Assert.True(runtime.StartSpec.HasWorldStartAnchor);
+        Assert.Equal(transport.StartServerTicks, runtime.StartSpec.StartServerTicks);
+        Assert.Equal(transport.ServerTickFrequency, runtime.StartSpec.ServerTickFrequency);
+        Assert.Equal(transport.StartFrame, runtime.StartSpec.StartFrame);
+        Assert.Equal(transport.FixedDeltaSeconds, runtime.StartSpec.FixedDeltaSeconds);
+
+        var submit = await launched.Battle.SubmitLocalInputToGatewayAsync(moveX: 1f, moveY: 0f, aimX: 1f, aimY: 0f, fire: false);
+
+        Assert.True(submit.Remote.Success);
+        var wire = WireRoomGatewayBinary.Deserialize<WireSubmitBattleInputReq>(transport.LastPayload);
+        Assert.Equal(launched.Flow.TargetFrame, wire.Frame);
     }
 }

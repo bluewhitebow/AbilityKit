@@ -1,6 +1,6 @@
-{
+﻿{
   "name": "com.abilitykit.protocol.shooter",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "displayName": "AbilityKit Protocol (Shooter)",
   "unity": "2022.3",
   "description": "Shooter gameplay wire protocol for the multi-gameplay demo.",
@@ -10,6 +10,6 @@
   "dependencies": {
     "com.abilitykit.core": "0.0.1",
     "com.abilitykit.protocol": "0.0.1",
-    "com.abilitykit.protocol.room": "0.1.0"
+    "com.abilitykit.protocol.room": "0.0.1"
   }
 }

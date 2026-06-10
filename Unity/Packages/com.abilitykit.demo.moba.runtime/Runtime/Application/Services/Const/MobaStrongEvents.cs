@@ -5,6 +5,53 @@ using AbilityKit.Demo.Moba.Services;
 namespace AbilityKit.Demo.Moba
 {
     using AbilityKit.Demo.Moba;
+
+    public static class MobaEventIds
+    {
+        public static class Common
+        {
+            public const string DamageApplied = "common.damage_applied";
+        }
+
+        public static class Ability
+        {
+            public const string SkillCastStarted = "ability.skill_cast_started";
+            public const string SkillStage = "ability.skill_stage";
+            public const string SkillCastEnded = "ability.skill_cast_ended";
+            public const string SkillHitConfirmed = "ability.skill_hit_confirmed";
+        }
+    }
+
+    public static class MobaPresentationTriggering
+    {
+        public static class Events
+        {
+            public const string Play = "presentation.play";
+            public const string Stop = "presentation.stop";
+        }
+    }
+
+    public static class MobaRuntimeKindNames
+    {
+        public const string Skill = "Skill";
+        public const string SkillPipeline = "SkillPipeline";
+        public const string Effect = "Effect";
+        public const string Action = "Action";
+        public const string Buff = "Buff";
+        public const string Projectile = "Projectile";
+        public const string ProjectileHit = "ProjectileHit";
+        public const string Area = "Area";
+        public const string AreaEnter = "AreaEnter";
+        public const string Summon = "Summon";
+        public const string Presentation = "Presentation";
+        public const string Unit = "Unit";
+        public const string UnitDeath = "UnitDeath";
+        public const string DamageAttack = "DamageAttack";
+        public const string DamageCalc = "DamageCalc";
+        public const string DamageResult = "DamageResult";
+        public const string Actor = "Actor";
+    }
+
     public static class MobaStrongEvents
     {
         public static class Buff
@@ -18,17 +65,18 @@ namespace AbilityKit.Demo.Moba
 
         public static class Common
         {
-            public static readonly EventKey<DamageAppliedArgs> DamageApplied = new EventKey<DamageAppliedArgs>("common.damage_applied");
+            public static readonly EventKey<DamageAppliedArgs> DamageApplied = new EventKey<DamageAppliedArgs>(MobaEventIds.Common.DamageApplied);
         }
 
         public static class Ability
         {
-            public static readonly EventKey<SkillCastStartedArgs> SkillCastStarted = new EventKey<SkillCastStartedArgs>("ability.skill_cast_started");
-            public static readonly EventKey<SkillStageArgs> SkillStage = new EventKey<SkillStageArgs>("ability.skill_stage");
-            public static readonly EventKey<SkillCastEndedArgs> SkillCastEnded = new EventKey<SkillCastEndedArgs>("ability.skill_cast_ended");
+            public static readonly EventKey<SkillCastStartedArgs> SkillCastStarted = new EventKey<SkillCastStartedArgs>(MobaEventIds.Ability.SkillCastStarted);
+            public static readonly EventKey<SkillStageArgs> SkillStage = new EventKey<SkillStageArgs>(MobaEventIds.Ability.SkillStage);
+            public static readonly EventKey<SkillCastEndedArgs> SkillCastEnded = new EventKey<SkillCastEndedArgs>(MobaEventIds.Ability.SkillCastEnded);
 
-            public static readonly EventKey<SkillHitConfirmedArgs> SkillHitConfirmed = new EventKey<SkillHitConfirmedArgs>("ability.skill_hit_confirmed");
+            public static readonly EventKey<SkillHitConfirmedArgs> SkillHitConfirmed = new EventKey<SkillHitConfirmedArgs>(MobaEventIds.Ability.SkillHitConfirmed);
         }
+
     }
 
     public enum SkillCastEndReason

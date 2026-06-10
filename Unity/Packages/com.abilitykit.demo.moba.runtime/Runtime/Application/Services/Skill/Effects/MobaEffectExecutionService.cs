@@ -109,7 +109,7 @@ namespace AbilityKit.Demo.Moba.Services
                     configId,
                     lineageInput.SourceActorId,
                     lineageInput.TargetActorId,
-                    TraceEndpoint.Config("Effect", configId),
+                    TraceEndpoint.Config(MobaRuntimeKindNames.Effect, configId),
                     TraceEndpoint.Actor(lineageInput.TargetActorId));
                 scope.IsRoot = false;
             }

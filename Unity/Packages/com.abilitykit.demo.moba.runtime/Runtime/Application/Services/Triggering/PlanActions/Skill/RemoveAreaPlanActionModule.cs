@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Services.Area;
+using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 32)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.RemoveArea)]
     public sealed class RemoveAreaPlanActionModule : MobaPlanActionModuleBase<RemoveAreaArgs, RemoveAreaPlanActionModule>
     {
         protected override IActionSchema<RemoveAreaArgs, IWorldResolver> Schema => RemoveAreaSchema.Instance;
@@ -36,7 +37,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             {
                 ownerActorIds.Add(args.OwnerActorId);
             }
-            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "remove_area", ownerActorIds) || ownerActorIds.Count == 0)
+            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveArea, ownerActorIds) || ownerActorIds.Count == 0)
             {
                 if (coreInput.HasCasterActor)
                 {

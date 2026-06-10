@@ -1,8 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Demo.Shooter.View;
+using AbilityKit.GameFramework.Network;
 using AbilityKit.Protocol.Room;
 using AbilityKit.Protocol.Shooter;
+using GameFramework.Network;
 using Xunit;
 
 namespace AbilityKit.Demo.Shooter.Runtime.Tests;
@@ -122,5 +128,103 @@ public sealed class ShooterClientNetworkLauncherTests
         Assert.Equal("battle-launch", launched.Battle.BattleId);
         Assert.Equal(9041ul, launched.Battle.WorldId);
         Assert.Equal(61u, launched.Battle.PlayerId);
+    }
+
+    [Fact]
+    public void ClientConnectionFactoryCanWrapGameFrameworkNetworkChannel()
+    {
+        var channel = new FakeGameFrameworkNetworkChannel("ShooterGateway");
+        var factory = ShooterClientConnectionFactory.FromGameFrameworkChannel(channel);
+
+        using var connection = factory.CreateConnection();
+
+        var gatewayConnection = Assert.IsType<GameFrameworkNetworkChannelConnection>(connection);
+        Assert.False(gatewayConnection.IsConnected);
+
+        gatewayConnection.Open("127.0.0.1", 17003);
+        gatewayConnection.Tick(1f / 30f);
+
+        Assert.True(gatewayConnection.IsConnected);
+        Assert.True(channel.Connected);
+        Assert.Equal(IPAddress.Loopback, channel.ConnectedAddress);
+        Assert.Equal(17003, channel.ConnectedPort);
+
+        gatewayConnection.Close();
+
+        Assert.False(gatewayConnection.IsConnected);
+        Assert.False(channel.Connected);
+    }
+
+    private sealed class FakeGameFrameworkNetworkChannel : INetworkChannel
+    {
+        public FakeGameFrameworkNetworkChannel(string name)
+        {
+            Name = name;
+        }
+
+        public string Name { get; }
+
+        public Socket Socket => throw new NotSupportedException();
+
+        public bool Connected { get; private set; }
+
+        public ServiceType ServiceType => ServiceType.Tcp;
+
+        public global::GameFramework.Network.AddressFamily AddressFamily => global::GameFramework.Network.AddressFamily.IPv4;
+
+        public int SendPacketCount => 0;
+
+        public int SentPacketCount => 0;
+
+        public int ReceivePacketCount => 0;
+
+        public int ReceivedPacketCount => 0;
+
+        public bool ResetHeartBeatElapseSecondsWhenReceivePacket { get; set; }
+
+        public int MissHeartBeatCount => 0;
+
+        public float HeartBeatInterval { get; set; }
+
+        public float HeartBeatElapseSeconds => 0f;
+
+        public IPAddress? ConnectedAddress { get; private set; }
+
+        public int ConnectedPort { get; private set; }
+
+        public EventHandler<Packet>? DefaultHandler { get; private set; }
+
+        public List<Packet> SentPackets { get; } = new List<Packet>();
+
+        public void RegisterHandler(IPacketHandler handler)
+        {
+        }
+
+        public void SetDefaultHandler(EventHandler<Packet> handler)
+        {
+            DefaultHandler = handler;
+        }
+
+        public void Connect(IPAddress ipAddress, int port)
+        {
+            Connect(ipAddress, port, userData: null);
+        }
+
+        public void Connect(IPAddress ipAddress, int port, object? userData)
+        {
+            ConnectedAddress = ipAddress;
+            ConnectedPort = port;
+            Connected = true;
+        }
+
+        public void Close()
+        {
+            Connected = false;
+        }
+
+        public void Send<T>(T packet) where T : Packet
+        {
+            SentPackets.Add(packet);
+        }
     }
 }

@@ -15,7 +15,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 消耗资源的Plan Action模块
     /// 在技能释放前扣除资源（蓝�?能量等）
     /// </summary>
-    [PlanActionModule(order: 10)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.ConsumeResource)]
     public sealed class ConsumeResourcePlanActionModule : MobaPlanActionModuleBase<ConsumeResourceArgs, ConsumeResourcePlanActionModule>
     {
         protected override IActionSchema<ConsumeResourceArgs, IWorldResolver> Schema => ConsumeResourceSchema.Instance;

@@ -49,21 +49,6 @@ namespace AbilityKit.Demo.Moba.Services
                 _skillRuntimeHandle = handle;
             }
 
-            if (payload is IMobaTriggerDataContext dataContext)
-            {
-                if (!_skillRuntimeHandle.IsValid
-                    && dataContext.TryGetData(AbilityContextKeys.SkillRuntimeHandle.ToKeyString(), out MobaSkillCastRuntimeHandle dataHandle)
-                    && dataHandle.IsValid)
-                {
-                    _skillRuntimeHandle = dataHandle;
-                }
-
-                if (_frame == 0 && dataContext.TryGetData(AbilityContextKeys.Frame.ToKeyString(), out int frame))
-                {
-                    _frame = frame;
-                }
-            }
-
             return this;
         }
 

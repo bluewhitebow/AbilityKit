@@ -49,6 +49,12 @@ namespace AbilityKit.Demo.Moba.Share
         void OnDamageEventSnapshot(in FrameSnapshotData snapshot);
 
         /// <summary>
+        /// 处理表现 Cue 快照
+        /// </summary>
+        /// <param name="snapshot">快照数据</param>
+        void OnPresentationCueSnapshot(in FrameSnapshotData snapshot);
+ 
+        /// <summary>
         /// 处理状态哈希快照（用于调试/验证）
         /// </summary>
         /// <param name="snapshot">快照数据</param>

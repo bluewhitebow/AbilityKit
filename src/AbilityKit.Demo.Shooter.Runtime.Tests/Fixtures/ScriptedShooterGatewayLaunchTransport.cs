@@ -11,6 +11,18 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
 {
     public readonly List<uint> OpCodes = new List<uint>();
 
+    public long StartServerTicks { get; set; } = 123456L;
+
+    public long ServerTickFrequency { get; set; } = 10000000L;
+
+    public int StartFrame { get; set; }
+
+    public double FixedDeltaSeconds { get; set; } = 1d / 30d;
+
+    public long JoinServerNowTicks { get; set; } = 123456L;
+
+    public long StartServerNowTicks { get; set; } = 123456L;
+
     public ArraySegment<byte> LastPayload { get; private set; }
 
     public Task<ArraySegment<byte>> SendRequestAsync(uint opCode, ArraySegment<byte> payload, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -34,15 +46,11 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
                     Success = true,
                     RoomId = "room-launch",
                     NumericRoomId = 1041ul,
-                    Snapshot = new WireRoomSnapshot { BattleId = "battle-prelaunch", CanStart = true },
-                    WorldStartAnchor = new WireWorldStartAnchor
-                    {
-                        StartServerTicks = 123456L,
-                        ServerTickFrequency = 10000000L,
-                        StartFrame = 0,
-                        FixedDeltaSeconds = 1d / 30d
-                    },
-                    Message = "joined"
+                    Snapshot = new WireRoomSnapshot { BattleId = "battle-prelaunch", CanStart = true, WorldId = 0ul },
+                    WorldStartAnchor = CreateAnchor(),
+                    Message = "joined",
+                    JoinKind = WireRoomJoinKind.TeamLobby,
+                    ServerNowTicks = JoinServerNowTicks
                 }));
             case RoomGatewayOpCodes.SetReady:
                 return Task.FromResult(WireRoomGatewayBinary.Serialize(new WireRoomSnapshotRes
@@ -60,14 +68,8 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
                     BattleId = "battle-launch",
                     WorldId = 9041ul,
                     Started = true,
-                    WorldStartAnchor = new WireWorldStartAnchor
-                    {
-                        StartServerTicks = 123456L,
-                        ServerTickFrequency = 10000000L,
-                        StartFrame = 0,
-                        FixedDeltaSeconds = 1d / 30d
-                    },
-                    ServerNowTicks = 123456L,
+                    WorldStartAnchor = CreateAnchor(),
+                    ServerNowTicks = StartServerNowTicks,
                     Message = "started"
                 }));
             case RoomGatewayOpCodes.SubscribeStateSync:
@@ -86,5 +88,16 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
             default:
                 throw new InvalidOperationException("Unexpected room gateway opCode: " + opCode);
         }
+    }
+
+    private WireWorldStartAnchor CreateAnchor()
+    {
+        return new WireWorldStartAnchor
+        {
+            StartServerTicks = StartServerTicks,
+            ServerTickFrequency = ServerTickFrequency,
+            StartFrame = StartFrame,
+            FixedDeltaSeconds = FixedDeltaSeconds
+        };
     }
 }

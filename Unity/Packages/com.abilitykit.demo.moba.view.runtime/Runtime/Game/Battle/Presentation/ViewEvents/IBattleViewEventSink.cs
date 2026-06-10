@@ -2,6 +2,7 @@
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Ability.Triggering;
+using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Protocol.Moba.StateSync;
 
 namespace AbilityKit.Game.Flow.Battle.ViewEvents
@@ -19,6 +20,8 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         void OnAreaEventSnapshot(ISnapshotEnvelope packet, MobaAreaEventSnapshotEntry[] entries);
 
         void OnDamageEventSnapshot(ISnapshotEnvelope packet, MobaDamageEventSnapshotEntry[] entries);
+
+        void OnPresentationCueSnapshot(ISnapshotEnvelope packet, PresentationCueData[] entries);
     }
 }
 

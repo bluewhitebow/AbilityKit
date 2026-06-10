@@ -30,6 +30,7 @@ namespace AbilityKit.Protocol.Moba
             public const int DamageEvent = 4007;
             public const int ActorDespawn = 4008;
             public const int AreaEvent = 4009;
+            public const int PresentationCue = 4010;
         }
     }
 }

@@ -5,7 +5,6 @@ namespace AbilityKit.Demo.Moba.Services
     public readonly struct MobaTriggerConditionContext : IMobaTriggerStageSnapshotProvider
     {
         private readonly object _payload;
-        private readonly IMobaTriggerDataContext _dataContext;
         private readonly MobaSkillCastRuntimeService _skillRuntimes;
 
         private MobaTriggerConditionContext(
@@ -14,13 +13,11 @@ namespace AbilityKit.Demo.Moba.Services
             MobaGameplayOrigin origin,
             MobaTriggerExecutionSnapshot executionSnapshot,
             MobaSkillCastRuntimeHandle skillRuntimeHandle,
-            IMobaTriggerDataContext dataContext,
             MobaTriggerStageSnapshot stageSnapshot,
             MobaSkillCastRuntimeService skillRuntimes,
             int frame)
         {
             _payload = payload;
-            _dataContext = dataContext;
             _skillRuntimes = skillRuntimes;
             LineageInput = lineageInput;
             Origin = origin;
@@ -64,17 +61,6 @@ namespace AbilityKit.Demo.Moba.Services
 
             payload = default;
             return false;
-        }
-
-        public bool TryGetData<T>(AbilityContextKeys key, out T value)
-        {
-            value = default;
-            return _dataContext != null && _dataContext.TryGetData(key.ToKeyString(), out value);
-        }
-
-        public T GetData<T>(AbilityContextKeys key, T defaultValue = default)
-        {
-            return _dataContext != null ? _dataContext.GetData(key.ToKeyString(), defaultValue) : defaultValue;
         }
 
         public bool TryGetBlackboard(out MobaSkillRuntimeBlackboard blackboard)
@@ -148,7 +134,6 @@ namespace AbilityKit.Demo.Moba.Services
             int frame)
         {
             var payload = executionContext.Payload;
-            var dataContext = payload as IMobaTriggerDataContext;
             payload.TryResolveStageSnapshot(out var stageSnapshot);
             return new MobaTriggerConditionContext(
                 payload,
@@ -156,7 +141,6 @@ namespace AbilityKit.Demo.Moba.Services
                 executionContext.Origin,
                 executionContext.ExecutionSnapshot,
                 executionContext.SkillRuntimeHandle,
-                dataContext,
                 stageSnapshot,
                 skillRuntimes,
                 frame != 0 ? frame : executionContext.Frame);

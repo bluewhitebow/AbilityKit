@@ -43,6 +43,8 @@ public sealed class ShooterClientBattleHandleTests
             9009ul,
             11u,
             in anchor,
+            223456L,
+            ShooterRoomGatewayEntryKind.TeamLobby,
             canStart: true,
             started: true,
             subscribed: true,
@@ -63,6 +65,8 @@ public sealed class ShooterClientBattleHandleTests
         Assert.Equal("battle-9", context.BattleId);
         Assert.Equal(9009ul, context.WorldId);
         Assert.Equal(11u, context.PlayerId);
+        Assert.Equal(0, flow.TargetFrame);
+        Assert.Equal(0, flow.CatchUpFrames);
         Assert.Equal(context.Frame, result.Local.RequestedFrame);
         Assert.True(result.Remote.Success);
         Assert.Equal(2, result.Remote.AcceptedFrame);

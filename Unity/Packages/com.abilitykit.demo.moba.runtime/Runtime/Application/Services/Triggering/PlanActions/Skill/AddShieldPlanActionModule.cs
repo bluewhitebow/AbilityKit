@@ -10,7 +10,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 19)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.AddShield)]
     public sealed class AddShieldPlanActionModule : MobaPlanActionModuleBase<AddShieldArgs, AddShieldPlanActionModule>
     {
         protected override IActionSchema<AddShieldArgs, IWorldResolver> Schema => AddShieldSchema.Instance;

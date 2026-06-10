@@ -1,8 +1,10 @@
 using System;
+using AbilityKit.Ability.Host;
 using AbilityKit.Core.Common.SnapshotRouting;
-using AbilityKit.Game.Flow;
+using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Protocol.Moba.StateSync;
+using FrameSnapshotDispatcher = AbilityKit.Core.Common.SnapshotRouting.FrameSnapshotDispatcher;
 
 namespace AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot
 {
@@ -10,7 +12,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot
     {
         private readonly FrameSnapshotDispatcher _snapshots;
         private readonly IBattleViewEventSink _sink;
-        private readonly BattleSubscriptionGroup _subscriptions = new BattleSubscriptionGroup(5);
+        private readonly BattleSubscriptionGroup _subscriptions = new BattleSubscriptionGroup(6);
 
         public BattleSnapshotViewAdapter(FrameSnapshotDispatcher snapshots, IBattleViewEventSink sink)
         {
@@ -34,6 +36,14 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents.Snapshot
             _subscriptions.Add(_snapshots.Subscribe<MobaDamageEventSnapshotEntry[]>(
                 MobaOpCodes.Snapshot.DamageEvent,
                 _sink.OnDamageEventSnapshot));
+            _subscriptions.Add(_snapshots.Subscribe<MobaPresentationCueSnapshotEntry[]>(
+                MobaOpCodes.Snapshot.PresentationCue,
+                OnPresentationCueSnapshot));
+        }
+
+        private void OnPresentationCueSnapshot(ISnapshotEnvelope packet, MobaPresentationCueSnapshotEntry[] entries)
+        {
+            _sink.OnPresentationCueSnapshot(packet, PresentationCueSnapshotMapper.Map(entries));
         }
 
         public void Dispose()

@@ -73,7 +73,7 @@ namespace AbilityKit.Demo.Moba.Triggering
                     in lineageContext,
                     MobaContextSourceResolveKind.DirectProvider,
                     MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "Presentation",
+                    runtimeKind: MobaRuntimeKindNames.Presentation,
                     runtimeConfigId: TemplateId);
                 return source.IsValid;
             }

@@ -17,7 +17,7 @@ using AbilityKit.Demo.Moba.Systems;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 40)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.PlayPresentation)]
     public sealed class PlayPresentationPlanActionModule : MobaPlanActionModuleBase<PlayPresentationArgs, PlayPresentationPlanActionModule>
     {
         protected override IActionSchema<PlayPresentationArgs, IWorldResolver> Schema => PlayPresentationSchema.Instance;
@@ -72,7 +72,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                     break;
             }
 
-            var eventName = args.Stop ? "presentation.stop" : "presentation.play";
+            var eventName = args.Stop ? MobaPresentationTriggering.Events.Stop : MobaPresentationTriggering.Events.Play;
             var eid = TriggeringIdUtil.GetEventEid(eventName);
 
             var payload = new PresentationEventArgs

@@ -225,7 +225,7 @@ namespace AbilityKit.Demo.Moba.Systems
                     passiveSkillId,
                     actorId,
                     actorId,
-                    TraceEndpoint.Config("Skill", passiveSkillId),
+                    TraceEndpoint.Config(MobaRuntimeKindNames.Skill, passiveSkillId),
                     TraceEndpoint.Actor(actorId));
             }
             catch (Exception ex)

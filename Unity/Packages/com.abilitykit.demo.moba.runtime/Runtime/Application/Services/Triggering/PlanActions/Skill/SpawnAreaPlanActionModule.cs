@@ -11,7 +11,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 24)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.SpawnArea)]
     public sealed class SpawnAreaPlanActionModule : MobaPlanActionModuleBase<SpawnAreaArgs, SpawnAreaPlanActionModule>
     {
         protected override IActionSchema<SpawnAreaArgs, IWorldResolver> Schema => SpawnAreaSchema.Instance;

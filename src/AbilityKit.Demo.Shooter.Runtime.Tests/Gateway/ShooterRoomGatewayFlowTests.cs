@@ -36,7 +36,11 @@ public sealed class ShooterRoomGatewayFlowTests
         Assert.True(result.CanStart);
         Assert.True(result.Started);
         Assert.True(result.Subscribed);
-        Assert.Equal(12, result.WorldStartAnchor.StartFrame);
+        Assert.Equal(30, result.WorldStartAnchor.StartFrame);
+        Assert.Equal(1200000L, result.ServerNowTicks);
+        Assert.Equal(33, result.TargetFrame);
+        Assert.Equal(3, result.CatchUpFrames);
+        Assert.Equal(ShooterRoomGatewayEntryKind.TeamLobby, result.EntryKind);
         Assert.Equal("subscribed", result.Message);
 
         var inputContext = result.CreateBattleInputContext(frame: 8);
@@ -67,5 +71,78 @@ public sealed class ShooterRoomGatewayFlowTests
         Assert.Equal("existing-room", result.RoomId);
         Assert.Equal("battle-1", result.BattleId);
         Assert.Equal(31u, result.PlayerId);
+        Assert.Equal(30, result.WorldStartAnchor.StartFrame);
+        Assert.Equal(33, result.TargetFrame);
+        Assert.Equal(ShooterRoomGatewayEntryKind.TeamLobby, result.EntryKind);
+    }
+
+    [Fact]
+    public async Task RoomGatewayFlowReconnectsRunningBattleWithoutReadyOrStart()
+    {
+        var roomClient = new ScriptedShooterRoomClient
+        {
+            JoinKind = ShooterGatewayRoomJoinKind.Reconnect,
+            JoinBattleId = "battle-running",
+            JoinWorldId = 9101ul,
+            JoinServerNowTicks = 1123456L,
+            JoinWorldStartAnchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 18, 1d / 30d),
+            JoinCanStart = false
+        };
+        var flow = new ShooterRoomGatewayFlow(roomClient);
+
+        var result = await flow.JoinReadyStartAndSubscribeAsync(
+            "session-token",
+            "running-room",
+            ShooterRoomLaunchSpec.CreateDefault("client-reconnect"),
+            playerId: 41u);
+
+        Assert.Equal(2, roomClient.Calls.Count);
+        Assert.Equal("join:running-room", roomClient.Calls[0]);
+        Assert.Equal("subscribe:running-room:battle-running", roomClient.Calls[1]);
+        Assert.DoesNotContain(roomClient.Calls, call => call.StartsWith("ready:", StringComparison.Ordinal));
+        Assert.DoesNotContain(roomClient.Calls, call => call.StartsWith("start:", StringComparison.Ordinal));
+        Assert.Equal(ShooterRoomGatewayEntryKind.Reconnect, result.EntryKind);
+        Assert.Equal("battle-running", result.BattleId);
+        Assert.Equal(9101ul, result.WorldId);
+        Assert.Equal(1123456L, result.ServerNowTicks);
+        Assert.Equal(21, result.TargetFrame);
+        Assert.Equal(3, result.CatchUpFrames);
+        Assert.False(result.CanStart);
+        Assert.True(result.Started);
+        Assert.True(result.Subscribed);
+    }
+
+    [Fact]
+    public async Task RoomGatewayFlowLateJoinsRunningBattleWithoutReadyOrStart()
+    {
+        var roomClient = new ScriptedShooterRoomClient
+        {
+            JoinKind = ShooterGatewayRoomJoinKind.LateJoin,
+            JoinBattleId = "battle-mid",
+            JoinWorldId = 9201ul,
+            JoinServerNowTicks = 2123456L,
+            JoinWorldStartAnchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 24, 1d / 30d),
+            JoinCanStart = false
+        };
+        var flow = new ShooterRoomGatewayFlow(roomClient);
+
+        var result = await flow.JoinReadyStartAndSubscribeAsync(
+            "session-token",
+            "mid-room",
+            ShooterRoomLaunchSpec.CreateDefault("client-late"),
+            playerId: 42u);
+
+        Assert.Equal(2, roomClient.Calls.Count);
+        Assert.Equal("join:mid-room", roomClient.Calls[0]);
+        Assert.Equal("subscribe:mid-room:battle-mid", roomClient.Calls[1]);
+        Assert.Equal(ShooterRoomGatewayEntryKind.LateJoin, result.EntryKind);
+        Assert.Equal("battle-mid", result.BattleId);
+        Assert.Equal(9201ul, result.WorldId);
+        Assert.Equal(2123456L, result.ServerNowTicks);
+        Assert.Equal(30, result.TargetFrame);
+        Assert.Equal(6, result.CatchUpFrames);
+        Assert.False(result.CanStart);
+        Assert.True(result.Started);
+        Assert.True(result.Subscribed);
     }
 }

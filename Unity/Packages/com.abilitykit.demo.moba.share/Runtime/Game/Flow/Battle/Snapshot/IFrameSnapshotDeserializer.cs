@@ -145,7 +145,12 @@ namespace AbilityKit.Demo.Moba.Share
         /// 分发伤害事件
         /// </summary>
         void DispatchDamageEvent(int frameIndex, in DamageEventData[] data);
-
+ 
+        /// <summary>
+        /// 分发表现 Cue 事件
+        /// </summary>
+        void DispatchPresentationCue(int frameIndex, in PresentationCueData[] data);
+ 
         /// <summary>
         /// 分发状态哈希
         /// </summary>

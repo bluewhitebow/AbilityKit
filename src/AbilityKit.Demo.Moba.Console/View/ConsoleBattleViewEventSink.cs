@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Demo.Moba.Console.Platform;
+using ConsolePresentationCuePresenter = AbilityKit.Demo.Moba.Console.Presentation.ConsolePresentationCuePresenter;
 
 namespace AbilityKit.Demo.Moba.Console.View
 {
@@ -12,12 +13,14 @@ namespace AbilityKit.Demo.Moba.Console.View
     public sealed class ConsoleBattleViewEventSink : BaseBattleViewEventSink
     {
         private readonly IConsoleBattleView _battleView;
+        private readonly ConsolePresentationCuePresenter _cuePresenter;
         private readonly Dictionary<int, float> _maxHpCache = new();
         private bool _disposed;
 
-        public ConsoleBattleViewEventSink(IConsoleBattleView battleView, string playerId = "player_1")
+        public ConsoleBattleViewEventSink(IConsoleBattleView battleView, string playerId = "player_1", ConsolePresentationCuePresenter cuePresenter = null)
         {
             _battleView = battleView ?? throw new ArgumentNullException(nameof(battleView));
+            _cuePresenter = cuePresenter;
         }
 
         #region BaseBattleViewEventSink 抽象方法实现
@@ -92,6 +95,11 @@ namespace AbilityKit.Demo.Moba.Console.View
             }
 
             Log.Damage($"[ViewEventSink] Damage: #{targetId} took {damageValue} from #{attackerId}, HP: {targetHpAfter}/{maxHp}");
+        }
+
+        protected override void OnPresentationCue(in PresentationCueData data)
+        {
+            _cuePresenter?.Handle(in data);
         }
 
         protected override void OnStateHash(int frameIndex, uint stateHash)

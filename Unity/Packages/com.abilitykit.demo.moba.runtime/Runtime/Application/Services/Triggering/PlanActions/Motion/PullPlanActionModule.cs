@@ -17,7 +17,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 拉拽位移的Plan Action模块
     /// 将目标拉向释放者或指定位置
     /// </summary>
-    [PlanActionModule(order: 15)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.Pull)]
     public sealed class PullPlanActionModule : MobaPlanActionModuleBase<PullArgs, PullPlanActionModule>
     {
         protected override IActionSchema<PullArgs, IWorldResolver> Schema => PullSchema.Instance;

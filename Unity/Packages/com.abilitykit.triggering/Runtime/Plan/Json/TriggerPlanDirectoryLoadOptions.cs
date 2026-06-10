@@ -11,6 +11,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         public bool TreatWarningsAsErrors { get; set; }
 
+        public TriggerPlanJsonDatabase.ICueFactory CueFactory { get; set; }
+
         public IList<TriggerPlanJsonDiagnostic> Diagnostics { get; set; }
 
         public static TriggerPlanDirectoryLoadOptions Default { get; } = new TriggerPlanDirectoryLoadOptions();

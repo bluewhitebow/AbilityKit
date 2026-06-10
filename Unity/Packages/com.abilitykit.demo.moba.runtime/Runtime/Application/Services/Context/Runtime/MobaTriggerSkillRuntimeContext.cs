@@ -20,14 +20,6 @@ namespace AbilityKit.Demo.Moba.Services
             return runtimes.TryGetBlackboard(in handle, out blackboard);
         }
 
-        public static bool TryGetSkillRuntimeBlackboard(this IMobaTriggerDataContext context, MobaSkillCastRuntimeService runtimes, out MobaSkillRuntimeBlackboard blackboard)
-        {
-            blackboard = null;
-            if (context == null || runtimes == null) return false;
-            if (!context.TryGetData(AbilityContextKeys.SkillRuntimeHandle.ToKeyString(), out MobaSkillCastRuntimeHandle handle)) return false;
-            return runtimes.TryGetBlackboard(in handle, out blackboard);
-        }
-
         public static bool TryMarkDamagedTarget(this IMobaTriggerSkillRuntimeContext context, MobaSkillCastRuntimeService runtimes, int actorId)
         {
             return context.TryGetSkillRuntimeBlackboard(runtimes, out var blackboard) && blackboard.AddActorId(in MobaSkillRuntimeBlackboardKeys.DamagedTargets, actorId);

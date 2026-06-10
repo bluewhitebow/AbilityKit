@@ -51,7 +51,7 @@ public sealed class ShooterRoomGatewayRoomClientTests
             Success = true,
             RoomId = "room-1",
             NumericRoomId = 1001ul,
-            Snapshot = new WireRoomSnapshot { BattleId = "battle-1", CanStart = true },
+            Snapshot = new WireRoomSnapshot { BattleId = "battle-1", CanStart = true, WorldId = 9001ul },
             WorldStartAnchor = new WireWorldStartAnchor
             {
                 StartServerTicks = 123456L,
@@ -59,7 +59,9 @@ public sealed class ShooterRoomGatewayRoomClientTests
                 StartFrame = 12,
                 FixedDeltaSeconds = 1d / 30d
             },
-            Message = "joined"
+            Message = "joined",
+            JoinKind = WireRoomJoinKind.Reconnect,
+            ServerNowTicks = 523456L
         });
         var join = await roomClient.JoinRoomAsync(new ShooterGatewayJoinRoomRequest("session-token", "cn", "server-a", "room-1"));
         Assert.Equal(RoomGatewayOpCodes.JoinRoom, transport.LastOpCode);
@@ -71,6 +73,9 @@ public sealed class ShooterRoomGatewayRoomClientTests
         Assert.True(join.Success);
         Assert.Equal("battle-1", join.BattleId);
         Assert.True(join.CanStart);
+        Assert.Equal(ShooterGatewayRoomJoinKind.Reconnect, join.JoinKind);
+        Assert.Equal(523456L, join.ServerNowTicks);
+        Assert.Equal(9001ul, join.WorldId);
         Assert.Equal(123456L, join.WorldStartAnchor.StartServerTicks);
         Assert.Equal(12, join.WorldStartAnchor.StartFrame);
 

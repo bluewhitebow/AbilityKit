@@ -77,7 +77,7 @@ namespace AbilityKit.Demo.Moba.Events.Unit
                     in lineageContext,
                     MobaContextSourceResolveKind.DirectProvider,
                     MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "Unit",
+                    runtimeKind: MobaRuntimeKindNames.Unit,
                     runtimeConfigId: TemplateId);
                 return source.IsValid;
             }

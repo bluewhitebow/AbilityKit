@@ -1,24 +1,23 @@
 using System;
 using System.Collections.Generic;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Shooter;
-using ShooterBulletState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsProjectileEntity;
-using ShooterPlayerState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsPlayerEntity;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
+    [WorldService(typeof(ShooterBattleState), WorldLifetime.Singleton)]
     public sealed class ShooterBattleState
     {
-        private readonly IShooterEcsEntityStore _entityStore;
+        private readonly IShooterEntityManager _entities;
         private int _nextBulletId = 1;
 
-        public ShooterBattleState(IShooterEcsEntityStore entityStore)
+        public ShooterBattleState(IShooterEntityManager entities)
         {
-            _entityStore = entityStore ?? throw new ArgumentNullException(nameof(entityStore));
+            _entities = entities ?? throw new ArgumentNullException(nameof(entities));
         }
 
-        public IDictionary<int, ShooterPlayerState> Players => _entityStore.Players;
-
-        public IList<ShooterBulletState> Bullets => _entityStore.Projectiles;
+        public IShooterEntityManager Entities => _entities;
 
         public Dictionary<int, ShooterPlayerCommand> LatestCommands { get; } = new Dictionary<int, ShooterPlayerCommand>();
 
@@ -32,7 +31,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         public void Reset(in ShooterStartGamePayload spec)
         {
-            _entityStore.Clear();
+            _entities.Clear();
             LatestCommands.Clear();
             Events.Clear();
             _nextBulletId = 1;

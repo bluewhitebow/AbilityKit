@@ -9,10 +9,10 @@ using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Demo.Moba.Config.BattleDemo;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Triggering.Runtime.Config.Plans;
-using AbilityKit.Triggering.Eventing;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Triggering.Runtime.Plan.Json;
+using AbilityKit.Demo.Moba.Triggering;
 using AbilityKit.Triggering.Variables.Numeric;
 using Newtonsoft.Json.Linq;
 
@@ -73,7 +73,10 @@ namespace AbilityKit.Demo.Moba.Console.Bootstrap
             builder.Register<TriggerPlanJsonDatabase>(WorldLifetime.Singleton, container =>
             {
                 var textAssetLoader = container.Resolve<ITextAssetLoader>();
-                var db = new TriggerPlanJsonDatabase();
+                var db = new TriggerPlanJsonDatabase
+                {
+                    CueFactory = new MobaPresentationCueFactory(container.Resolve<AbilityKit.Demo.Moba.Services.MobaPresentationCueSnapshotService>())
+                };
 
                 try
                 {
@@ -84,7 +87,8 @@ namespace AbilityKit.Demo.Moba.Console.Bootstrap
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
 
-                    var loadedDb = directoryLoader.LoadDirectories(directories, "**/*.json");
+                    var options = new TriggerPlanDirectoryLoadOptions { CueFactory = db.CueFactory };
+                    var loadedDb = directoryLoader.LoadDirectories(directories, "**/*.json", options);
                     if (loadedDb?.Records != null)
                     {
                         db.MergeFrom(loadedDb, replaceExisting: true);

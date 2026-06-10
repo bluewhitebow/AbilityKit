@@ -16,7 +16,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 闪烁位移的Plan Action模块
     /// 瞬间传送到指定方向和距离的位置
     /// </summary>
-    [PlanActionModule(order: 14)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.Blink)]
     public sealed class BlinkPlanActionModule : MobaPlanActionModuleBase<BlinkArgs, BlinkPlanActionModule>
     {
         protected override IActionSchema<BlinkArgs, IWorldResolver> Schema => BlinkSchema.Instance;

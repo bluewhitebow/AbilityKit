@@ -1,0 +1,202 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.World.Svelto;
+
+namespace AbilityKit.Demo.Shooter.Runtime
+{
+    [WorldService(typeof(ShooterEntityManager), WorldLifetime.Singleton)]
+    [WorldService(typeof(IShooterEntityManager), WorldLifetime.Singleton)]
+    public sealed class ShooterEntityManager : IShooterEntityManager
+    {
+        private readonly ISveltoWorldContext _context;
+        private readonly HashSet<int> _playerIds = new HashSet<int>();
+        private readonly HashSet<int> _projectileIds = new HashSet<int>();
+
+        public ShooterEntityManager(ISveltoWorldContext context)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        public int PlayerCount => _playerIds.Count;
+
+        public int ProjectileCount => _projectileIds.Count;
+
+        public IReadOnlyCollection<int> PlayerIds => _playerIds;
+
+        public IReadOnlyCollection<int> ProjectileIds => _projectileIds;
+
+        public void Clear()
+        {
+            var removed = false;
+            if (_context.EntitiesDB.ExistsAndIsNotEmpty(ShooterSveltoGroups.Players))
+            {
+                _context.EntityFunctions.RemoveEntitiesFromGroup(ShooterSveltoGroups.Players);
+                removed = true;
+            }
+
+            if (_context.EntitiesDB.ExistsAndIsNotEmpty(ShooterSveltoGroups.Projectiles))
+            {
+                _context.EntityFunctions.RemoveEntitiesFromGroup(ShooterSveltoGroups.Projectiles);
+                removed = true;
+            }
+
+            _playerIds.Clear();
+            _projectileIds.Clear();
+
+            if (removed)
+            {
+                _context.SubmitEntities();
+            }
+        }
+
+        public bool HasPlayer(int playerId)
+        {
+            return _playerIds.Contains(playerId);
+        }
+
+        public bool TryGetPlayer(int playerId, out ShooterSveltoPlayerComponent player)
+        {
+            player = default;
+            if (!_playerIds.Contains(playerId))
+            {
+                return false;
+            }
+
+            if (!_context.EntitiesDB.TryQueryMappedEntities<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players, out var mapper))
+            {
+                return false;
+            }
+
+            player = mapper.Entity((uint)playerId);
+            return true;
+        }
+
+        public void AddPlayer(in ShooterSveltoPlayerComponent player)
+        {
+            if (player.PlayerId <= 0)
+            {
+                return;
+            }
+
+            if (_playerIds.Contains(player.PlayerId))
+            {
+                SetPlayer(in player);
+                return;
+            }
+
+            var initializer = _context.EntityFactory.BuildEntity<ShooterSveltoPlayerDescriptor>((uint)player.PlayerId, ShooterSveltoGroups.Players);
+            initializer.Init(player);
+            _playerIds.Add(player.PlayerId);
+            _context.SubmitEntities();
+        }
+
+        public void SetPlayer(in ShooterSveltoPlayerComponent player)
+        {
+            if (player.PlayerId <= 0)
+            {
+                return;
+            }
+
+            if (!_playerIds.Contains(player.PlayerId))
+            {
+                AddPlayer(in player);
+                return;
+            }
+
+            if (!_context.EntitiesDB.TryQueryMappedEntities<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players, out var mapper))
+            {
+                return;
+            }
+
+            mapper.Entity((uint)player.PlayerId) = player;
+        }
+
+        public void RemovePlayer(int playerId)
+        {
+            if (!_playerIds.Remove(playerId))
+            {
+                return;
+            }
+
+            _context.EntityFunctions.RemoveEntity<ShooterSveltoPlayerDescriptor>((uint)playerId, ShooterSveltoGroups.Players);
+            _context.SubmitEntities();
+        }
+
+        public bool HasProjectile(int bulletId)
+        {
+            return _projectileIds.Contains(bulletId);
+        }
+
+        public bool TryGetProjectile(int bulletId, out ShooterSveltoProjectileComponent projectile)
+        {
+            projectile = default;
+            if (!_projectileIds.Contains(bulletId))
+            {
+                return false;
+            }
+
+            if (!_context.EntitiesDB.TryQueryMappedEntities<ShooterSveltoProjectileComponent>(ShooterSveltoGroups.Projectiles, out var mapper))
+            {
+                return false;
+            }
+
+            projectile = mapper.Entity((uint)bulletId);
+            return true;
+        }
+
+        public void AddProjectile(in ShooterSveltoProjectileComponent projectile)
+        {
+            if (projectile.BulletId <= 0)
+            {
+                return;
+            }
+
+            if (_projectileIds.Contains(projectile.BulletId))
+            {
+                SetProjectile(in projectile);
+                return;
+            }
+
+            var initializer = _context.EntityFactory.BuildEntity<ShooterSveltoProjectileDescriptor>((uint)projectile.BulletId, ShooterSveltoGroups.Projectiles);
+            initializer.Init(projectile);
+            _projectileIds.Add(projectile.BulletId);
+            _context.SubmitEntities();
+        }
+
+        public void SetProjectile(in ShooterSveltoProjectileComponent projectile)
+        {
+            if (projectile.BulletId <= 0)
+            {
+                return;
+            }
+
+            if (!_projectileIds.Contains(projectile.BulletId))
+            {
+                AddProjectile(in projectile);
+                return;
+            }
+
+            if (!_context.EntitiesDB.TryQueryMappedEntities<ShooterSveltoProjectileComponent>(ShooterSveltoGroups.Projectiles, out var mapper))
+            {
+                return;
+            }
+
+            mapper.Entity((uint)projectile.BulletId) = projectile;
+        }
+
+        public void RemoveProjectile(int bulletId)
+        {
+            if (!_projectileIds.Remove(bulletId))
+            {
+                return;
+            }
+
+            _context.EntityFunctions.RemoveEntity<ShooterSveltoProjectileDescriptor>((uint)bulletId, ShooterSveltoGroups.Projectiles);
+            _context.SubmitEntities();
+        }
+    }
+}

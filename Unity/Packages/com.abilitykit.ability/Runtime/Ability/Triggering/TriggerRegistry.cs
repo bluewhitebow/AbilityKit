@@ -13,6 +13,11 @@ namespace AbilityKit.Ability.Triggering.Runtime
 
         public void AutoRegisterFromAssemblies(params Assembly[] assemblies)
         {
+            AutoRegisterFromAssemblies(assemblies, null);
+        }
+
+        public void AutoRegisterFromAssemblies(Assembly[] assemblies, IReadOnlyList<string> namespacePrefixes)
+        {
             if (assemblies == null || assemblies.Length == 0) throw new ArgumentNullException(nameof(assemblies));
 
             for (int i = 0; i < assemblies.Length; i++)
@@ -38,6 +43,8 @@ namespace AbilityKit.Ability.Triggering.Runtime
                     if (type == null) continue;
                     if (type.IsAbstract || type.IsInterface) continue;
 
+                    if (!IsNamespaceMatched(type, namespacePrefixes)) continue;
+
                     var actionAttr = type.GetCustomAttribute<TriggerActionTypeAttribute>(inherit: false);
                     if (actionAttr != null && typeof(IActionFactory).IsAssignableFrom(type))
                     {
@@ -54,6 +61,32 @@ namespace AbilityKit.Ability.Triggering.Runtime
                     }
                 }
             }
+        }
+
+        private static bool IsNamespaceMatched(Type type, IReadOnlyList<string> namespacePrefixes)
+        {
+            if (namespacePrefixes == null || namespacePrefixes.Count == 0)
+            {
+                return true;
+            }
+
+            var ns = type.Namespace;
+            if (string.IsNullOrEmpty(ns))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < namespacePrefixes.Count; i++)
+            {
+                var prefix = namespacePrefixes[i];
+                if (string.IsNullOrEmpty(prefix)) continue;
+                if (ns.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private T CreateFactoryInstance<T>(Type type) where T : class

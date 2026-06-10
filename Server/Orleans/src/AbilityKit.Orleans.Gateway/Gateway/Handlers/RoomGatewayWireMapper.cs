@@ -22,6 +22,12 @@ internal static class RoomGatewayWireMapper
 
     public static WireJoinRoomRes ToJoinRoomRes(RoomSnapshot snapshot, string message = "")
     {
+        return ToJoinRoomRes(new JoinRoomResponse(snapshot, RoomJoinKind.TeamLobby, DateTime.UtcNow.Ticks), message);
+    }
+
+    public static WireJoinRoomRes ToJoinRoomRes(JoinRoomResponse response, string message = "")
+    {
+        var snapshot = response.Snapshot;
         var roomId = snapshot.Summary?.RoomId ?? string.Empty;
         return new WireJoinRoomRes
         {
@@ -30,7 +36,9 @@ internal static class RoomGatewayWireMapper
             NumericRoomId = RoomGatewayIds.CreateNumericRoomId(roomId),
             Snapshot = ToWireSnapshot(snapshot),
             WorldStartAnchor = ToWireAnchor(snapshot.WorldStartAnchor),
-            Message = message ?? string.Empty
+            Message = message ?? string.Empty,
+            JoinKind = ToWireJoinKind(response.JoinKind),
+            ServerNowTicks = response.ServerNowTicks
         };
     }
 
@@ -55,7 +63,18 @@ internal static class RoomGatewayWireMapper
             Members = snapshot.Members == null ? null : new List<string>(snapshot.Members),
             Players = ToWirePlayers(snapshot.Players),
             CanStart = snapshot.CanStart,
-            BattleId = snapshot.BattleId ?? string.Empty
+            BattleId = snapshot.BattleId ?? string.Empty,
+            WorldId = snapshot.WorldId
+        };
+    }
+
+    public static WireRoomJoinKind ToWireJoinKind(RoomJoinKind joinKind)
+    {
+        return joinKind switch
+        {
+            RoomJoinKind.Reconnect => WireRoomJoinKind.Reconnect,
+            RoomJoinKind.LateJoin => WireRoomJoinKind.LateJoin,
+            _ => WireRoomJoinKind.TeamLobby
         };
     }
 

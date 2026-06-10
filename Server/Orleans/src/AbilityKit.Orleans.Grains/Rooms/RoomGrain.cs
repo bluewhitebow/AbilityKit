@@ -47,20 +47,39 @@ public sealed class RoomGrain : Grain, IRoomGrain
             gameplay.BuildPlayerSnapshots(gameplayState),
             gameplay.CanStart(gameplayState),
             _battleId,
-            _worldStartAnchor));
+            _worldStartAnchor,
+            _worldId));
     }
 
-    public async Task JoinAsync(string accountId)
+    public async Task<JoinRoomResponse> JoinAsync(string accountId)
     {
         var summary = RequireSummary();
         var gameplay = RequireGameplay();
         var gameplayState = RequireGameplayState();
-        EnsureOpen();
         EnsureAccountId(accountId);
 
-        if (_members.Contains(accountId))
+        var alreadyMember = _members.Contains(accountId);
+        if (_closed && !string.IsNullOrEmpty(_battleId))
         {
-            return;
+            if (!alreadyMember)
+            {
+                if (summary.MaxPlayers > 0 && _members.Count >= summary.MaxPlayers)
+                {
+                    throw new InvalidOperationException("Room is full.");
+                }
+
+                _members.Add(accountId);
+                await NotifyRoomChangedAsync();
+            }
+
+            var runningKind = alreadyMember ? RoomJoinKind.Reconnect : RoomJoinKind.LateJoin;
+            return new JoinRoomResponse(await GetSnapshotAsync(), runningKind, DateTime.UtcNow.Ticks);
+        }
+
+        EnsureOpen();
+        if (alreadyMember)
+        {
+            return new JoinRoomResponse(await GetSnapshotAsync(), RoomJoinKind.Reconnect, DateTime.UtcNow.Ticks);
         }
 
         if (summary.MaxPlayers > 0 && _members.Count >= summary.MaxPlayers)
@@ -71,6 +90,7 @@ public sealed class RoomGrain : Grain, IRoomGrain
         _members.Add(accountId);
         gameplay.Join(gameplayState, summary, _members, accountId);
         await NotifyRoomChangedAsync();
+        return new JoinRoomResponse(await GetSnapshotAsync(), RoomJoinKind.TeamLobby, DateTime.UtcNow.Ticks);
     }
 
     public async Task LeaveAsync(string accountId)

@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "com.abilitykit.world.networkfragments",
   "version": "0.0.1",
   "displayName": "AbilityKit World Network Fragments",
@@ -10,6 +10,6 @@
     "com.abilitykit.world.di": "0.0.1",
     "com.abilitykit.world.framesync": "0.0.1",
     "com.abilitykit.host": "0.0.1",
-    "com.abilitykit.network.runtime": "0.1.0"
+    "com.abilitykit.network.runtime": "0.0.1"
   }
 }

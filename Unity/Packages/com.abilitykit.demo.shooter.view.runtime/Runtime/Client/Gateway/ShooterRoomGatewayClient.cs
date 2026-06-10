@@ -58,7 +58,14 @@ namespace AbilityKit.Demo.Shooter.View
             var payload = WireRoomGatewayBinary.Serialize(in req);
             var responsePayload = await _transport.SendRequestAsync(_submitBattleInputOpCode, payload, timeout, cancellationToken).ConfigureAwait(false);
             var wire = WireRoomGatewayBinary.Deserialize<WireSubmitBattleInputRes>(responsePayload);
-            return new ShooterGatewayBattleInputResult(wire.Success, wire.AcceptedFrame, wire.Message ?? string.Empty);
+            return new ShooterGatewayBattleInputResult(
+                wire.Success,
+                wire.AcceptedFrame,
+                wire.Message ?? string.Empty,
+                wire.CurrentFrame,
+                wire.Status ?? string.Empty,
+                wire.ShouldResync,
+                wire.ServerTicks);
         }
 
         private static void Validate(in ShooterGatewayBattleInputContext context)
@@ -94,12 +101,25 @@ namespace AbilityKit.Demo.Shooter.View
         public readonly bool Success;
         public readonly int AcceptedFrame;
         public readonly string Message;
+        public readonly int CurrentFrame;
+        public readonly string Status;
+        public readonly bool ShouldResync;
+        public readonly long ServerTicks;
 
         public ShooterGatewayBattleInputResult(bool success, int acceptedFrame, string message)
+            : this(success, acceptedFrame, message, 0, string.Empty, false, 0L)
+        {
+        }
+
+        public ShooterGatewayBattleInputResult(bool success, int acceptedFrame, string message, int currentFrame, string status, bool shouldResync, long serverTicks)
         {
             Success = success;
             AcceptedFrame = acceptedFrame;
             Message = message ?? string.Empty;
+            CurrentFrame = currentFrame;
+            Status = status ?? string.Empty;
+            ShouldResync = shouldResync;
+            ServerTicks = serverTicks;
         }
     }
 }

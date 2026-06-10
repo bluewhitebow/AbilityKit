@@ -84,7 +84,7 @@ namespace AbilityKit.Demo.Moba
                     in lineageContext,
                     Services.MobaContextSourceResolveKind.DirectProvider,
                     Services.MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "DamageAttack",
+                    runtimeKind: MobaRuntimeKindNames.DamageAttack,
                     runtimeConfigId: OriginConfigId);
                 return source.IsValid;
             }
@@ -158,7 +158,7 @@ namespace AbilityKit.Demo.Moba
                     in lineageContext,
                     Services.MobaContextSourceResolveKind.DirectProvider,
                     Services.MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "DamageCalc",
+                    runtimeKind: MobaRuntimeKindNames.DamageCalc,
                     runtimeConfigId: lineageContext.SourceConfigId);
                 return source.IsValid;
             }
@@ -238,7 +238,7 @@ namespace AbilityKit.Demo.Moba
                     in lineageContext,
                     Services.MobaContextSourceResolveKind.DirectProvider,
                     Services.MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "DamageResult",
+                    runtimeKind: MobaRuntimeKindNames.DamageResult,
                     runtimeConfigId: ReasonParam);
                 return source.IsValid;
             }

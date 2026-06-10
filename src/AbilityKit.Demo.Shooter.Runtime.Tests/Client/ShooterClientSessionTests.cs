@@ -60,7 +60,11 @@ public sealed class ShooterClientSessionTests
             {
                 Success = true,
                 AcceptedFrame = 7,
-                Message = "accepted"
+                Message = "accepted",
+                CurrentFrame = 5,
+                Status = "Accepted",
+                ShouldResync = false,
+                ServerTicks = 123456789L
             });
         var gateway = new ShooterRoomGatewayClient(transport);
         var session = new ShooterClientSession(runtime, presentation, tickRate: 30, decoder: null, gateway);
@@ -85,6 +89,10 @@ public sealed class ShooterClientSessionTests
         Assert.True(result.Remote.Success);
         Assert.Equal(7, result.Remote.AcceptedFrame);
         Assert.Equal("accepted", result.Remote.Message);
+        Assert.Equal(5, result.Remote.CurrentFrame);
+        Assert.Equal("Accepted", result.Remote.Status);
+        Assert.False(result.Remote.ShouldResync);
+        Assert.Equal(123456789L, result.Remote.ServerTicks);
         Assert.Equal(RoomGatewayOpCodes.SubmitBattleInput, transport.LastOpCode);
         Assert.True(transport.LastPayload.Count > 0);
         var wire = WireRoomGatewayBinary.Deserialize<WireSubmitBattleInputReq>(transport.LastPayload);
@@ -101,5 +109,45 @@ public sealed class ShooterClientSessionTests
         Assert.Single(commands);
         Assert.Equal(command.PlayerId, commands[0].PlayerId);
         Assert.True(commands[0].Fire);
+    }
+
+    [Fact]
+    public async Task ClientSessionReceivesGatewayInputResyncHint()
+    {
+        var runtime = new ShooterBattleRuntimePort();
+        var presentation = new ShooterPresentationFacade();
+        var transport = new RecordingShooterRoomGatewayTransport(
+            new WireSubmitBattleInputRes
+            {
+                Success = false,
+                AcceptedFrame = 12,
+                Message = "Input frame is too far ahead.",
+                CurrentFrame = 8,
+                Status = "RejectedTooFarFuture",
+                ShouldResync = true,
+                ServerTicks = 987654321L
+            });
+        var gateway = new ShooterRoomGatewayClient(transport);
+        var session = new ShooterClientSession(runtime, presentation, tickRate: 30, decoder: null, gateway);
+        var start = new ShooterStartGamePayload(
+            "gateway-resync-session",
+            30,
+            4905,
+            new[]
+            {
+                new ShooterStartPlayer(11, "P11", 0f, 0f)
+            });
+        Assert.True(session.StartGame(in start));
+        var context = new ShooterGatewayBattleInputContext("session-token", "battle-1", 9009ul, frame: 30, playerId: 11u);
+        var command = new ShooterPlayerCommand(11, 1f, 0f, 0f, 1f, true);
+
+        var result = await session.SubmitLocalInputToGatewayAsync(context, command);
+
+        Assert.False(result.Remote.Success);
+        Assert.Equal(12, result.Remote.AcceptedFrame);
+        Assert.Equal(8, result.Remote.CurrentFrame);
+        Assert.Equal("RejectedTooFarFuture", result.Remote.Status);
+        Assert.True(result.Remote.ShouldResync);
+        Assert.Equal(987654321L, result.Remote.ServerTicks);
     }
 }

@@ -106,10 +106,18 @@ namespace AbilityKit.Demo.Shooter.View
 
             var gatewayClient = new ShooterRoomGatewayClient(_transport);
             var session = new ShooterClientSession(runtime, presentation, tickRate, decoder: null, gatewayClient);
-            if (!session.StartGame(in startGame))
+            var alignedStartGame = startGame.WithWorldStartAnchor(
+                flowResult.WorldId,
+                flowResult.WorldStartAnchor.StartServerTicks,
+                flowResult.WorldStartAnchor.ServerTickFrequency,
+                flowResult.WorldStartAnchor.StartFrame,
+                flowResult.WorldStartAnchor.FixedDeltaSeconds);
+            if (!session.StartGame(in alignedStartGame))
             {
                 throw new InvalidOperationException("Shooter client session failed to start game.");
             }
+
+            session.CatchUpToFrame(flowResult.TargetFrame);
 
             var battle = new ShooterClientBattleHandle(session, flowResult);
             return new ShooterClientGatewayLaunchResult(

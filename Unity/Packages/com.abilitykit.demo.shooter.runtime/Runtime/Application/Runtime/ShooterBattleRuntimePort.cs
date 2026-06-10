@@ -1,43 +1,41 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Shooter;
-using ShooterBulletState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsProjectileEntity;
-using ShooterPlayerState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsPlayerEntity;
+using AbilityKit.World.Svelto;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
+    [WorldService(typeof(ShooterBattleRuntimePort), WorldLifetime.Singleton)]
+    [WorldService(typeof(IShooterBattleRuntimePort), WorldLifetime.Singleton)]
     public sealed class ShooterBattleRuntimePort : IShooterBattleRuntimePort
     {
         private readonly ShooterBattleState _state;
         private readonly IShooterBattleSimulation _simulation;
-        private readonly IShooterSveltoWorld? _sveltoWorld;
+        private readonly IShooterEntityManager _entities;
 
         public ShooterBattleRuntimePort()
-            : this(new ShooterManagedEcsEntityStore())
+            : this(CreateDefaultEntityManager())
         {
         }
 
-        public ShooterBattleRuntimePort(IShooterEcsEntityStore entityStore)
-            : this(CreateState(entityStore))
+        private ShooterBattleRuntimePort(IShooterEntityManager entities)
+            : this(CreateState(entities))
         {
         }
 
         private ShooterBattleRuntimePort(ShooterBattleState state)
-            : this(state, new ShooterBattleSimulation(state), null)
+            : this(state, new ShooterBattleSimulation(state), state.Entities)
         {
         }
 
-        public ShooterBattleRuntimePort(ShooterBattleState state, IShooterBattleSimulation simulation, IShooterSveltoWorld? sveltoWorld)
+        public ShooterBattleRuntimePort(ShooterBattleState state, IShooterBattleSimulation simulation, IShooterEntityManager entities)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
             _simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
-            _sveltoWorld = sveltoWorld;
+            _entities = entities ?? throw new ArgumentNullException(nameof(entities));
         }
-
-        private IDictionary<int, ShooterPlayerState> _players => _state.Players;
-
-        private IList<ShooterBulletState> _bullets => _state.Bullets;
 
         public bool IsStarted => _state.IsStarted;
 
@@ -53,9 +51,9 @@ namespace AbilityKit.Demo.Shooter.Runtime
             for (int i = 0; i < players.Length; i++)
             {
                 var player = players[i];
-                if (player.PlayerId <= 0 || _players.ContainsKey(player.PlayerId)) continue;
+                if (player.PlayerId <= 0 || _entities.HasPlayer(player.PlayerId)) continue;
 
-                _players[player.PlayerId] = new ShooterPlayerState
+                var component = new ShooterSveltoPlayerComponent
                 {
                     PlayerId = player.PlayerId,
                     X = player.SpawnX,
@@ -66,10 +64,10 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     Score = 0,
                     Alive = true
                 };
+                _entities.AddPlayer(in component);
             }
 
-            _state.IsStarted = _players.Count > 0;
-            SyncEntityStore();
+            _state.IsStarted = _entities.PlayerCount > 0;
             return _state.IsStarted;
         }
 
@@ -84,7 +82,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             for (int i = 0; i < commands.Length; i++)
             {
                 var command = commands[i];
-                if (!_players.ContainsKey(command.PlayerId)) continue;
+                if (!_entities.HasPlayer(command.PlayerId)) continue;
 
                 _state.LatestCommands[command.PlayerId] = command;
                 accepted++;
@@ -104,24 +102,24 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _state.Events.Clear();
 
             _simulation.Tick(deltaTime);
-            SyncEntityStore();
             return true;
         }
 
         public ShooterStateSnapshotPayload GetSnapshot()
         {
-            var players = new ShooterPlayerSnapshot[_players.Count];
-            var index = 0;
-            foreach (var kv in _players)
+            var playerIds = CopyAndSort(_entities.PlayerIds);
+            var players = new ShooterPlayerSnapshot[playerIds.Length];
+            for (int i = 0; i < playerIds.Length; i++)
             {
-                var p = kv.Value;
-                players[index++] = new ShooterPlayerSnapshot(p.PlayerId, p.X, p.Y, p.AimX, p.AimY, p.Hp, p.Score, p.Alive);
+                _entities.TryGetPlayer(playerIds[i], out var p);
+                players[i] = new ShooterPlayerSnapshot(p.PlayerId, p.X, p.Y, p.AimX, p.AimY, p.Hp, p.Score, p.Alive);
             }
 
-            var bullets = new ShooterBulletSnapshot[_bullets.Count];
-            for (int i = 0; i < _bullets.Count; i++)
+            var bulletIds = CopyAndSort(_entities.ProjectileIds);
+            var bullets = new ShooterBulletSnapshot[bulletIds.Length];
+            for (int i = 0; i < bulletIds.Length; i++)
             {
-                var b = _bullets[i];
+                _entities.TryGetProjectile(bulletIds[i], out var b);
                 bullets[i] = new ShooterBulletSnapshot(b.BulletId, b.OwnerPlayerId, b.X, b.Y, b.VelocityX, b.VelocityY, b.RemainingFrames);
             }
 
@@ -135,17 +133,10 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 var hash = 2166136261u;
                 hash = Hash(hash, CurrentFrame);
 
-                var playerIds = new int[_players.Count];
-                var playerIndex = 0;
-                foreach (var kv in _players)
-                {
-                    playerIds[playerIndex++] = kv.Key;
-                }
-
-                Array.Sort(playerIds);
+                var playerIds = CopyAndSort(_entities.PlayerIds);
                 for (int i = 0; i < playerIds.Length; i++)
                 {
-                    var player = _players[playerIds[i]];
+                    _entities.TryGetPlayer(playerIds[i], out var player);
                     hash = Hash(hash, player.PlayerId);
                     hash = Hash(hash, Quantize(player.X));
                     hash = Hash(hash, Quantize(player.Y));
@@ -156,11 +147,10 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     hash = Hash(hash, player.Alive ? 1 : 0);
                 }
 
-                var bullets = _bullets.ToArray();
-                Array.Sort(bullets, CompareBulletsById);
-                for (int i = 0; i < bullets.Length; i++)
+                var bulletIds = CopyAndSort(_entities.ProjectileIds);
+                for (int i = 0; i < bulletIds.Length; i++)
                 {
-                    var bullet = bullets[i];
+                    _entities.TryGetProjectile(bulletIds[i], out var bullet);
                     hash = Hash(hash, bullet.BulletId);
                     hash = Hash(hash, bullet.OwnerPlayerId);
                     hash = Hash(hash, Quantize(bullet.X));
@@ -189,7 +179,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 CurrentFrame,
                 CreateSnapshotFlags(isFullSnapshot, authorityOverride),
                 ComputeStateHash(),
-                _players.Count + _bullets.Count,
+                _entities.PlayerCount + _entities.ProjectileCount,
                 chunks,
                 Array.Empty<byte>());
         }
@@ -218,8 +208,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 }
             }
 
-            _state.IsStarted = _players.Count > 0;
-            SyncEntityStore();
+            _state.IsStarted = _entities.PlayerCount > 0;
             return _state.IsStarted || snapshot.EntityCount == 0;
         }
 
@@ -235,26 +224,14 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return ImportPackedSnapshot(in snapshot);
         }
 
-        private void SyncEntityStore()
-        {
-            _sveltoWorld?.SyncEntities();
-        }
-
         private ShooterPackedEntityChunk ExportPlayerChunk()
         {
-            if (_players.Count == 0)
+            if (_entities.PlayerCount == 0)
             {
                 return ShooterPackedEntityChunk.Empty(ShooterPackedEntityKinds.Player);
             }
 
-            var entityIds = new int[_players.Count];
-            var index = 0;
-            foreach (var kv in _players)
-            {
-                entityIds[index++] = kv.Key;
-            }
-
-            Array.Sort(entityIds);
+            var entityIds = CopyAndSort(_entities.PlayerIds);
             var posX = new float[entityIds.Length];
             var posY = new float[entityIds.Length];
             var velX = new float[entityIds.Length];
@@ -268,7 +245,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
             for (int i = 0; i < entityIds.Length; i++)
             {
-                var player = _players[entityIds[i]];
+                _entities.TryGetPlayer(entityIds[i], out var player);
                 posX[i] = player.X;
                 posY[i] = player.Y;
                 facingX[i] = player.AimX;
@@ -300,29 +277,26 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         private ShooterPackedEntityChunk ExportProjectileChunk()
         {
-            if (_bullets.Count == 0)
+            if (_entities.ProjectileCount == 0)
             {
                 return ShooterPackedEntityChunk.Empty(ShooterPackedEntityKinds.Projectile);
             }
 
-            var bullets = _bullets.ToArray();
-            Array.Sort(bullets, CompareBulletsById);
-            var entityIds = new int[bullets.Length];
-            var posX = new float[bullets.Length];
-            var posY = new float[bullets.Length];
-            var velX = new float[bullets.Length];
-            var velY = new float[bullets.Length];
-            var facingX = new float[bullets.Length];
-            var facingY = new float[bullets.Length];
-            var hp = new short[bullets.Length];
-            var flags = new byte[bullets.Length];
-            var ownerIds = new int[bullets.Length];
-            var aux = new int[bullets.Length];
+            var entityIds = CopyAndSort(_entities.ProjectileIds);
+            var posX = new float[entityIds.Length];
+            var posY = new float[entityIds.Length];
+            var velX = new float[entityIds.Length];
+            var velY = new float[entityIds.Length];
+            var facingX = new float[entityIds.Length];
+            var facingY = new float[entityIds.Length];
+            var hp = new short[entityIds.Length];
+            var flags = new byte[entityIds.Length];
+            var ownerIds = new int[entityIds.Length];
+            var aux = new int[entityIds.Length];
 
-            for (int i = 0; i < bullets.Length; i++)
+            for (int i = 0; i < entityIds.Length; i++)
             {
-                var bullet = bullets[i];
-                entityIds[i] = bullet.BulletId;
+                _entities.TryGetProjectile(entityIds[i], out var bullet);
                 posX[i] = bullet.X;
                 posY[i] = bullet.Y;
                 velX[i] = bullet.VelocityX;
@@ -338,7 +312,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 aux[i] = bullet.RemainingFrames;
             }
 
-            return new ShooterPackedEntityChunk(ShooterPackedEntityKinds.Projectile, bullets.Length, entityIds, posX, posY, velX, velY, facingX, facingY, hp, flags, ownerIds, aux);
+            return new ShooterPackedEntityChunk(ShooterPackedEntityKinds.Projectile, entityIds.Length, entityIds, posX, posY, velX, velY, facingX, facingY, hp, flags, ownerIds, aux);
         }
 
         private void ImportPlayerChunk(in ShooterPackedEntityChunk chunk)
@@ -350,7 +324,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 if (playerId <= 0) continue;
 
                 var flags = GetByte(chunk.Flags, i);
-                _players[playerId] = new ShooterPlayerState
+                var player = new ShooterSveltoPlayerComponent
                 {
                     PlayerId = playerId,
                     X = GetFloat(chunk.PosX, i),
@@ -361,6 +335,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     Score = GetInt(chunk.Aux, i),
                     Alive = (flags & ShooterPackedEntityFlags.Alive) != 0
                 };
+                _entities.AddPlayer(in player);
             }
         }
 
@@ -373,7 +348,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 if (bulletId <= 0) continue;
 
                 var remainingFrames = GetInt(chunk.Aux, i, GetShort(chunk.Hp, i));
-                _bullets.Add(new ShooterBulletState
+                var bullet = new ShooterSveltoProjectileComponent
                 {
                     BulletId = bulletId,
                     OwnerPlayerId = GetInt(chunk.OwnerIds, i),
@@ -382,8 +357,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     VelocityX = GetFloat(chunk.VelX, i),
                     VelocityY = GetFloat(chunk.VelY, i),
                     RemainingFrames = remainingFrames
-                });
-
+                };
+                _entities.AddProjectile(in bullet);
                 _state.AdvanceBulletIdPast(bulletId);
             }
         }
@@ -402,11 +377,6 @@ namespace AbilityKit.Demo.Shooter.Runtime
             }
 
             return flags;
-        }
-
-        private static int CompareBulletsById(ShooterBulletState left, ShooterBulletState right)
-        {
-            return left.BulletId.CompareTo(right.BulletId);
         }
 
         private static short ClampToShort(int value)
@@ -456,10 +426,27 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return ShooterBattleMath.Normalize(ref x, ref y);
         }
 
-        private static ShooterBattleState CreateState(IShooterEcsEntityStore entityStore)
+        private static int[] CopyAndSort(IReadOnlyCollection<int> ids)
         {
-            return new ShooterBattleState(entityStore);
+            var sorted = new int[ids.Count];
+            var index = 0;
+            foreach (var id in ids)
+            {
+                sorted[index++] = id;
+            }
+
+            Array.Sort(sorted);
+            return sorted;
         }
 
+        private static IShooterEntityManager CreateDefaultEntityManager()
+        {
+            return new ShooterEntityManager(new SveltoWorldContext());
+        }
+
+        private static ShooterBattleState CreateState(IShooterEntityManager entities)
+        {
+            return new ShooterBattleState(entities);
+        }
     }
 }

@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using AbilityKit.Ability.Host.Extensions.Client.FrameSync;
 
 namespace AbilityKit.Demo.Shooter.View
 {
@@ -85,6 +86,8 @@ namespace AbilityKit.Demo.Shooter.View
                 cancellationToken).ConfigureAwait(false);
             EnsureSuccess(subscribe.Success, subscribe.Message, "subscribe state sync");
 
+            var worldStartAnchor = SelectWorldStartAnchor(in start.WorldStartAnchor, in join.WorldStartAnchor);
+
             return new ShooterRoomGatewayFlowResult(
                 sessionToken,
                 create.RoomId,
@@ -92,7 +95,9 @@ namespace AbilityKit.Demo.Shooter.View
                 battleId,
                 start.WorldId,
                 playerId,
-                in join.WorldStartAnchor,
+                in worldStartAnchor,
+                start.ServerNowTicks,
+                ShooterRoomGatewayEntryKind.TeamLobby,
                 ready.CanStart,
                 start.Started,
                 subscribe.Success,
@@ -123,6 +128,30 @@ namespace AbilityKit.Demo.Shooter.View
                 timeout,
                 cancellationToken).ConfigureAwait(false);
             EnsureSuccess(join.Success, join.Message, "join room");
+
+            if (join.JoinKind != ShooterGatewayRoomJoinKind.TeamLobby && !string.IsNullOrWhiteSpace(join.BattleId))
+            {
+                var runningSubscribe = await _roomClient.SubscribeStateSyncAsync(
+                    new ShooterGatewayStateSyncSubscriptionRequest(sessionToken, join.BattleId, roomId),
+                    timeout,
+                    cancellationToken).ConfigureAwait(false);
+                EnsureSuccess(runningSubscribe.Success, runningSubscribe.Message, "subscribe state sync");
+
+                return new ShooterRoomGatewayFlowResult(
+                    sessionToken,
+                    roomId,
+                    join.NumericRoomId,
+                    join.BattleId,
+                    join.WorldId,
+                    playerId,
+                    in join.WorldStartAnchor,
+                    join.ServerNowTicks,
+                    ToEntryKind(join.JoinKind),
+                    join.CanStart,
+                    started: true,
+                    runningSubscribe.Success,
+                    runningSubscribe.Message);
+            }
 
             var ready = await _roomClient.SetReadyAsync(
                 new ShooterGatewayReadyRequest(sessionToken, roomId, ready: true),
@@ -161,6 +190,8 @@ namespace AbilityKit.Demo.Shooter.View
                 cancellationToken).ConfigureAwait(false);
             EnsureSuccess(subscribe.Success, subscribe.Message, "subscribe state sync");
 
+            var worldStartAnchor = SelectWorldStartAnchor(in start.WorldStartAnchor, in join.WorldStartAnchor);
+
             return new ShooterRoomGatewayFlowResult(
                 sessionToken,
                 roomId,
@@ -168,11 +199,30 @@ namespace AbilityKit.Demo.Shooter.View
                 battleId,
                 start.WorldId,
                 playerId,
-                in join.WorldStartAnchor,
+                in worldStartAnchor,
+                start.ServerNowTicks,
+                ShooterRoomGatewayEntryKind.TeamLobby,
                 ready.CanStart,
                 start.Started,
                 subscribe.Success,
                 subscribe.Message);
+        }
+
+        private static ShooterRoomGatewayEntryKind ToEntryKind(ShooterGatewayRoomJoinKind joinKind)
+        {
+            return joinKind switch
+            {
+                ShooterGatewayRoomJoinKind.Reconnect => ShooterRoomGatewayEntryKind.Reconnect,
+                ShooterGatewayRoomJoinKind.LateJoin => ShooterRoomGatewayEntryKind.LateJoin,
+                _ => ShooterRoomGatewayEntryKind.TeamLobby
+            };
+        }
+
+        private static ShooterGatewayWorldStartAnchor SelectWorldStartAnchor(
+            in ShooterGatewayWorldStartAnchor startAnchor,
+            in ShooterGatewayWorldStartAnchor joinAnchor)
+        {
+            return startAnchor.IsValid ? startAnchor : joinAnchor;
         }
 
         private static void ValidateSessionToken(string sessionToken)
@@ -192,6 +242,13 @@ namespace AbilityKit.Demo.Shooter.View
         }
     }
 
+    public enum ShooterRoomGatewayEntryKind
+    {
+        TeamLobby = 0,
+        Reconnect = 1,
+        LateJoin = 2
+    }
+
     public readonly struct ShooterRoomGatewayFlowResult
     {
         public readonly string SessionToken;
@@ -201,6 +258,10 @@ namespace AbilityKit.Demo.Shooter.View
         public readonly ulong WorldId;
         public readonly uint PlayerId;
         public readonly ShooterGatewayWorldStartAnchor WorldStartAnchor;
+        public readonly long ServerNowTicks;
+        public readonly int TargetFrame;
+        public readonly int CatchUpFrames;
+        public readonly ShooterRoomGatewayEntryKind EntryKind;
         public readonly bool CanStart;
         public readonly bool Started;
         public readonly bool Subscribed;
@@ -214,6 +275,8 @@ namespace AbilityKit.Demo.Shooter.View
             ulong worldId,
             uint playerId,
             in ShooterGatewayWorldStartAnchor worldStartAnchor,
+            long serverNowTicks,
+            ShooterRoomGatewayEntryKind entryKind,
             bool canStart,
             bool started,
             bool subscribed,
@@ -226,6 +289,11 @@ namespace AbilityKit.Demo.Shooter.View
             WorldId = worldId;
             PlayerId = playerId;
             WorldStartAnchor = worldStartAnchor;
+            ServerNowTicks = serverNowTicks;
+            var catchUp = WorldStartFrameCatchUpCalculator.Calculate(worldStartAnchor.ToFrameStartAnchor(), serverNowTicks);
+            TargetFrame = catchUp.TargetFrame;
+            CatchUpFrames = catchUp.CatchUpFrames;
+            EntryKind = entryKind;
             CanStart = canStart;
             Started = started;
             Subscribed = subscribed;

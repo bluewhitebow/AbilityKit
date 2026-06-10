@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Events.Summon;
+using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 31)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.RemoveSummon)]
     public sealed class RemoveSummonPlanActionModule : MobaPlanActionModuleBase<RemoveSummonArgs, RemoveSummonPlanActionModule>
     {
         protected override IActionSchema<RemoveSummonArgs, IWorldResolver> Schema => RemoveSummonSchema.Instance;
@@ -36,7 +37,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             {
                 ownerActorIds.Add(args.RootOwnerActorId);
             }
-            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "remove_summon", ownerActorIds) || ownerActorIds.Count == 0)
+            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveSummon, ownerActorIds) || ownerActorIds.Count == 0)
             {
                 if (coreInput.HasCasterActor)
                 {

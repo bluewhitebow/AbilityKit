@@ -6,6 +6,7 @@ using AbilityKit.Ability.Triggering.Json;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Triggering.Runtime.Plan.Json;
 using AbilityKit.Ability.World.DI;
+using AbilityKit.Demo.Moba.Triggering;
 using AbilityKit.Demo.Moba.Systems.Bootstrap;
 using AbilityKit.Demo.Moba.Systems.Bootstrap.Flow;
 
@@ -37,18 +38,19 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
             builder.TryRegister<TriggerPlanJsonDatabase>(WorldLifetime.Singleton, r =>
             {
                 var db = new TriggerPlanJsonDatabase();
+                db.CueFactory = new MobaPresentationCueFactory(r.Resolve<MobaPresentationCueSnapshotService>());
                 var textAssetLoader = r.Resolve<ITextAssetLoader>();
                 var fsAdapter = new EtFileSystemAdapter(textAssetLoader);
                 var directoryLoader = new TriggerPlanDirectoryLoader(fsAdapter);
                 var profile = r.Resolve<MobaTriggerPlanLoadProfile>() ?? MobaTriggerPlanLoadProfile.Default;
 
-                LoadEntries(db, fsAdapter, directoryLoader, profile.Entries);
+                LoadEntries(db, fsAdapter, directoryLoader, profile.Entries, db.CueFactory);
 
                 return db;
             });
         }
 
-        private static void LoadEntries(TriggerPlanJsonDatabase db, EtFileSystemAdapter fsAdapter, TriggerPlanDirectoryLoader directoryLoader, TriggerPlanLoadEntry[] entries)
+        private static void LoadEntries(TriggerPlanJsonDatabase db, EtFileSystemAdapter fsAdapter, TriggerPlanDirectoryLoader directoryLoader, TriggerPlanLoadEntry[] entries, TriggerPlanJsonDatabase.ICueFactory cueFactory)
         {
             if (entries == null) return;
 
@@ -59,21 +61,21 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
 
                 if (entry.IsDirectory)
                 {
-                    LoadDirectory(db, directoryLoader, entry);
+                    LoadDirectory(db, directoryLoader, entry, cueFactory);
                 }
                 else
                 {
-                    LoadFile(db, fsAdapter, entry);
+                    LoadFile(db, fsAdapter, entry, cueFactory);
                 }
             }
         }
 
-        private static void LoadFile(TriggerPlanJsonDatabase db, EtFileSystemAdapter fsAdapter, TriggerPlanLoadEntry entry)
+        private static void LoadFile(TriggerPlanJsonDatabase db, EtFileSystemAdapter fsAdapter, TriggerPlanLoadEntry entry, TriggerPlanJsonDatabase.ICueFactory cueFactory)
         {
             MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Loading {entry.Name} from {entry.Path}");
             try
             {
-                var loadedDb = new TriggerPlanJsonDatabase();
+                var loadedDb = new TriggerPlanJsonDatabase { CueFactory = cueFactory };
                 loadedDb.Load(fsAdapter, entry.Path);
                 db.MergeFrom(loadedDb, replaceExisting: true);
                 MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"{entry.Name} merged. total records={db.Records?.Count ?? 0}");
@@ -85,13 +87,14 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
             }
         }
 
-        private static void LoadDirectory(TriggerPlanJsonDatabase db, TriggerPlanDirectoryLoader directoryLoader, TriggerPlanLoadEntry entry)
+        private static void LoadDirectory(TriggerPlanJsonDatabase db, TriggerPlanDirectoryLoader directoryLoader, TriggerPlanLoadEntry entry, TriggerPlanJsonDatabase.ICueFactory cueFactory)
         {
             var pattern = string.IsNullOrEmpty(entry.Pattern) ? "**/*.json" : entry.Pattern;
             MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Configuration, nameof(TriggerPlansStage), $"Loading {entry.Name} from {entry.Path} directory");
             try
             {
-                var loadedDb = directoryLoader.LoadDirectory(entry.Path, pattern);
+                var options = new TriggerPlanDirectoryLoadOptions { CueFactory = cueFactory };
+                var loadedDb = directoryLoader.LoadDirectory(entry.Path, pattern, options);
                 if (loadedDb != null && loadedDb.Records != null)
                 {
                     db.MergeFrom(loadedDb, replaceExisting: true);

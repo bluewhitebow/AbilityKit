@@ -36,6 +36,7 @@ using ShareDamageEventData = AbilityKit.Demo.Moba.Share.DamageEventData;
 using ShareStateHashData = AbilityKit.Demo.Moba.Share.StateHashData;
 using ShareFrameSnapshotDispatcher = AbilityKit.Demo.Moba.Share.FrameSnapshotDispatcher;
 using ShareActorSpawnData = AbilityKit.Demo.Moba.Share.ActorSpawnData;
+using SharePresentationCueData = AbilityKit.Demo.Moba.Share.PresentationCueData;
 using EC = AbilityKit.World.ECS;
 using Bootstrap = AbilityKit.Demo.Moba.Console.Bootstrap;
 using ECSEntities = AbilityKit.Demo.Moba.Console.Battle.ECS.Entities;
@@ -53,6 +54,7 @@ namespace AbilityKit.Demo.Moba.Console
         private readonly ConsoleBattleContext _context;
         private readonly BattleFlow _flow;
         private readonly IConsoleBattleView _battleView;
+        private readonly ConsoleVfxManager _presentationVfxManager;
         private readonly ConsoleSyncFeature _syncFeature;
         private readonly ConsoleInputFeature _inputFeature;
         private readonly ConsoleHudFeature _hudFeature;
@@ -69,6 +71,7 @@ namespace AbilityKit.Demo.Moba.Console
         private ConsoleBattleViewEventSink? _shareViewEventSink;
         private ShareReplayRecorder? _replayRecorder;
         private ShareReplayPlayer? _replayPlayer;
+        private ConsolePresentationCuePresenter? _cuePresenter;
 
         private AutoTestInputFeature? _autoTestInput;
 
@@ -109,12 +112,14 @@ namespace AbilityKit.Demo.Moba.Console
             _context = new ConsoleBattleContext { Plan = _config.BuildPlan() };
             _flow = new BattleFlow();
 
+            _presentationVfxManager = new ConsoleVfxManager(new ConsoleVfxDatabase());
             _battleView = new ConsoleBattleView(
                 new ConsoleEntityDisplayService(),
                 new ConsoleFloatingTextSystem(),
                 new ConsoleAreaViewSystem(),
                 new ConsoleProjectileDisplayService(),
-                Platform.Renderer);
+                Platform.Renderer,
+                _presentationVfxManager);
 
             _syncFeature = new ConsoleSyncFeature();
             _inputFeature = new ConsoleInputFeature();
@@ -140,7 +145,9 @@ namespace AbilityKit.Demo.Moba.Console
         private void InitializeShareComponents()
         {
             _snapshotDispatcher = new ShareFrameSnapshotDispatcher();
-            _shareViewEventSink = new ConsoleBattleViewEventSink(_battleView, _config.PlayerId);
+            _cuePresenter?.Dispose();
+            _cuePresenter = new ConsolePresentationCuePresenter(_presentationVfxManager, _battleView.EntityDisplay);
+            _shareViewEventSink = new ConsoleBattleViewEventSink(_battleView, _config.PlayerId, _cuePresenter);
 
             _replayRecorder = new ShareReplayRecorder();
             _replayRecorder.SetSnapshotInterval(30);
@@ -226,6 +233,12 @@ namespace AbilityKit.Demo.Moba.Console
             {
                 var snapshotData = new ShareFrameSnapshotData(frame, 0, ShareSnapshotType.Full, damageEvents: data);
                 _shareViewEventSink.OnDamageEventSnapshot(in snapshotData);
+            });
+
+            dispatcher.Subscribe(MobaOpCodes.Snapshot.PresentationCue, (int frame, SharePresentationCueData[] data) =>
+            {
+                var snapshotData = new ShareFrameSnapshotData(frame, 0, ShareSnapshotType.Full, presentationCues: data);
+                _shareViewEventSink.OnPresentationCueSnapshot(in snapshotData);
             });
 
             dispatcher.Subscribe(MobaOpCodes.Snapshot.StateHash, (int frame, ShareStateHashData data) =>
@@ -387,6 +400,7 @@ namespace AbilityKit.Demo.Moba.Console
             // _autoTestInput?.Tick(_context, (float)elapsed);
             // _hudFeature.Tick(_context, (float)elapsed);
 
+            _cuePresenter?.Tick(_syncAdapter?.LogicTimeSeconds ?? _totalTime);
             _battleView.Tick((float)elapsed);
             _syncAdapter?.Tick((float)elapsed);
 
@@ -490,6 +504,7 @@ namespace AbilityKit.Demo.Moba.Console
             // _inputFeature?.OnDetach(_context);
             // _syncFeature?.OnDetach(_context);
 
+            _cuePresenter?.Dispose();
             _viewBinder?.Dispose();
             _snapshotDispatcher?.Dispose();
             _shareViewEventSink?.Dispose();

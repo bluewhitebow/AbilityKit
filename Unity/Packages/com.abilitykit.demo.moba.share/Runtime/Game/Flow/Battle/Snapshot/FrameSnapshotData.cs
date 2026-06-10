@@ -59,6 +59,11 @@ namespace AbilityKit.Demo.Moba.Share
         /// </summary>
         public IReadOnlyList<ActorSpawnData> ActorSpawns { get; }
 
+        /// <summary>
+        /// 表现 Cue 数据列表
+        /// </summary>
+        public IReadOnlyList<PresentationCueData> PresentationCues { get; }
+
         public FrameSnapshotData(
             int frameIndex,
             double timestamp,
@@ -69,7 +74,8 @@ namespace AbilityKit.Demo.Moba.Share
             IReadOnlyList<AreaEventData> areaEvents = null,
             IReadOnlyList<DamageEventData> damageEvents = null,
             StateHashData stateHash = default,
-            IReadOnlyList<ActorSpawnData> actorSpawns = null)
+            IReadOnlyList<ActorSpawnData> actorSpawns = null,
+            IReadOnlyList<PresentationCueData> presentationCues = null)
         {
             FrameIndex = frameIndex;
             Timestamp = timestamp;
@@ -81,6 +87,7 @@ namespace AbilityKit.Demo.Moba.Share
             DamageEvents = damageEvents ?? Array.Empty<DamageEventData>();
             StateHash = stateHash;
             ActorSpawns = actorSpawns ?? Array.Empty<ActorSpawnData>();
+            PresentationCues = presentationCues ?? Array.Empty<PresentationCueData>();
         }
     }
 
@@ -267,6 +274,138 @@ namespace AbilityKit.Demo.Moba.Share
             DamageValue = damageValue;
             TargetHpAfter = targetHpAfter;
             IsKill = isKill;
+        }
+    }
+
+    /// <summary>
+    /// 表现 Cue 数据
+    /// </summary>
+    public readonly struct PresentationCueData
+    {
+        public PresentationCueStage Stage { get; }
+        public string CueKind { get; }
+        public string CueVfxId { get; }
+        public string CueSfxId { get; }
+        public int TemplateId { get; }
+        public int VfxId { get; }
+        public int SfxId { get; }
+        public string RequestKey { get; }
+        public int SourceActorId { get; }
+        public int TargetActorId { get; }
+        public int TriggerEventId { get; }
+        public string TriggerEventName { get; }
+        public int TriggerId { get; }
+        public int Phase { get; }
+        public int Priority { get; }
+        public int Order { get; }
+        public int ActionIndex { get; }
+        public int InterruptReason { get; }
+        public string InterruptSourceName { get; }
+        public int InterruptTriggerId { get; }
+        public bool InterruptConditionPassed { get; }
+        public IReadOnlyList<int> Targets { get; }
+        public IReadOnlyList<SnapshotVec3> Positions { get; }
+        public float OffsetX { get; }
+        public float OffsetY { get; }
+        public float OffsetZ { get; }
+        public int DurationMsOverride { get; }
+        public float Scale { get; }
+        public float ColorR { get; }
+        public float ColorG { get; }
+        public float ColorB { get; }
+        public float ColorA { get; }
+
+        public PresentationCueData(
+            PresentationCueStage stage,
+            string cueKind,
+            string cueVfxId,
+            string cueSfxId,
+            int templateId,
+            int vfxId,
+            int sfxId,
+            string requestKey,
+            int sourceActorId,
+            int targetActorId,
+            int triggerEventId,
+            string triggerEventName,
+            int triggerId,
+            int phase,
+            int priority,
+            int order,
+            int actionIndex,
+            int interruptReason,
+            string interruptSourceName,
+            int interruptTriggerId,
+            bool interruptConditionPassed,
+            IReadOnlyList<int> targets,
+            IReadOnlyList<SnapshotVec3> positions,
+            float offsetX,
+            float offsetY,
+            float offsetZ,
+            int durationMsOverride,
+            float scale,
+            float colorR,
+            float colorG,
+            float colorB,
+            float colorA)
+        {
+            Stage = stage;
+            CueKind = cueKind;
+            CueVfxId = cueVfxId;
+            CueSfxId = cueSfxId;
+            TemplateId = templateId;
+            VfxId = vfxId;
+            SfxId = sfxId;
+            RequestKey = requestKey;
+            SourceActorId = sourceActorId;
+            TargetActorId = targetActorId;
+            TriggerEventId = triggerEventId;
+            TriggerEventName = triggerEventName;
+            TriggerId = triggerId;
+            Phase = phase;
+            Priority = priority;
+            Order = order;
+            ActionIndex = actionIndex;
+            InterruptReason = interruptReason;
+            InterruptSourceName = interruptSourceName;
+            InterruptTriggerId = interruptTriggerId;
+            InterruptConditionPassed = interruptConditionPassed;
+            Targets = targets ?? Array.Empty<int>();
+            Positions = positions ?? Array.Empty<SnapshotVec3>();
+            OffsetX = offsetX;
+            OffsetY = offsetY;
+            OffsetZ = offsetZ;
+            DurationMsOverride = durationMsOverride;
+            Scale = scale;
+            ColorR = colorR;
+            ColorG = colorG;
+            ColorB = colorB;
+            ColorA = colorA;
+        }
+    }
+
+    public enum PresentationCueStage
+    {
+        None = 0,
+        ConditionPassed = 1,
+        ConditionFailed = 2,
+        BeforeAction = 3,
+        Executed = 4,
+        Interrupted = 5,
+        Skipped = 6,
+    }
+
+    public readonly struct SnapshotVec3
+    {
+        public float X { get; }
+        public float Y { get; }
+        public float Z { get; }
+
+        public SnapshotVec3(float x, float y, float z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
         }
     }
 

@@ -108,6 +108,14 @@ namespace AbilityKit.Demo.Moba.Share
         }
 
         /// <summary>
+        /// 分发表现 Cue 事件
+        /// </summary>
+        public void DispatchPresentationCue(int frameIndex, in PresentationCueData[] data)
+        {
+            Dispatch(frameIndex, MobaOpCodes.Snapshot.PresentationCue, data);
+        }
+
+        /// <summary>
         /// 分发状态哈希
         /// </summary>
         public void DispatchStateHash(int frameIndex, in StateHashData data)

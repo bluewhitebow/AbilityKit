@@ -8,7 +8,7 @@ using AbilityKit.Demo.Moba.Systems;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 0)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.EndGame)]
     public sealed class EndGamePlanActionModule : MobaPlanActionModuleBase<EndGameArgs, EndGamePlanActionModule>
     {
         protected override IActionSchema<EndGameArgs, IWorldResolver> Schema => EndGameSchema.Instance;

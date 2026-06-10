@@ -20,6 +20,18 @@ internal sealed class ScriptedShooterRoomClient : IShooterRoomGatewayRoomClient
 
     public ShooterGatewayStateSyncSubscriptionRequest LastSubscribeRequest { get; private set; }
 
+    public ShooterGatewayRoomJoinKind JoinKind { get; set; } = ShooterGatewayRoomJoinKind.TeamLobby;
+
+    public string JoinBattleId { get; set; } = "battle-prestart";
+
+    public ulong JoinWorldId { get; set; } = 0ul;
+
+    public long JoinServerNowTicks { get; set; } = 223456L;
+
+    public bool JoinCanStart { get; set; } = true;
+
+    public ShooterGatewayWorldStartAnchor JoinWorldStartAnchor { get; set; } = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 12, 1d / 30d);
+
     public Task<ShooterGatewayCreateRoomResult> CreateRoomAsync(ShooterGatewayCreateRoomRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         LastCreateRequest = request;
@@ -31,8 +43,18 @@ internal sealed class ScriptedShooterRoomClient : IShooterRoomGatewayRoomClient
     {
         LastJoinRequest = request;
         Calls.Add("join:" + request.RoomId);
-        var anchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 12, 1d / 30d);
-        return Task.FromResult(new ShooterGatewayJoinRoomResult(true, request.RoomId, 1001ul, in anchor, "joined", "battle-prestart", canStart: true));
+        var anchor = JoinWorldStartAnchor;
+        return Task.FromResult(new ShooterGatewayJoinRoomResult(
+            true,
+            request.RoomId,
+            1001ul,
+            in anchor,
+            "joined",
+            JoinBattleId,
+            JoinCanStart,
+            JoinKind,
+            JoinServerNowTicks,
+            JoinWorldId));
     }
 
     public Task<ShooterGatewayRoomSnapshotResult> SetReadyAsync(ShooterGatewayReadyRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -46,7 +68,8 @@ internal sealed class ScriptedShooterRoomClient : IShooterRoomGatewayRoomClient
     {
         LastStartBattleRequest = request;
         Calls.Add("start:" + request.RoomId + ":" + request.GameplayId);
-        return Task.FromResult(new ShooterGatewayStartBattleResult(true, "battle-1", 9001ul, started: true, "started"));
+        var anchor = new ShooterGatewayWorldStartAnchor(200000L, 10000000L, 30, 1d / 30d);
+        return Task.FromResult(new ShooterGatewayStartBattleResult(true, "battle-1", 9001ul, started: true, in anchor, 1200000L, "started"));
     }
 
     public Task<ShooterGatewayStateSyncSubscriptionResult> SubscribeStateSyncAsync(ShooterGatewayStateSyncSubscriptionRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)

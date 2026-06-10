@@ -1,7 +1,10 @@
+#nullable enable
+
 using System;
+using System.Collections.Generic;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Shooter;
-using ShooterBulletState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsProjectileEntity;
-using ShooterPlayerState = AbilityKit.Demo.Shooter.Runtime.ShooterEcsPlayerEntity;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
@@ -10,13 +13,19 @@ namespace AbilityKit.Demo.Shooter.Runtime
         void Tick(float deltaTime);
     }
 
+    [WorldService(typeof(ShooterBattleSimulation), WorldLifetime.Singleton)]
+    [WorldService(typeof(IShooterBattleSimulation), WorldLifetime.Singleton)]
     public sealed class ShooterBattleSimulation : IShooterBattleSimulation
     {
         private readonly ShooterBattleState _state;
+        private readonly IShooterEntityManager _entities;
+        private readonly List<int> _playerIdBuffer = new List<int>(8);
+        private readonly List<int> _projectileIdBuffer = new List<int>(32);
 
         public ShooterBattleSimulation(ShooterBattleState state)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
+            _entities = _state.Entities;
         }
 
         public void Tick(float deltaTime)
@@ -27,10 +36,13 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         private void TickPlayers(float deltaTime)
         {
-            foreach (var kv in _state.Players)
+            CopyIds(_entities.PlayerIds, _playerIdBuffer);
+            for (int i = 0; i < _playerIdBuffer.Count; i++)
             {
-                var player = kv.Value;
-                if (!player.Alive) continue;
+                if (!_entities.TryGetPlayer(_playerIdBuffer[i], out var player) || !player.Alive)
+                {
+                    continue;
+                }
 
                 _state.LatestCommands.TryGetValue(player.PlayerId, out var command);
                 var moveLength = ShooterBattleMath.Normalize(ref command.MoveX, ref command.MoveY);
@@ -49,23 +61,31 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
                 if (command.Fire)
                 {
-                    SpawnBullet(player);
+                    SpawnBullet(in player);
                     command.Fire = false;
                     _state.LatestCommands[player.PlayerId] = command;
                 }
+
+                _entities.SetPlayer(in player);
             }
         }
 
         private void TickBullets(float deltaTime)
         {
-            for (int i = _state.Bullets.Count - 1; i >= 0; i--)
+            CopyIds(_entities.ProjectileIds, _projectileIdBuffer);
+            for (int i = _projectileIdBuffer.Count - 1; i >= 0; i--)
             {
-                var bullet = _state.Bullets[i];
+                var bulletId = _projectileIdBuffer[i];
+                if (!_entities.TryGetProjectile(bulletId, out var bullet))
+                {
+                    continue;
+                }
+
                 bullet.X += bullet.VelocityX * deltaTime;
                 bullet.Y += bullet.VelocityY * deltaTime;
                 bullet.RemainingFrames--;
 
-                if (TryHitPlayer(bullet, out var target) && target != null)
+                if (TryHitPlayer(in bullet, out var target))
                 {
                     target.Hp = Math.Max(0, target.Hp - ShooterBattleTuning.HitDamage);
                     if (target.Hp == 0)
@@ -73,29 +93,31 @@ namespace AbilityKit.Demo.Shooter.Runtime
                         target.Alive = false;
                     }
 
-                    if (_state.Players.TryGetValue(bullet.OwnerPlayerId, out var owner))
+                    _entities.SetPlayer(in target);
+                    if (_entities.TryGetPlayer(bullet.OwnerPlayerId, out var owner))
                     {
                         owner.Score++;
+                        _entities.SetPlayer(in owner);
                     }
 
                     _state.Events.Add(new ShooterEventSnapshot(1, bullet.OwnerPlayerId, target.PlayerId, bullet.BulletId, target.X, target.Y, ShooterBattleTuning.HitDamage));
-                    _state.Bullets.RemoveAt(i);
+                    _entities.RemoveProjectile(bullet.BulletId);
                     continue;
                 }
 
                 if (bullet.RemainingFrames <= 0)
                 {
-                    _state.Bullets.RemoveAt(i);
+                    _entities.RemoveProjectile(bullet.BulletId);
                     continue;
                 }
 
-                _state.Bullets[i] = bullet;
+                _entities.SetProjectile(in bullet);
             }
         }
 
-        private void SpawnBullet(ShooterPlayerState player)
+        private void SpawnBullet(in ShooterSveltoPlayerComponent player)
         {
-            var bullet = new ShooterBulletState
+            var bullet = new ShooterSveltoProjectileComponent
             {
                 BulletId = _state.AllocateBulletId(),
                 OwnerPlayerId = player.PlayerId,
@@ -105,16 +127,20 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 VelocityY = player.AimY * ShooterBattleTuning.BulletSpeed,
                 RemainingFrames = ShooterBattleTuning.BulletLifeFrames
             };
-            _state.Bullets.Add(bullet);
+
+            _entities.AddProjectile(in bullet);
             _state.Events.Add(new ShooterEventSnapshot(2, player.PlayerId, 0, bullet.BulletId, bullet.X, bullet.Y, 0));
         }
 
-        private bool TryHitPlayer(ShooterBulletState bullet, out ShooterPlayerState? target)
+        private bool TryHitPlayer(in ShooterSveltoProjectileComponent bullet, out ShooterSveltoPlayerComponent target)
         {
-            foreach (var kv in _state.Players)
+            CopyIds(_entities.PlayerIds, _playerIdBuffer);
+            for (int i = 0; i < _playerIdBuffer.Count; i++)
             {
-                var player = kv.Value;
-                if (!player.Alive || player.PlayerId == bullet.OwnerPlayerId) continue;
+                if (!_entities.TryGetPlayer(_playerIdBuffer[i], out var player) || !player.Alive || player.PlayerId == bullet.OwnerPlayerId)
+                {
+                    continue;
+                }
 
                 var dx = player.X - bullet.X;
                 var dy = player.Y - bullet.Y;
@@ -125,8 +151,17 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 }
             }
 
-            target = null;
+            target = default;
             return false;
+        }
+
+        private static void CopyIds(IReadOnlyCollection<int> source, List<int> destination)
+        {
+            destination.Clear();
+            foreach (var id in source)
+            {
+                destination.Add(id);
+            }
         }
     }
 }

@@ -54,12 +54,20 @@ public sealed class ShooterRoomGatewayConnectionTests
             {
                 Success = true,
                 AcceptedFrame = 3,
-                Message = "ok"
+                Message = "ok",
+                CurrentFrame = 2,
+                Status = "RemappedLate",
+                ShouldResync = false,
+                ServerTicks = 22334455L
             });
         var submitResult = await requestTask;
         Assert.True(submitResult.Remote.Success);
         Assert.Equal(3, submitResult.Remote.AcceptedFrame);
         Assert.Equal("ok", submitResult.Remote.Message);
+        Assert.Equal(2, submitResult.Remote.CurrentFrame);
+        Assert.Equal("RemappedLate", submitResult.Remote.Status);
+        Assert.False(submitResult.Remote.ShouldResync);
+        Assert.Equal(22334455L, submitResult.Remote.ServerTicks);
 
         var authority = new ShooterBattleRuntimePort();
         Assert.True(authority.StartGame(in start));

@@ -9,7 +9,7 @@ using AbilityKit.Core.Math;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 30)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.SpawnSummon)]
     public sealed class SpawnSummonPlanActionModule : MobaPlanActionModuleBase<SpawnSummonArgs, SpawnSummonPlanActionModule>
     {
         protected override IActionSchema<SpawnSummonArgs, IWorldResolver> Schema => SpawnSummonSchema.Instance;

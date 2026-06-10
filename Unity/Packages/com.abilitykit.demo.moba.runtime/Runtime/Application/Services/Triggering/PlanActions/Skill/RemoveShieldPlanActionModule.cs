@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Demo.Moba.Config.Core;
+using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 20)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.RemoveShield)]
     public sealed class RemoveShieldPlanActionModule : MobaPlanActionModuleBase<RemoveShieldArgs, RemoveShieldPlanActionModule>
     {
         protected override IActionSchema<RemoveShieldArgs, IWorldResolver> Schema => RemoveShieldSchema.Instance;
@@ -23,7 +24,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
             var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "remove_shield", targets))
+            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveShield, targets))
             {
                 return;
             }

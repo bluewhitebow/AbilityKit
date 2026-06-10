@@ -6,7 +6,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 0)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.AddGameplayVar)]
     public sealed class AddGameplayVarPlanActionModule : MobaPlanActionModuleBase<AddGameplayVarArgs, AddGameplayVarPlanActionModule>
     {
         protected override IActionSchema<AddGameplayVarArgs, IWorldResolver> Schema => AddGameplayVarSchema.Instance;

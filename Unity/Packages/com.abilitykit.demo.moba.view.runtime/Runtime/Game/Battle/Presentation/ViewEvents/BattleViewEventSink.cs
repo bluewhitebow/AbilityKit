@@ -8,6 +8,7 @@ using AbilityKit.Game.Battle.Entity;
 using AbilityKit.Game.Battle.Vfx;
 using AbilityKit.Game.Flow.Battle.View;
 using AbilityKit.Protocol.Moba;
+using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Protocol.Moba.StateSync;
 using EC = AbilityKit.World.ECS;
 
@@ -18,6 +19,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         private readonly BattleAreaViewEventHandler _areaEvents;
         private readonly BattleDamageViewEventHandler _damageEvents;
         private readonly BattleProjectileViewEventHandler _projectileEvents;
+        private readonly BattlePresentationCueViewEventHandler _presentationCues;
         private readonly BattleViewDirtyEntityRefresher _dirtyViews;
 
         public BattleViewEventSink(
@@ -49,6 +51,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
             _areaEvents = handlers.CreateAreaEvents(ctx, query, binder, areaViews);
             _damageEvents = handlers.CreateDamageEvents(ctx, query, in vfxNode, floatingTexts);
             _projectileEvents = handlers.CreateProjectileEvents(ctx, query, vfx, in vfxNode, resources);
+            _presentationCues = handlers.CreatePresentationCues(ctx, query, vfx, in vfxNode);
             _dirtyViews = handlers.CreateDirtyViews(ctx, query, binder);
         }
 
@@ -96,6 +99,11 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         {
             _damageEvents.HandleSnapshot(entries);
         }
+
+        public void OnPresentationCueSnapshot(ISnapshotEnvelope packet, PresentationCueData[] entries)
+        {
+            _presentationCues.HandleSnapshot(entries);
+        }
     }
 
     internal sealed class BattleViewEventSinkHandlerFactory
@@ -126,6 +134,15 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
             BattleViewResourceProvider resources)
         {
             return new BattleProjectileViewEventHandler(ctx, query, vfx, in vfxNode, resources);
+        }
+
+        public BattlePresentationCueViewEventHandler CreatePresentationCues(
+            BattleContext ctx,
+            IBattleEntityQuery query,
+            BattleVfxManager vfx,
+            in EC.IEntity vfxNode)
+        {
+            return new BattlePresentationCueViewEventHandler(ctx, query, vfx, in vfxNode);
         }
 
         public BattleViewDirtyEntityRefresher CreateDirtyViews(

@@ -211,6 +211,40 @@ public sealed class ShooterClientFrameSyncControllerTests
     }
 
     [Fact]
+    public void ClientFrameSyncControllerRestoresPredictedSnapshotFromRollbackBuffer()
+    {
+        var start = new ShooterStartGamePayload(
+            "local-rollback-buffer",
+            30,
+            5901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30);
+
+        Assert.Equal(1, controller.SubmitLocalInput(new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, false)));
+        Assert.Equal(1, controller.Tick(1f / 30f).Ticks);
+        var frameOne = local.CurrentFrame;
+        var frameOneHash = local.ComputeStateHash();
+
+        Assert.Equal(1, controller.SubmitLocalInput(new ShooterPlayerCommand(1, 0f, 1f, 0f, 1f, true)));
+        Assert.Equal(1, controller.Tick(1f / 30f).Ticks);
+        Assert.Equal(frameOne + 1, local.CurrentFrame);
+        Assert.NotEqual(frameOneHash, local.ComputeStateHash());
+
+        Assert.True(controller.TryRestorePredictedSnapshot(frameOne));
+        Assert.Equal(frameOne, local.CurrentFrame);
+        Assert.Equal(frameOneHash, local.ComputeStateHash());
+        Assert.Equal(frameOne, presentation.ViewModel.Frame);
+    }
+
+    [Fact]
     public void ClientFrameSyncControllerIgnoresLateStaleAuthoritySnapshot()
     {
         var start = new ShooterStartGamePayload(

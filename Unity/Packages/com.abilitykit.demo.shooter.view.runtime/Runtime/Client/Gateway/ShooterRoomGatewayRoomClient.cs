@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using AbilityKit.Ability.Host.Extensions.Client.FrameSync;
 using System.Threading.Tasks;
 using AbilityKit.Protocol.Room;
 
@@ -94,14 +95,18 @@ namespace AbilityKit.Demo.Shooter.View
             var respPayload = await _transport.SendRequestAsync(_opCodes.JoinRoom, payload, timeout, cancellationToken).ConfigureAwait(false);
             var wire = WireRoomGatewayBinary.Deserialize<WireJoinRoomRes>(respPayload);
             var worldStartAnchor = wire.WorldStartAnchor;
+            var anchor = ToAnchor(in worldStartAnchor);
             return new ShooterGatewayJoinRoomResult(
                 wire.Success,
                 wire.RoomId ?? string.Empty,
                 wire.NumericRoomId,
-                ToAnchor(in worldStartAnchor),
+                in anchor,
                 wire.Message ?? string.Empty,
                 wire.Snapshot.BattleId ?? string.Empty,
-                wire.Snapshot.CanStart);
+                wire.Snapshot.CanStart,
+                ToJoinKind(wire.JoinKind),
+                wire.ServerNowTicks,
+                wire.Snapshot.WorldId);
         }
 
         public async Task<ShooterGatewayRoomSnapshotResult> SetReadyAsync(
@@ -226,6 +231,16 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             return result;
+        }
+
+        private static ShooterGatewayRoomJoinKind ToJoinKind(WireRoomJoinKind joinKind)
+        {
+            return joinKind switch
+            {
+                WireRoomJoinKind.Reconnect => ShooterGatewayRoomJoinKind.Reconnect,
+                WireRoomJoinKind.LateJoin => ShooterGatewayRoomJoinKind.LateJoin,
+                _ => ShooterGatewayRoomJoinKind.TeamLobby
+            };
         }
 
         private static ShooterGatewayWorldStartAnchor ToAnchor(in WireWorldStartAnchor anchor)
@@ -367,6 +382,13 @@ namespace AbilityKit.Demo.Shooter.View
         }
     }
 
+    public enum ShooterGatewayRoomJoinKind
+    {
+        TeamLobby = 0,
+        Reconnect = 1,
+        LateJoin = 2
+    }
+
     public readonly struct ShooterGatewayJoinRoomResult
     {
         public readonly bool Success;
@@ -376,8 +398,16 @@ namespace AbilityKit.Demo.Shooter.View
         public readonly string Message;
         public readonly string BattleId;
         public readonly bool CanStart;
+        public readonly ShooterGatewayRoomJoinKind JoinKind;
+        public readonly long ServerNowTicks;
+        public readonly ulong WorldId;
 
         public ShooterGatewayJoinRoomResult(bool success, string roomId, ulong numericRoomId, in ShooterGatewayWorldStartAnchor worldStartAnchor, string message, string battleId, bool canStart)
+            : this(success, roomId, numericRoomId, in worldStartAnchor, message, battleId, canStart, ShooterGatewayRoomJoinKind.TeamLobby, 0L, 0ul)
+        {
+        }
+
+        public ShooterGatewayJoinRoomResult(bool success, string roomId, ulong numericRoomId, in ShooterGatewayWorldStartAnchor worldStartAnchor, string message, string battleId, bool canStart, ShooterGatewayRoomJoinKind joinKind, long serverNowTicks, ulong worldId)
         {
             Success = success;
             RoomId = roomId ?? string.Empty;
@@ -386,6 +416,9 @@ namespace AbilityKit.Demo.Shooter.View
             Message = message ?? string.Empty;
             BattleId = battleId ?? string.Empty;
             CanStart = canStart;
+            JoinKind = joinKind;
+            ServerNowTicks = serverNowTicks;
+            WorldId = worldId;
         }
     }
 
@@ -461,6 +494,18 @@ namespace AbilityKit.Demo.Shooter.View
             ServerTickFrequency = serverTickFrequency;
             StartFrame = startFrame;
             FixedDeltaSeconds = fixedDeltaSeconds;
+        }
+
+        public bool IsValid => StartServerTicks > 0L && ServerTickFrequency > 0L && FixedDeltaSeconds > 0d;
+
+        public WorldStartFrameAnchor ToFrameStartAnchor()
+        {
+            return new WorldStartFrameAnchor(StartServerTicks, ServerTickFrequency, StartFrame, FixedDeltaSeconds);
+        }
+
+        public int CalculateTargetFrame(long serverNowTicks)
+        {
+            return WorldStartFrameCatchUpCalculator.Calculate(ToFrameStartAnchor(), serverNowTicks).TargetFrame;
         }
     }
 }

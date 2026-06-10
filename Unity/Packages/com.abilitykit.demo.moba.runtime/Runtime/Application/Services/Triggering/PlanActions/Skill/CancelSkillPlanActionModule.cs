@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 9)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.CancelSkill)]
     public sealed class CancelSkillPlanActionModule : MobaPlanActionModuleBase<CancelSkillArgs, CancelSkillPlanActionModule>
     {
         protected override IActionSchema<CancelSkillArgs, IWorldResolver> Schema => CancelSkillSchema.Instance;
@@ -23,7 +24,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
             var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "cancel_skill", targets))
+            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.CancelSkill, targets))
             {
                 if (effectInput.HasCasterActor) targets.Add(effectInput.CasterActorId);
             }

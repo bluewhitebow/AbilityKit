@@ -68,6 +68,7 @@ public class BattleInitParams
     [Id(10)] public string? WorldType { get; set; }
     [Id(11)] public string? ClientId { get; set; }
     [Id(12)] public string? RoomType { get; set; }
+    [Id(13)] public WorldStartAnchor? WorldStartAnchor { get; set; }
 }
 
 /// <summary>

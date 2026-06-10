@@ -10,7 +10,7 @@ using AbilityKit.Demo.Moba.Systems;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 20)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.AddBuff)]
     public sealed class AddBuffPlanActionModule : MobaPlanActionModuleBase<AddBuffArgs, AddBuffPlanActionModule>
     {
         protected override IActionSchema<AddBuffArgs, IWorldResolver> Schema => AddBuffSchema.Instance;

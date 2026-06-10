@@ -41,6 +41,14 @@ public sealed record JoinRoomRequest(
     [property: Id(3)] string RoomId);
 
 [GenerateSerializer]
+public enum RoomJoinKind
+{
+    TeamLobby = 0,
+    Reconnect = 1,
+    LateJoin = 2
+}
+
+[GenerateSerializer]
 public sealed record LeaveRoomRequest(
     [property: Id(0)] string AccountId,
     [property: Id(1)] string Region,
@@ -66,7 +74,14 @@ public sealed record RoomSnapshot(
     [property: Id(2)] List<RoomPlayerSnapshot> Players,
     [property: Id(3)] bool CanStart,
     [property: Id(4)] string? BattleId,
-    [property: Id(5)] WorldStartAnchor? WorldStartAnchor);
+    [property: Id(5)] WorldStartAnchor? WorldStartAnchor,
+    [property: Id(6)] ulong WorldId);
+
+[GenerateSerializer]
+public sealed record JoinRoomResponse(
+    [property: Id(0)] RoomSnapshot Snapshot,
+    [property: Id(1)] RoomJoinKind JoinKind,
+    [property: Id(2)] long ServerNowTicks);
 
 [GenerateSerializer]
 public sealed record RoomReadyRequest(

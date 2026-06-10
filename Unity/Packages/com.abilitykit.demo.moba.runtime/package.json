@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "com.abilitykit.demo.moba.runtime",
   "version": "0.0.1",
   "displayName": "AbilityKit Demo MOBA Runtime",
@@ -8,7 +8,7 @@
     "name": "AbilityKit"
   },
   "dependencies": {
-    "com.abilitykit.demo.moba.share": "1.0.0",
+    "com.abilitykit.demo.moba.share": "0.0.1",
     "com.abilitykit.core": "0.0.1",
     "com.abilitykit.attributes": "0.0.1",
     "com.abilitykit.actionschema": "0.0.1",

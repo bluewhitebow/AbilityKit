@@ -28,14 +28,59 @@ namespace AbilityKit.Protocol.Shooter
         [MemoryPackOrder(1)] public int TickRate;
         [MemoryPackOrder(2)] public int RandomSeed;
         [MemoryPackOrder(3)] public ShooterStartPlayer[] Players;
+        [MemoryPackOrder(4)] public ulong WorldId;
+        [MemoryPackOrder(5)] public long StartServerTicks;
+        [MemoryPackOrder(6)] public long ServerTickFrequency;
+        [MemoryPackOrder(7)] public int StartFrame;
+        [MemoryPackOrder(8)] public double FixedDeltaSeconds;
+
+        public ShooterStartGamePayload(string matchId, int tickRate, int randomSeed, ShooterStartPlayer[] players)
+            : this(matchId, tickRate, randomSeed, players, 0ul, 0L, 0L, 0, 0d)
+        {
+        }
 
         [MemoryPackConstructor]
-        public ShooterStartGamePayload(string matchId, int tickRate, int randomSeed, ShooterStartPlayer[] players)
+        public ShooterStartGamePayload(
+            string matchId,
+            int tickRate,
+            int randomSeed,
+            ShooterStartPlayer[] players,
+            ulong worldId,
+            long startServerTicks,
+            long serverTickFrequency,
+            int startFrame,
+            double fixedDeltaSeconds)
         {
             MatchId = matchId ?? string.Empty;
             TickRate = tickRate;
             RandomSeed = randomSeed;
             Players = players;
+            WorldId = worldId;
+            StartServerTicks = startServerTicks;
+            ServerTickFrequency = serverTickFrequency;
+            StartFrame = startFrame;
+            FixedDeltaSeconds = fixedDeltaSeconds;
+        }
+
+        public readonly bool HasWorldStartAnchor => StartServerTicks > 0L && ServerTickFrequency > 0L && FixedDeltaSeconds > 0d;
+
+        public readonly ShooterStartGamePayload WithWorldStartAnchor(
+            ulong worldId,
+            long startServerTicks,
+            long serverTickFrequency,
+            int startFrame,
+            double fixedDeltaSeconds)
+        {
+            return new ShooterStartGamePayload(
+                MatchId,
+                TickRate,
+                RandomSeed,
+                Players ?? Array.Empty<ShooterStartPlayer>(),
+                worldId,
+                startServerTicks,
+                serverTickFrequency,
+                startFrame,
+                fixedDeltaSeconds);
         }
     }
 
@@ -58,7 +103,12 @@ namespace AbilityKit.Protocol.Shooter
                 value.MatchId,
                 value.TickRate,
                 value.RandomSeed,
-                value.Players ?? Array.Empty<ShooterStartPlayer>());
+                value.Players ?? Array.Empty<ShooterStartPlayer>(),
+                value.WorldId,
+                value.StartServerTicks,
+                value.ServerTickFrequency,
+                value.StartFrame,
+                value.FixedDeltaSeconds);
         }
     }
 }

@@ -4,13 +4,13 @@ using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Ability.World.DI;
+using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime;
 using AbilityKit.Triggering.Runtime.Plan;
 using CritType = AbilityKit.Demo.Moba.CritType;
 using DamageReasonKind = AbilityKit.Demo.Moba.DamageReasonKind;
 using DamageFormulaKind = AbilityKit.Demo.Moba.DamageFormulaKind;
-using AbilityKit.Demo.Moba.Systems;
 
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
@@ -19,7 +19,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// 閫犳垚浼ゅ鐨凱lan Action妯″潡
     /// 浣跨敤鏂扮殑鍏峰悕鍙傛暟 Schema API
     /// </summary>
-    [PlanActionModule(order: 11)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.GiveDamage)]
     public sealed class GiveDamagePlanActionModule : MobaPlanActionModuleBase<GiveDamageArgs, GiveDamagePlanActionModule>
     {
         protected override IActionSchema<GiveDamageArgs, IWorldResolver> Schema => GiveDamageSchema.Instance;
@@ -28,7 +28,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (!ctx.Context.TryResolve<MobaCombatEffectService>(out var combat) || combat == null)
             {
-                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", "cannot resolve MobaCombatEffectService.");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, TriggeringConstants.Actions.GiveDamage, "cannot resolve MobaCombatEffectService.");
                 return;
             }
 
@@ -36,13 +36,13 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var effectInput = new MobaEffectActionInput(in coreInput);
             if (!effectInput.HasCasterActor)
             {
-                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"missing caster. target={effectInput.TargetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, TriggeringConstants.Actions.GiveDamage, $"missing caster. target={effectInput.TargetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
                 return;
             }
 
             var attackerActorId = effectInput.CasterActorId;
             var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, "give_damage", targets))
+            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.GiveDamage, targets))
             {
                 return;
             }
@@ -57,7 +57,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         {
             if (targetActorId <= 0)
             {
-                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"invalid target. attacker={attackerActorId}, target={targetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, TriggeringConstants.Actions.GiveDamage, $"invalid target. attacker={attackerActorId}, target={targetActorId}, damage={args.DamageValue:0.###}, reasonParam={args.ReasonParam}");
                 return;
             }
 
@@ -78,7 +78,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var result = combat.DealDamage(attack);
             if (result == null)
             {
-                MobaPlanActionDiagnostics.Rejected(ctx.Context, "give_damage", $"pipeline returned null. attacker={attackerActorId} target={targetActorId} damage={args.DamageValue:0.###} reasonParam={args.ReasonParam}");
+                MobaPlanActionDiagnostics.Rejected(ctx.Context, TriggeringConstants.Actions.GiveDamage, $"pipeline returned null. attacker={attackerActorId} target={targetActorId} damage={args.DamageValue:0.###} reasonParam={args.ReasonParam}");
                 return;
             }
 
@@ -106,7 +106,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             AppendSkillRuntime(sb, ctx, in origin);
             AppendTraceChain(sb, ctx, input, in origin);
 
-            MobaPlanActionDiagnostics.Investigation(ctx.Context, "give_damage", sb.ToString());
+            MobaPlanActionDiagnostics.Investigation(ctx.Context, TriggeringConstants.Actions.GiveDamage, sb.ToString());
         }
 
         private static void AppendSkillRuntime(StringBuilder sb, ExecCtx<IWorldResolver> ctx, in MobaGameplayOrigin origin)

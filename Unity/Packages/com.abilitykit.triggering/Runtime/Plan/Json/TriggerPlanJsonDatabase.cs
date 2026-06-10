@@ -190,6 +190,12 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         public IReadOnlyList<Record> Records => _records;
 
+        public ICueFactory CueFactory
+        {
+            get => _cueFactory ?? DefaultCueFactory.Instance;
+            set => _cueFactory = value ?? DefaultCueFactory.Instance;
+        }
+
         public bool TryGetString(int id, out string value)
         {
             value = null;
@@ -371,7 +377,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                         eid = StableStringId.Get("event:" + t.EventName);
                     }
 
-                    var plan = _converter.Convert(t);
+                    var cue = CueFactory.Create(t.CueKind, t.CueVfxId, t.CueSfxId) ?? NullTriggerCue.Instance;
+                    var plan = _converter.Convert(t, cue);
                     var executionRoot = _converter.ConvertExecutionRoot(t);
                     next.Add(new Record(t.TriggerId, t.EventName, eid, NormalizeScope(t.Scope), in plan, executionRoot));
                     byTriggerId[t.TriggerId] = plan;

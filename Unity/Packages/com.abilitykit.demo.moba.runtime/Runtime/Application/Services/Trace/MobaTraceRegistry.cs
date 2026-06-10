@@ -92,32 +92,51 @@ namespace AbilityKit.Demo.Moba.Services
                 case MobaTraceKind.SkillCast:
                 case MobaTraceKind.SkillEffect:
                 case MobaTraceKind.SkillPhase:
-                    return TraceEndpoint.Config("Skill", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Skill, configId);
                 case MobaTraceKind.EffectExecution:
-                    return TraceEndpoint.Config("Effect", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Effect, configId);
                 case MobaTraceKind.EffectAction:
-                    return TraceEndpoint.Config("Action", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Action, configId);
                 case MobaTraceKind.BuffApply:
                 case MobaTraceKind.BuffTick:
                 case MobaTraceKind.BuffRemove:
-                    return TraceEndpoint.Config("Buff", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Buff, configId);
                 case MobaTraceKind.ProjectileLaunch:
                 case MobaTraceKind.ProjectileHit:
-                    return TraceEndpoint.Config("Projectile", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Projectile, configId);
                 case MobaTraceKind.AreaSpawn:
                 case MobaTraceKind.AreaEnter:
                 case MobaTraceKind.AreaExit:
                 case MobaTraceKind.AreaExpire:
-                    return TraceEndpoint.Config("Area", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Area, configId);
                 case MobaTraceKind.SummonSpawn:
                 case MobaTraceKind.SummonDeath:
-                    return TraceEndpoint.Config("Summon", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Summon, configId);
                 case MobaTraceKind.PresentationPlay:
                 case MobaTraceKind.PresentationStop:
-                    return TraceEndpoint.Config("Presentation", configId);
+                    return TraceEndpoint.Config(MobaRuntimeKindNames.Presentation, configId);
                 default:
                     return default;
             }
+        }
+
+        private static string FormatRuntimeConfig(string runtimeKind, int configId)
+        {
+            return $"{runtimeKind}:{configId}";
+        }
+
+        private static string FormatActor(int actorId)
+        {
+            return actorId > 0 ? FormatRuntimeConfig(MobaRuntimeKindNames.Actor, actorId) : null;
+        }
+
+        private static bool TryParseRuntimeConfig(string originDisplay, string runtimeKind, out int configId)
+        {
+            configId = 0;
+            var prefix = runtimeKind + ":";
+            return !string.IsNullOrEmpty(originDisplay)
+                && originDisplay.StartsWith(prefix)
+                && int.TryParse(originDisplay.Substring(prefix.Length), out configId);
         }
 
         /// <summary>
@@ -135,8 +154,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.SkillEffect,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Skill:{skillConfigId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Skill, skillConfigId),
+                originTarget: FormatActor(targetActorId),
                 configId: skillConfigId);
         }
 
@@ -155,8 +174,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.EffectExecution,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Effect:{effectConfigId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Effect, effectConfigId),
+                originTarget: FormatActor(targetActorId),
                 configId: effectConfigId);
         }
 
@@ -173,8 +192,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.BuffApply,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Buff:{buffConfigId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Buff, buffConfigId),
+                originTarget: FormatActor(targetActorId),
                 configId: buffConfigId);
         }
 
@@ -191,8 +210,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.ProjectileLaunch,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Projectile:{projectileConfigId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Projectile, projectileConfigId),
+                originTarget: FormatActor(targetActorId),
                 configId: projectileConfigId);
         }
 
@@ -208,7 +227,7 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.AreaSpawn,
                 sourceActorId: sourceActorId,
                 targetActorId: 0,
-                originSource: $"Area:{areaConfigId}",
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Area, areaConfigId),
                 originTarget: null,
                 configId: areaConfigId);
         }
@@ -229,8 +248,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.EffectAction,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Action:{actionId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Action, actionId),
+                originTarget: FormatActor(targetActorId),
                 configId: actionId);
         }
 
@@ -249,8 +268,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.BuffTick,
                 sourceActorId: sourceActorId,
                 targetActorId: targetActorId,
-                originSource: $"Buff:{buffConfigId}",
-                originTarget: targetActorId > 0 ? $"Actor:{targetActorId}" : null,
+                originSource: FormatRuntimeConfig(MobaRuntimeKindNames.Buff, buffConfigId),
+                originTarget: FormatActor(targetActorId),
                 configId: buffConfigId);
         }
 
@@ -267,8 +286,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.ProjectileHit,
                 sourceActorId: 0,
                 targetActorId: targetActorId,
-                originSource: "ProjectileHit",
-                originTarget: $"Actor:{targetActorId}",
+                originSource: MobaRuntimeKindNames.ProjectileHit,
+                originTarget: FormatActor(targetActorId),
                 configId: 0);
         }
 
@@ -285,8 +304,8 @@ namespace AbilityKit.Demo.Moba.Services
                 kind: (int)MobaTraceKind.AreaEnter,
                 sourceActorId: 0,
                 targetActorId: targetActorId,
-                originSource: "AreaEnter",
-                originTarget: $"Actor:{targetActorId}",
+                originSource: MobaRuntimeKindNames.AreaEnter,
+                originTarget: FormatActor(targetActorId),
                 configId: 0);
         }
 
@@ -411,20 +430,17 @@ namespace AbilityKit.Demo.Moba.Services
             if (!string.IsNullOrEmpty(originDisplay))
             {
                 metadata.OriginSource = originDisplay;
-                if (originDisplay.StartsWith("Skill:"))
+                if (TryParseRuntimeConfig(originDisplay, MobaRuntimeKindNames.Skill, out var skillId))
                 {
-                    if (int.TryParse(originDisplay.Substring(6), out var skillId))
-                        metadata.SkillConfigId = skillId;
+                    metadata.SkillConfigId = skillId;
                 }
-                else if (originDisplay.StartsWith("Effect:"))
+                else if (TryParseRuntimeConfig(originDisplay, MobaRuntimeKindNames.Effect, out var effectId))
                 {
-                    if (int.TryParse(originDisplay.Substring(7), out var effectId))
-                        metadata.EffectConfigId = effectId;
+                    metadata.EffectConfigId = effectId;
                 }
-                else if (originDisplay.StartsWith("Buff:"))
+                else if (TryParseRuntimeConfig(originDisplay, MobaRuntimeKindNames.Buff, out var buffId))
                 {
-                    if (int.TryParse(originDisplay.Substring(5), out var buffId))
-                        metadata.SkillConfigId = buffId; // 复用 SkillConfigId 字段存储 BuffId
+                    metadata.SkillConfigId = buffId; // 复用 SkillConfigId 字段存储 BuffId
                 }
             }
 
@@ -436,7 +452,7 @@ namespace AbilityKit.Demo.Moba.Services
         protected override long GetOriginSourceId(MobaTraceMetadata metadata) => metadata.SkillConfigId > 0 ? metadata.SkillConfigId : metadata.EffectConfigId;
         protected override string GetOriginSourceDisplay(MobaTraceMetadata metadata) => metadata.OriginSource;
         protected override long GetOriginTargetId(MobaTraceMetadata metadata) => metadata.TargetActorId;
-        protected override string GetOriginTargetDisplay(MobaTraceMetadata metadata) => metadata.TargetActorId > 0 ? $"Actor:{metadata.TargetActorId}" : null;
+        protected override string GetOriginTargetDisplay(MobaTraceMetadata metadata) => FormatActor(metadata.TargetActorId);
 
         #endregion
     }

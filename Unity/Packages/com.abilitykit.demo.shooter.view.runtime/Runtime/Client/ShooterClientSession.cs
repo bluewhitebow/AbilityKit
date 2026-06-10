@@ -92,6 +92,11 @@ namespace AbilityKit.Demo.Shooter.View
             return _frameSync.Tick(deltaTime);
         }
 
+        public ShooterClientFrameTickResult CatchUpToFrame(int targetFrame)
+        {
+            return _frameSync.CatchUpToFrame(targetFrame);
+        }
+
         public ShooterSnapshotApplyResult ApplyGatewayPush(uint opCode, ArraySegment<byte> payload)
         {
             return _frameSync.ApplyGatewayPush(opCode, payload);

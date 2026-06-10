@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "com.abilitykit.host.extension",
   "version": "0.0.1",
   "displayName": "AbilityKit Host Extensions",
@@ -12,6 +12,6 @@
     "com.abilitykit.world.framesync": "0.0.1",
     "com.abilitykit.world.networkfragments": "0.0.1",
     "com.abilitykit.world.snapshot": "0.0.1",
-    "com.abilitykit.network.runtime": "0.1.0"
+    "com.abilitykit.network.runtime": "0.0.1"
   }
 }

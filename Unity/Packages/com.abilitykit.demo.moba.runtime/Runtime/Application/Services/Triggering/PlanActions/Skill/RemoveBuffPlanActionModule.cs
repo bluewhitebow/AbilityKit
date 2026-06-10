@@ -7,7 +7,7 @@ using AbilityKit.Triggering.Runtime.Plan;
 
 namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 {
-    [PlanActionModule(order: 14)]
+    [PlanActionModule(order: MobaPlanActionModuleOrders.RemoveBuff)]
     public sealed class RemoveBuffPlanActionModule : MobaPlanActionModuleBase<RemoveBuffArgs, RemoveBuffPlanActionModule>
     {
         protected override IActionSchema<RemoveBuffArgs, IWorldResolver> Schema => RemoveBuffSchema.Instance;

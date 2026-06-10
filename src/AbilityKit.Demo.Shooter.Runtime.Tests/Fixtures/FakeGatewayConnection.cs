@@ -102,7 +102,7 @@ internal sealed class FakeGatewayConnection : IConnection
                     Success = true,
                     RoomId = "room-launch",
                     NumericRoomId = 1041ul,
-                    Snapshot = new WireRoomSnapshot { BattleId = "battle-prelaunch", CanStart = true },
+                    Snapshot = new WireRoomSnapshot { BattleId = "battle-prelaunch", CanStart = true, WorldId = 0ul },
                     WorldStartAnchor = new WireWorldStartAnchor
                     {
                         StartServerTicks = 123456L,
@@ -110,7 +110,9 @@ internal sealed class FakeGatewayConnection : IConnection
                         StartFrame = 0,
                         FixedDeltaSeconds = 1d / 30d
                     },
-                    Message = "joined"
+                    Message = "joined",
+                    JoinKind = WireRoomJoinKind.TeamLobby,
+                    ServerNowTicks = 123456L
                 });
                 break;
             case RoomGatewayOpCodes.SetReady:

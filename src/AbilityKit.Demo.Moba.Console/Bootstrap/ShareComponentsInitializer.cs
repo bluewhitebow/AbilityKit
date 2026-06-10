@@ -13,6 +13,7 @@ using ShareDamageEventData = AbilityKit.Demo.Moba.Share.DamageEventData;
 using ShareStateHashData = AbilityKit.Demo.Moba.Share.StateHashData;
 using ShareFrameSnapshotDispatcher = AbilityKit.Demo.Moba.Share.FrameSnapshotDispatcher;
 using ShareActorSpawnData = AbilityKit.Demo.Moba.Share.ActorSpawnData;
+using SharePresentationCueData = AbilityKit.Demo.Moba.Share.PresentationCueData;
 
 namespace AbilityKit.Demo.Moba.Console.Bootstrap
 {
@@ -95,6 +96,12 @@ namespace AbilityKit.Demo.Moba.Console.Bootstrap
             {
                 var snapshotData = new ShareFrameSnapshotData(frame, 0, ShareSnapshotType.Full, damageEvents: data);
                 _viewEventSink.OnDamageEventSnapshot(in snapshotData);
+            });
+
+            dispatcher.Subscribe(MobaOpCodes.Snapshot.PresentationCue, (int frame, SharePresentationCueData[] data) =>
+            {
+                var snapshotData = new ShareFrameSnapshotData(frame, 0, ShareSnapshotType.Full, presentationCues: data);
+                _viewEventSink.OnPresentationCueSnapshot(in snapshotData);
             });
 
             dispatcher.Subscribe(MobaOpCodes.Snapshot.StateHash, (int frame, ShareStateHashData data) =>

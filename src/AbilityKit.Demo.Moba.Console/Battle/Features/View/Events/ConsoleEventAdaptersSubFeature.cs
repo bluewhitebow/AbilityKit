@@ -123,6 +123,13 @@ namespace AbilityKit.Demo.Moba.Console.Battle.Features
                 _sink.OnDamageEventSnapshot(in snapshot);
             });
 
+            _dispatcher.Subscribe(MobaOpCodes.Snapshot.PresentationCue, (int frame, PresentationCueData[] data) =>
+            {
+                var eventList = new List<PresentationCueData>(data);
+                var snapshot = new FrameSnapshotData(frame, 0, SnapshotType.Full, presentationCues: eventList);
+                _sink.OnPresentationCueSnapshot(in snapshot);
+            });
+
             _dispatcher.Subscribe(MobaOpCodes.Snapshot.StateHash, (int frame, StateHashData data) =>
             {
                 var snapshot = new FrameSnapshotData(frame, 0, SnapshotType.Full, stateHash: data);

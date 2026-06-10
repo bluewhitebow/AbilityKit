@@ -55,12 +55,19 @@ internal sealed class ShooterBattleRuntimeAdapter : IBattleRuntimeAdapter
                 return BattleRuntimeStartResult.Fail("IShooterBattleRuntimePort not resolved from Shooter logic world.");
             }
 
+            var tickRate = initParams.TickRate > 0 ? initParams.TickRate : ShooterGameplay.DefaultTickRate;
             var players = BuildStartPlayers(initParams.Players);
+            var anchor = initParams.WorldStartAnchor;
             var start = new ShooterStartGamePayload(
                 _battleId,
-                initParams.TickRate > 0 ? initParams.TickRate : ShooterGameplay.DefaultTickRate,
+                tickRate,
                 initParams.RandomSeed,
-                players);
+                players,
+                _worldId,
+                anchor?.StartServerTicks ?? 0L,
+                anchor?.ServerTickFrequency ?? 0L,
+                anchor?.StartFrame ?? 0,
+                anchor?.FixedDeltaSeconds ?? 0d);
 
             return _runtime.StartGame(in start)
                 ? BattleRuntimeStartResult.Success()

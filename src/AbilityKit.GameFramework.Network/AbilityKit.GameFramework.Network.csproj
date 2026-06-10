@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AbilityKit.GameFramework.Network</RootNamespace>
+    <AssemblyName>AbilityKit.GameFramework.Network</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Unity/Packages/com.abilitykit.gameframework.network/Runtime/**/*.cs" Exclude="../../Unity/Packages/com.abilitykit.gameframework.network/Runtime/**/*.asmdef" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AbilityKit.GameFramework/AbilityKit.GameFramework.csproj" />
+    <ProjectReference Include="../AbilityKit.Network.Runtime/AbilityKit.Network.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

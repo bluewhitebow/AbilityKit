@@ -15,23 +15,23 @@ namespace AbilityKit.Demo.Shooter.Runtime.Tests.Runtime;
 public sealed class ShooterWorldModuleTests
 {
     [Fact]
-    public void ConfigureRegistersRuntimePortWithWorldEntityStore()
+    public void ConfigureRegistersRuntimePortWithSveltoEntityManager()
     {
         var container = new WorldContainerBuilder()
             .AddModule(new ShooterWorldModule())
             .Build();
 
-        Assert.True(container.TryResolve<IShooterEcsEntityStore>(out var store));
+        Assert.True(container.TryResolve<IShooterEntityManager>(out var entities));
         Assert.True(container.TryResolve<ShooterBattleState>(out var state));
         Assert.True(container.TryResolve<IShooterBattleSimulation>(out var simulation));
         Assert.True(container.TryResolve<IShooterSveltoWorld>(out var shooterSveltoWorld));
         Assert.True(container.TryResolve<IShooterBattleRuntimePort>(out var runtime));
         Assert.True(container.TryResolve<ISveltoWorldContext>(out var svelto));
-        Assert.IsType<ShooterSveltoEcsEntityStore>(store);
         Assert.IsType<ShooterBattleSimulation>(simulation);
         Assert.IsType<ShooterSveltoWorld>(shooterSveltoWorld);
-        Assert.Same(store, shooterSveltoWorld.EntityStore);
+        Assert.IsType<ShooterEntityManager>(entities);
         Assert.Same(svelto, shooterSveltoWorld.Context);
+        Assert.Same(entities, state.Entities);
 
         var start = new ShooterStartGamePayload(
             "world-module",
@@ -40,15 +40,28 @@ public sealed class ShooterWorldModuleTests
             new[] { new ShooterStartPlayer(1, "P1", 0f, 0f) });
 
         Assert.True(runtime.StartGame(in start));
-        Assert.True(store.Players.ContainsKey(1));
-        Assert.True(state.Players.ContainsKey(1));
+        Assert.True(entities.HasPlayer(1));
+        Assert.True(entities.TryGetPlayer(1, out var player));
+        Assert.Equal(1, player.PlayerId);
         Assert.Equal(1, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
-        Assert.Same(store, container.Resolve<IShooterEcsEntityStore>());
+        Assert.Same(entities, container.Resolve<IShooterEntityManager>());
         Assert.Same(state, container.Resolve<ShooterBattleState>());
         Assert.Same(shooterSveltoWorld, container.Resolve<IShooterSveltoWorld>());
     }
+
     [Fact]
-    public void RuntimeSyncsSveltoEntitiesIncrementally()
+    public void ShooterAutoModuleUsesShooterStartupDomainOnly()
+    {
+        var container = new WorldContainerBuilder()
+            .AddModule(new ShooterWorldModule())
+            .Build();
+
+        Assert.True(container.TryResolve<IShooterEntityManager>(out _));
+        Assert.False(container.TryResolve<AbilityKit.Demo.Moba.Tests.ForeignWorldService>(out _));
+    }
+
+    [Fact]
+    public void RuntimeWritesSveltoEntitiesIncrementally()
     {
         var container = new WorldContainerBuilder()
             .AddModule(new ShooterWorldModule())
@@ -105,9 +118,11 @@ public sealed class ShooterWorldModuleTests
 
         Assert.Equal(ShooterGameplay.WorldType, world.WorldType);
         Assert.True(world.Services.TryResolve<IShooterBattleRuntimePort>(out var runtime));
+        Assert.True(world.Services.TryResolve<IShooterEntityManager>(out var entities));
         Assert.True(world.Services.TryResolve<ISveltoWorldContext>(out var svelto));
         Assert.True(world.Services.TryResolve<IShooterSveltoWorld>(out var shooterSveltoWorld));
         Assert.Same(svelto, shooterSveltoWorld.Context);
+        Assert.Same(entities, world.Services.Resolve<ShooterBattleState>().Entities);
 
         var start = new ShooterStartGamePayload(
             "blueprint-world",
@@ -116,6 +131,7 @@ public sealed class ShooterWorldModuleTests
             new[] { new ShooterStartPlayer(1, "P1", 0f, 0f) });
 
         Assert.True(runtime.StartGame(in start));
+        Assert.True(entities.HasPlayer(1));
         Assert.Equal(1, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
 
         manager.DisposeAll();

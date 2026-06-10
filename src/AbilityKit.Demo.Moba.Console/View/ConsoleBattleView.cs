@@ -35,6 +35,7 @@ namespace AbilityKit.Demo.Moba.Console.View
         private readonly ConsoleFloatingTextSystem _floatingTexts;
         private readonly ConsoleAreaViewSystem _areaViews;
         private readonly ConsoleProjectileDisplayService _projectileDisplay;
+        private readonly ConsoleVfxManager _vfxManager;
         private readonly IRenderer _renderer;
         private bool _disposed;
         private int _playerCount;
@@ -44,16 +45,19 @@ namespace AbilityKit.Demo.Moba.Console.View
             ConsoleFloatingTextSystem floatingTexts,
             ConsoleAreaViewSystem areaViews,
             ConsoleProjectileDisplayService projectileDisplay,
-            IRenderer renderer)
+            IRenderer renderer,
+            ConsoleVfxManager vfxManager = null)
         {
             _entityDisplay = entityDisplay ?? throw new ArgumentNullException(nameof(entityDisplay));
             _floatingTexts = floatingTexts ?? throw new ArgumentNullException(nameof(floatingTexts));
             _areaViews = areaViews ?? throw new ArgumentNullException(nameof(areaViews));
             _projectileDisplay = projectileDisplay ?? throw new ArgumentNullException(nameof(projectileDisplay));
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+            _vfxManager = vfxManager ?? new ConsoleVfxManager();
         }
 
         public ConsoleEntityDisplayService EntityDisplay => _entityDisplay;
+        public ConsoleVfxManager VfxManager => _vfxManager;
 
         #region 视图方法
 
@@ -126,6 +130,7 @@ namespace AbilityKit.Demo.Moba.Console.View
         public void Tick(float deltaTime)
         {
             _floatingTexts.Tick();
+            _vfxManager.Tick(deltaTime);
         }
 
         public void Render()
@@ -161,6 +166,12 @@ namespace AbilityKit.Demo.Moba.Console.View
                 }
             }
 
+            foreach (var vfx in _vfxManager.GetActiveVfx())
+            {
+                var (vx, vy) = _renderer.WorldToScreen(vfx.X, vfx.Z);
+                _renderer.DrawText(vx, vy - 1, "V");
+            }
+
             foreach (var ft in _floatingTexts.GetAll())
             {
                 if (_entityDisplay.TryGet(ft.TargetActorId, out var target))
@@ -182,6 +193,7 @@ namespace AbilityKit.Demo.Moba.Console.View
             _floatingTexts.Clear();
             _areaViews.Clear();
             _projectileDisplay.Clear();
+            _vfxManager.Dispose();
         }
 
         #endregion

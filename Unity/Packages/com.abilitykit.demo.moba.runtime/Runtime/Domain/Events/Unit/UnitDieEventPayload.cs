@@ -88,7 +88,7 @@ namespace AbilityKit.Demo.Moba.Events.Unit
                     in lineageContext,
                     MobaContextSourceResolveKind.DirectProvider,
                     MobaContextSourceBoundary.Snapshot,
-                    runtimeKind: "UnitDeath",
+                    runtimeKind: MobaRuntimeKindNames.UnitDeath,
                     runtimeConfigId: ReasonParam);
                 return source.IsValid;
             }

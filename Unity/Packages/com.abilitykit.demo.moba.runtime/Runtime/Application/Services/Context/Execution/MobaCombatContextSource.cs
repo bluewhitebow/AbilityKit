@@ -173,7 +173,7 @@ namespace AbilityKit.Demo.Moba.Services
                 triggerId: 0,
                 frame: frame,
                 skillRuntimeHandle: skillRuntimeHandle,
-                runtimeKind: "SkillPipeline",
+                runtimeKind: MobaRuntimeKindNames.SkillPipeline,
                 runtimeConfigId: skillId,
                 hasLiveRuntime: true);
         }

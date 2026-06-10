@@ -9,7 +9,10 @@
     "AbilityKit.Protocol.Room",
     "AbilityKit.Protocol.Shooter",
     "AbilityKit.Network.Runtime",
-    "AbilityKit.Host.Extensions.Client"
+    "AbilityKit.GameFramework",
+    "AbilityKit.GameFramework.Network",
+    "AbilityKit.Host.Extensions.Client",
+    "AbilityKit.World.FrameSync"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

@@ -1,27 +1,19 @@
 using System;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.World.Svelto;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
+    [WorldService(typeof(ShooterSveltoWorld), WorldLifetime.Singleton)]
+    [WorldService(typeof(IShooterSveltoWorld), WorldLifetime.Singleton)]
     public sealed class ShooterSveltoWorld : IShooterSveltoWorld
     {
-        private readonly IShooterEcsEntityStoreSynchronization _synchronization;
-
-        public ShooterSveltoWorld(ISveltoWorldContext context, IShooterEcsEntityStore entityStore)
+        public ShooterSveltoWorld(ISveltoWorldContext context)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
-            EntityStore = entityStore ?? throw new ArgumentNullException(nameof(entityStore));
-            _synchronization = entityStore as IShooterEcsEntityStoreSynchronization
-                ?? throw new ArgumentException("Shooter Svelto entity store must support synchronization.", nameof(entityStore));
         }
 
         public ISveltoWorldContext Context { get; }
-
-        public IShooterEcsEntityStore EntityStore { get; }
-
-        public void SyncEntities()
-        {
-            _synchronization.SyncToEcs();
-        }
     }
 }

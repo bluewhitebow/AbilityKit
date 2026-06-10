@@ -1,5 +1,6 @@
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Triggering;
+using AbilityKit.Demo.Moba.Share;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Protocol.Moba.StateSync;
 
@@ -56,6 +57,11 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         public void OnDamageEventSnapshot(ISnapshotEnvelope packet, MobaDamageEventSnapshotEntry[] entries)
         {
             _lines.Push(_formatter.FormatDamages(entries));
+        }
+
+        public void OnPresentationCueSnapshot(ISnapshotEnvelope packet, PresentationCueData[] entries)
+        {
+            _lines.Push(_formatter.FormatPresentationCues(entries));
         }
     }
 

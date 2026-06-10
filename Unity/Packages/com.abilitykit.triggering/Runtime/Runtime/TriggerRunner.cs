@@ -256,6 +256,9 @@ namespace AbilityKit.Triggering.Runtime
 
                 // ========== Execute 阶段 ==========
                 _lifecycle.OnBeforeExecute(key, in args, entry.Phase, entry.Priority, entry.Order);
+                var executeCtx = BuildCueContext(key, in args, entry.Phase, entry.Priority, entry.Order, entry.Trigger,
+                    ShortCircuitReason.None, null, 0, true, control);
+                cue.OnBeforeAction(in executeCtx, 0);
 
                 bool wasInterrupted = false;
                 bool actionExecuted = false;
@@ -292,6 +295,7 @@ namespace AbilityKit.Triggering.Runtime
 
                 if (!wasInterrupted && actionExecuted)
                 {
+                    cue.OnExecuted(in executeCtx);
                     executedCount++;
                 }
             }

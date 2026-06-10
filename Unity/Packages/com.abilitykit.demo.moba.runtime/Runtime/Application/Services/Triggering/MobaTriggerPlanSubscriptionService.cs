@@ -171,24 +171,24 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
 
             if (!src.HasPredicate || src.PredicateKind == EPredicateKind.None)
             {
-                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, actions, src.InterruptPriority);
+                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, actions, src.InterruptPriority, src.Cue, src.Schedule, src.ExecutionControl);
             }
 
             if (src.PredicateKind == EPredicateKind.Expr)
             {
-                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, src.PredicateExpr, actions, src.InterruptPriority);
+                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, src.PredicateExpr, actions, src.InterruptPriority, src.Cue, src.Schedule, src.ExecutionControl);
             }
 
             switch (src.PredicateArity)
             {
                 case 0:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: null, actions: actions, interruptPriority: src.InterruptPriority);
+                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: null, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
                 case 1:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0 }, actions: actions, interruptPriority: src.InterruptPriority);
+                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0 }, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
                 case 2:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0, src.PredicateArg1 }, actions: actions, interruptPriority: src.InterruptPriority);
+                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0, src.PredicateArg1 }, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
                 default:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, actions: actions, interruptPriority: src.InterruptPriority, cue: null, schedule: default);
+                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
             }
         }
 

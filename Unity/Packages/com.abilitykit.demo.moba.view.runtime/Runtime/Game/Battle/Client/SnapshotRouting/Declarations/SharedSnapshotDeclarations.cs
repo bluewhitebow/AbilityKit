@@ -71,5 +71,18 @@ namespace AbilityKit.Game.Flow.Snapshot
             entries = MobaDamageEventSnapshotCodec.Deserialize(snap.Payload);
             return true;
         }
+
+        [SnapshotDecoder("shared", MobaOpCodes.Snapshot.PresentationCue, typeof(MobaPresentationCueSnapshotEntry[]))]
+        internal static bool DecodePresentationCues(in WorldStateSnapshot snap, out MobaPresentationCueSnapshotEntry[] entries)
+        {
+            if (snap.Payload == null || snap.Payload.Length == 0)
+            {
+                entries = null;
+                return false;
+            }
+
+            entries = MobaPresentationCueSnapshotCodec.Deserialize(snap.Payload);
+            return true;
+        }
     }
 }
