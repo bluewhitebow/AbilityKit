@@ -36,12 +36,17 @@ public interface IBattleLogicHostGrain : IGrainWithStringKey
     /// <summary>
     /// 订阅状态同步观察者
     /// </summary>
-    Task SubscribeAsync(IStateSyncObserver observer);
+    Task SubscribeAsync(IStateSyncObserverGrain observer);
+
+    /// <summary>
+    /// 向指定观察者推送当前完整快照。
+    /// </summary>
+    Task RequestFullSnapshotAsync(IStateSyncObserverGrain observer);
 
     /// <summary>
     /// 取消订阅状态同步观察者
     /// </summary>
-    Task UnsubscribeAsync(IStateSyncObserver observer);
+    Task UnsubscribeAsync(IStateSyncObserverGrain observer);
 
     /// <summary>
     /// 销毁战斗世界

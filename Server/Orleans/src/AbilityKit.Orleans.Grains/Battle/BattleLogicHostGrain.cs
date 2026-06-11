@@ -21,9 +21,9 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
     private readonly BattleHostState _battleHostState = new();
     private readonly IBattleInputBuffer<BattleInputItem> _inputBuffer = new BattleInputBuffer<BattleInputItem>();
     private readonly IBattleTickDriver<BattleInputItem> _tickDriver;
-    private readonly BattleObserverRegistry<IStateSyncObserver> _observerRegistry = new();
+    private readonly BattleObserverRegistry<IStateSyncObserverGrain> _observerRegistry = new();
     private readonly BattleSnapshotSyncPolicy _snapshotSyncPolicy = new();
-    private readonly BattleSnapshotPublisher<IStateSyncObserver, StateSyncPush> _snapshotPublisher;
+    private readonly BattleSnapshotPublisher<IStateSyncObserverGrain, StateSyncPush> _snapshotPublisher;
 
     private IDisposable? _timer;
     private IBattleRuntimeSession? _runtimeSession;
@@ -48,7 +48,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
             },
             MobaRoomGameplayAdapter.DefaultRoomType);
         _tickDriver = new BattleTickDriver<BattleInputItem>(SubmitRuntimeInputs, TickBattleWorld);
-        _snapshotPublisher = new BattleSnapshotPublisher<IStateSyncObserver, StateSyncPush>(
+        _snapshotPublisher = new BattleSnapshotPublisher<IStateSyncObserverGrain, StateSyncPush>(
             BuildStateSyncPush,
             SendStateSyncPush,
             HandleSnapshotPublishError);
@@ -212,7 +212,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         return Task.FromResult(_worldStartAnchor);
     }
 
-    public Task SubscribeAsync(IStateSyncObserver observer)
+    public Task SubscribeAsync(IStateSyncObserverGrain observer)
     {
         if (observer == null)
         {
@@ -232,7 +232,22 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         return Task.CompletedTask;
     }
 
-    public Task UnsubscribeAsync(IStateSyncObserver observer)
+    public Task RequestFullSnapshotAsync(IStateSyncObserverGrain observer)
+    {
+        if (observer == null)
+        {
+            throw new ArgumentNullException(nameof(observer));
+        }
+
+        if (_initialized)
+        {
+            _snapshotPublisher.PublishTo(observer, _battleHostState.Frame, isFullSnapshot: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task UnsubscribeAsync(IStateSyncObserverGrain observer)
     {
         if (observer == null)
         {
@@ -344,12 +359,12 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         return push;
     }
 
-    private static void SendStateSyncPush(IStateSyncObserver observer, StateSyncPush push)
+    private static void SendStateSyncPush(IStateSyncObserverGrain observer, StateSyncPush push)
     {
-        observer.OnSnapshotPushed(push);
+        _ = observer.OnSnapshotPushedAsync(push);
     }
 
-    private void HandleSnapshotPublishError(IStateSyncObserver observer, Exception exception)
+    private void HandleSnapshotPublishError(IStateSyncObserverGrain observer, Exception exception)
     {
         _logger.LogError(exception, "[BattleLogicHost] Error pushing snapshot to observer");
     }

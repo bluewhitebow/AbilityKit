@@ -28,9 +28,32 @@ namespace AbilityKit.Demo.Shooter.View
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
+            return CreateReadyStartAndSubscribeAsync(
+                runtime,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
+                startGame,
+                sessionToken,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientGatewayLaunchResult> CreateReadyStartAndSubscribeAsync(
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
             return LaunchAsync(
                 runtime,
-                presentation,
+                presentationSession,
                 startGame,
                 sessionToken,
                 launchSpec,
@@ -53,6 +76,31 @@ namespace AbilityKit.Demo.Shooter.View
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
+            return JoinReadyStartAndSubscribeAsync(
+                runtime,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
+                startGame,
+                sessionToken,
+                roomId,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientGatewayLaunchResult> JoinReadyStartAndSubscribeAsync(
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            string roomId,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
             if (string.IsNullOrWhiteSpace(roomId))
             {
                 throw new ArgumentException("roomId is required.", nameof(roomId));
@@ -60,7 +108,7 @@ namespace AbilityKit.Demo.Shooter.View
 
             return LaunchAsync(
                 runtime,
-                presentation,
+                presentationSession,
                 startGame,
                 sessionToken,
                 launchSpec,
@@ -73,7 +121,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         private async Task<ShooterClientGatewayLaunchResult> LaunchAsync(
             IShooterBattleRuntimePort runtime,
-            ShooterPresentationFacade presentation,
+            ShooterPresentationSessionContext presentationSession,
             ShooterStartGamePayload startGame,
             string sessionToken,
             ShooterRoomLaunchSpec launchSpec,
@@ -88,9 +136,9 @@ namespace AbilityKit.Demo.Shooter.View
                 throw new ArgumentNullException(nameof(runtime));
             }
 
-            if (presentation == null)
+            if (presentationSession == null)
             {
-                throw new ArgumentNullException(nameof(presentation));
+                throw new ArgumentNullException(nameof(presentationSession));
             }
 
             if (tickRate <= 0)
@@ -105,7 +153,7 @@ namespace AbilityKit.Demo.Shooter.View
                 : await flow.JoinReadyStartAndSubscribeAsync(sessionToken, joinRoomId, launchSpec, playerId, timeout, cancellationToken).ConfigureAwait(false);
 
             var gatewayClient = new ShooterRoomGatewayClient(_transport);
-            var session = new ShooterClientSession(runtime, presentation, tickRate, decoder: null, gatewayClient);
+            var session = new ShooterClientSession(runtime, presentationSession, tickRate, decoder: null, gatewayClient);
             var alignedStartGame = startGame.WithWorldStartAnchor(
                 flowResult.WorldId,
                 flowResult.WorldStartAnchor.StartServerTicks,
@@ -119,7 +167,7 @@ namespace AbilityKit.Demo.Shooter.View
 
             session.CatchUpToFrame(flowResult.TargetFrame);
 
-            var battle = new ShooterClientBattleHandle(session, flowResult);
+            var battle = new ShooterClientBattleHandle(session, flowResult, roomClient);
             return new ShooterClientGatewayLaunchResult(
                 roomClient,
                 gatewayClient,

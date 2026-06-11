@@ -27,6 +27,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public uint LastAppliedStateHash { get; private set; }
 
+        public uint LastAppliedSnapshotFlags { get; private set; }
+
         public int LastIgnoredFrame { get; private set; } = -1;
 
         public ShooterSnapshotApplyResult TryApplyGatewayPush(uint opCode, ArraySegment<byte> payload)
@@ -56,6 +58,7 @@ namespace AbilityKit.Demo.Shooter.View
                 _presentation.ApplyGatewaySnapshot(in snapshot);
                 LastAppliedFrame = snapshot.Frame;
                 LastAppliedStateHash = 0;
+                LastAppliedSnapshotFlags = 0;
                 _hasAppliedSnapshot = true;
                 return ShooterSnapshotApplyResult.AppliedActorSnapshot;
             }
@@ -68,6 +71,7 @@ namespace AbilityKit.Demo.Shooter.View
 
             LastAppliedFrame = packed.Frame;
             LastAppliedStateHash = packed.StateHash;
+            LastAppliedSnapshotFlags = packed.SnapshotFlags;
             _hasAppliedSnapshot = true;
             _presentation.ApplyGatewaySnapshot(in snapshot);
             return ShooterSnapshotApplyResult.AppliedPackedSnapshot;

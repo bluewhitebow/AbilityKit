@@ -267,18 +267,107 @@ namespace AbilityKit.Ability.Editor.Utilities
 
             if (predicate.Kind == "none" || predicate.Nodes == null || predicate.Nodes.Count == 0)
             {
-                return; // 无条件
+                return;
             }
 
-            // 转换表达式节点为条件
-            foreach (var node in predicate.Nodes)
+            var condition = ConvertBoolExprNodes(predicate.Nodes, result);
+            if (condition == null)
             {
+                return;
+            }
+
+            if (string.Equals(condition.Type, "all", StringComparison.OrdinalIgnoreCase) && condition.Items != null)
+            {
+                conditions.AddRange(condition.Items);
+                return;
+            }
+
+            conditions.Add(condition);
+        }
+
+        private static SourceConditionConfig ConvertBoolExprNodes(List<BoolExprNodeDto> nodes, ConvertResult result)
+        {
+            var stack = new Stack<SourceConditionConfig>();
+            foreach (var node in nodes)
+            {
+                if (node == null) continue;
+
+                if (SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindAnd) || SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindOr))
+                {
+                    if (stack.Count < 2)
+                    {
+                        result.AddWarning($"Invalid bool expression: {node.Kind} stack underflow");
+                        return null;
+                    }
+
+                    var right = stack.Pop();
+                    var left = stack.Pop();
+                    var type = SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindAnd) ? "all" : "any";
+                    stack.Push(MergeCompositeCondition(type, left, right));
+                    continue;
+                }
+
+                if (SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindNot))
+                {
+                    if (stack.Count < 1)
+                    {
+                        result.AddWarning("Invalid bool expression: Not stack underflow");
+                        return null;
+                    }
+
+                    stack.Push(new SourceConditionConfig
+                    {
+                        Type = "not",
+                        Item = stack.Pop()
+                    });
+                    continue;
+                }
+
                 var condition = ConvertBoolExprNode(node, result);
                 if (condition != null)
                 {
-                    conditions.Add(condition);
+                    stack.Push(condition);
                 }
             }
+
+            if (stack.Count == 0)
+            {
+                return null;
+            }
+
+            if (stack.Count > 1)
+            {
+                var items = new List<SourceConditionConfig>();
+                while (stack.Count > 0)
+                {
+                    items.Insert(0, stack.Pop());
+                }
+
+                result.AddWarning("Bool expression has multiple roots, wrapped with all condition");
+                return new SourceConditionConfig { Type = "all", Items = items };
+            }
+
+            return stack.Pop();
+        }
+
+        private static SourceConditionConfig MergeCompositeCondition(string type, SourceConditionConfig left, SourceConditionConfig right)
+        {
+            var items = new List<SourceConditionConfig>();
+            AddCompositeItem(items, type, left);
+            AddCompositeItem(items, type, right);
+            return new SourceConditionConfig { Type = type, Items = items };
+        }
+
+        private static void AddCompositeItem(List<SourceConditionConfig> items, string type, SourceConditionConfig condition)
+        {
+            if (condition == null) return;
+            if (string.Equals(condition.Type, type, StringComparison.OrdinalIgnoreCase) && condition.Items != null)
+            {
+                items.AddRange(condition.Items);
+                return;
+            }
+
+            items.Add(condition);
         }
 
         /// <summary>
@@ -288,37 +377,28 @@ namespace AbilityKit.Ability.Editor.Utilities
         {
             if (node == null) return null;
 
-            var condition = new SourceConditionConfig();
-
-            if (node.Kind == "const")
+            if (SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindConst))
             {
-                condition.Type = node.ConstValue ? "always_true" : "always_false";
-                return condition;
+                return new SourceConditionConfig { Type = node.ConstValue ? "always_true" : "always_false" };
             }
 
-            if (node.Kind == "compare")
+            if (SourceConditionPlanMapping.IsKind(node.Kind, SourceConditionPlanMapping.BoolKindCompareNumeric) || SourceConditionPlanMapping.IsKind(node.Kind, "compare"))
             {
-                // 根据比较操作符确定条件类型
-                if (node.CompareOp == "==")
+                if (!SourceConditionPlanMapping.TryGetConditionTypeForCompareOp(node.CompareOp, out var conditionType))
                 {
-                    condition.Type = "arg_eq";
-                }
-                else if (node.CompareOp == ">")
-                {
-                    condition.Type = "arg_gt";
-                }
-                else
-                {
-                    condition.Type = "num_var_gt";
+                    result.AddWarning($"Unknown compare op: {node.CompareOp}, fallback to arg_eq");
+                    conditionType = "arg_eq";
                 }
 
-                // 转换参数
-                condition.Args = new Dictionary<string, object>();
+                var condition = new SourceConditionConfig
+                {
+                    Type = conditionType,
+                    Args = new Dictionary<string, object>()
+                };
 
                 if (node.Left != null)
                 {
-                    var argName = ExtractArgName(node.Left);
-                    condition.Args["arg_name"] = argName;
+                    condition.Args["arg_name"] = ExtractArgName(node.Left);
                 }
 
                 if (node.Right != null)

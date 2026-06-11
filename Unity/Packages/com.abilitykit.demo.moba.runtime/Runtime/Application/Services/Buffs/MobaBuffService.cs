@@ -268,7 +268,11 @@ namespace AbilityKit.Demo.Moba.Services
 
         private bool ExecuteApply(BuffApplyRequest request)
         {
-            if (request == null || !request.IsValid) return false;
+            if (request == null || !request.IsValid)
+            {
+                ReportRejected("buff.apply.invalidRequest", "Apply buff request rejected: request is null or invalid.", request?.TargetActorId ?? 0, request?.BuffId ?? 0, request?.SourceActorId ?? 0);
+                return false;
+            }
 
             var target = TryGetActorEntity(request.TargetActorId);
             if (target != null && target.hasApplyBuffRequest && target.applyBuffRequest != null && target.applyBuffRequest.BuffId == request.BuffId)
@@ -276,12 +280,24 @@ namespace AbilityKit.Demo.Moba.Services
                 target.RemoveApplyBuffRequest();
             }
 
-            return _lifecycle.Apply(request);
+            var ok = _lifecycle != null && _lifecycle.Apply(request);
+            if (!ok)
+            {
+                var reject = _lifecycle != null ? _lifecycle.LastReject : BuffLifecycleRejectResult.None;
+                var rejectCode = FormatRejectCode(reject.Code);
+                ReportRejected(rejectCode, $"Apply buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} durationOverrideMs={request.DurationOverrideMs} hasLifecycle={_lifecycle != null} rejectCode={rejectCode} reason={FormatRejectReason(reject.Message)}", request.TargetActorId, request.BuffId, request.SourceActorId);
+            }
+
+            return ok;
         }
 
         private bool ExecuteRemove(BuffRemoveRequest request)
         {
-            if (request == null || !request.IsValid) return false;
+            if (request == null || !request.IsValid)
+            {
+                ReportRejected("buff.remove.invalidRequest", "Remove buff request rejected: request is null or invalid.", request?.TargetActorId ?? 0, request?.BuffId ?? 0, request?.SourceActorId ?? 0);
+                return false;
+            }
 
             var target = TryGetActorEntity(request.TargetActorId);
             if (target != null && target.hasApplyBuffRequest && target.applyBuffRequest != null && target.applyBuffRequest.BuffId == request.BuffId)
@@ -289,7 +305,38 @@ namespace AbilityKit.Demo.Moba.Services
                 target.RemoveApplyBuffRequest();
             }
 
-            return _lifecycle.Remove(request);
+            var ok = _lifecycle != null && _lifecycle.Remove(request);
+            if (!ok)
+            {
+                var reject = _lifecycle != null ? _lifecycle.LastReject : BuffLifecycleRejectResult.None;
+                var rejectCode = FormatRejectCode(reject.Code);
+                ReportRejected(rejectCode, $"Remove buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason} hasLifecycle={_lifecycle != null} rejectCode={rejectCode} lifecycleReason={FormatRejectReason(reject.Message)}", request.TargetActorId, request.BuffId, request.SourceActorId);
+            }
+
+            return ok;
+        }
+
+        private static string FormatRejectReason(string reason)
+        {
+            return string.IsNullOrEmpty(reason) ? "unknown" : reason;
+        }
+
+        private static string FormatRejectCode(string code)
+        {
+            return string.IsNullOrEmpty(code) ? "buff.lifecycle.rejected" : code;
+        }
+
+        private void ReportRejected(string key, string message, int targetActorId, int buffId, int sourceActorId)
+        {
+            var diagnostics = _diagnostics;
+            if (diagnostics != null)
+            {
+                diagnostics.Warning(key, message);
+                diagnostics.Counter("moba.buff.command.rejected");
+                return;
+            }
+
+            Log.Warning($"[MobaBuffService] {message} target={targetActorId} buffId={buffId} source={sourceActorId}");
         }
 
         public void Dispose()

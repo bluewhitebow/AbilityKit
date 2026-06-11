@@ -13,6 +13,13 @@ namespace AbilityKit.Protocol.Moba.StateSync
         Executed = 4,
         Interrupted = 5,
         Skipped = 6,
+        Started = 20,
+        Ticked = 21,
+        Refreshed = 22,
+        StackChanged = 23,
+        Expired = 24,
+        Removed = 25,
+        Completed = 26,
     }
 
     [MemoryPackable]
@@ -50,6 +57,25 @@ namespace AbilityKit.Protocol.Moba.StateSync
         [MemoryPackOrder(29)] public float ColorG;
         [MemoryPackOrder(30)] public float ColorB;
         [MemoryPackOrder(31)] public float ColorA;
+        [MemoryPackOrder(32)] public string OwnerKind;
+        [MemoryPackOrder(33)] public long InstanceId;
+        [MemoryPackOrder(34)] public string InstanceKey;
+        [MemoryPackOrder(35)] public int StackCount;
+        [MemoryPackOrder(36)] public int MaxStackCount;
+        [MemoryPackOrder(37)] public float ElapsedSeconds;
+        [MemoryPackOrder(38)] public float RemainingSeconds;
+        [MemoryPackOrder(39)] public int LifecycleReason;
+        [MemoryPackOrder(40)] public int ContextKind;
+        [MemoryPackOrder(41)] public int OriginKind;
+        [MemoryPackOrder(42)] public long SourceContextId;
+        [MemoryPackOrder(43)] public long RootContextId;
+        [MemoryPackOrder(44)] public long OwnerContextId;
+        [MemoryPackOrder(45)] public int SourceConfigId;
+        [MemoryPackOrder(46)] public string ContextEventId;
+        [MemoryPackOrder(47)] public int[] NumericParamKeys;
+        [MemoryPackOrder(48)] public float[] NumericParamValues;
+        [MemoryPackOrder(49)] public string[] StringParamKeys;
+        [MemoryPackOrder(50)] public string[] StringParamValues;
     }
 
     [MemoryPackable]

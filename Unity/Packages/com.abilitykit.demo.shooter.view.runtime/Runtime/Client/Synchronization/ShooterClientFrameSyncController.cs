@@ -16,8 +16,10 @@ namespace AbilityKit.Demo.Shooter.View
         private readonly ShooterPackedSnapshotSyncController _snapshotSync;
         private readonly ClientPredictionReconciliationCoordinator<ShooterPlayerCommand> _predictionReconciliation = new ClientPredictionReconciliationCoordinator<ShooterPlayerCommand>();
         private readonly RollbackCoordinator _rollback;
+        private readonly ShooterClientDriftRecoveryPolicy _recoveryPolicy;
         private readonly float _fixedDeltaTime;
         private float _accumulator;
+        private int _catchUpTargetFrame;
 
         public ShooterClientFrameSyncController(IShooterBattleRuntimePort runtime, ShooterPresentationFacade presentation, int tickRate)
             : this(runtime, presentation, tickRate, null)
@@ -30,6 +32,18 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         public ShooterClientFrameSyncController(IShooterBattleRuntimePort runtime, ShooterPresentationFacade presentation, int tickRate, ShooterGatewaySnapshotDecoder? decoder, ulong rollbackWorldId, int rollbackBufferFrames)
+            : this(runtime, presentation, tickRate, decoder, rollbackWorldId, rollbackBufferFrames, ShooterClientDriftRecoveryPolicy.Default)
+        {
+        }
+
+        public ShooterClientFrameSyncController(
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationFacade presentation,
+            int tickRate,
+            ShooterGatewaySnapshotDecoder? decoder,
+            ulong rollbackWorldId,
+            int rollbackBufferFrames,
+            ShooterClientDriftRecoveryPolicy recoveryPolicy)
         {
             if (tickRate <= 0) throw new ArgumentOutOfRangeException(nameof(tickRate));
             if (rollbackBufferFrames <= 0) throw new ArgumentOutOfRangeException(nameof(rollbackBufferFrames));
@@ -42,6 +56,7 @@ namespace AbilityKit.Demo.Shooter.View
             var registry = new RollbackRegistry();
             registry.Register(new ShooterPackedSnapshotRollbackProvider(_runtime, rollbackWorldId));
             _rollback = new RollbackCoordinator(registry, new RollbackSnapshotRingBuffer(rollbackBufferFrames));
+            _recoveryPolicy = recoveryPolicy;
             _fixedDeltaTime = 1f / tickRate;
         }
 
@@ -56,6 +71,20 @@ namespace AbilityKit.Demo.Shooter.View
         public ShooterSnapshotApplyResult LastSnapshotApplyResult { get; private set; } = ShooterSnapshotApplyResult.Ignored;
 
         public ShooterClientReconciliationResult LastReconciliationResult { get; private set; } = ShooterClientReconciliationResult.None;
+
+        public bool NeedsFullSnapshotResync { get; private set; }
+
+        public ShooterClientRecoveryState RecoveryState { get; private set; } = ShooterClientRecoveryState.Normal;
+
+        public ShooterClientResyncReason LastResyncReason { get; private set; } = ShooterClientResyncReason.None;
+
+        public int LastResyncClientFrame { get; private set; }
+
+        public int LastResyncAuthoritativeFrame { get; private set; }
+
+        public uint LastResyncClientStateHash { get; private set; }
+
+        public uint LastResyncAuthoritativeStateHash { get; private set; }
 
         public bool TryRestorePredictedSnapshot(int frame)
         {
@@ -74,6 +103,11 @@ namespace AbilityKit.Demo.Shooter.View
             if (!_runtime.IsStarted)
             {
                 return ShooterClientFrameTickResult.NotStarted;
+            }
+
+            if (RecoveryState == ShooterClientRecoveryState.AwaitingFullSnapshot || RecoveryState == ShooterClientRecoveryState.ApplyingFullSnapshot)
+            {
+                return new ShooterClientFrameTickResult(0, _runtime.CurrentFrame, _runtime.ComputeStateHash());
             }
 
             if (targetFrame <= _runtime.CurrentFrame)
@@ -114,6 +148,11 @@ namespace AbilityKit.Demo.Shooter.View
                 return 0;
             }
 
+            if (RecoveryState == ShooterClientRecoveryState.AwaitingFullSnapshot || RecoveryState == ShooterClientRecoveryState.ApplyingFullSnapshot)
+            {
+                return 0;
+            }
+
             var frame = _runtime.CurrentFrame;
             var accepted = _runtime.SubmitInput(frame, commands);
             if (accepted > 0)
@@ -128,6 +167,7 @@ namespace AbilityKit.Demo.Shooter.View
         {
             var replayTargetFrame = _runtime.CurrentFrame;
             var predictedHashBeforeCorrection = _runtime.IsStarted ? _runtime.ComputeStateHash() : 0u;
+            var wasAwaitingFullSnapshot = NeedsFullSnapshotResync;
 
             LastSnapshotApplyResult = _snapshotSync.TryApplyGatewayPush(opCode, payload);
             if (LastSnapshotApplyResult == ShooterSnapshotApplyResult.AppliedPackedSnapshot)
@@ -135,7 +175,9 @@ namespace AbilityKit.Demo.Shooter.View
                 var authoritativeFrame = _snapshotSync.LastAppliedFrame;
                 var authoritativeStateHash = _snapshotSync.LastAppliedStateHash;
                 var importedStateHash = _runtime.ComputeStateHash();
+                var isStrongRecoverySnapshot = IsStrongRecoverySnapshot(_snapshotSync.LastAppliedSnapshotFlags);
 
+                RecoveryState = wasAwaitingFullSnapshot ? ShooterClientRecoveryState.ApplyingFullSnapshot : ShooterClientRecoveryState.Normal;
                 _accumulator = 0f;
                 CaptureRollbackSnapshot();
                 var reconciliation = new ShooterClientReconciliationResult(
@@ -153,12 +195,58 @@ namespace AbilityKit.Demo.Shooter.View
                         StepRuntimeFrameAndCapture));
 
                 LastReconciliationResult = reconciliation;
+                if (reconciliation.AuthoritativeHashMatched)
+                {
+                    var frameDelta = replayTargetFrame - authoritativeFrame;
+                    if (wasAwaitingFullSnapshot && !isStrongRecoverySnapshot)
+                    {
+                        MarkFullSnapshotResyncNeeded(
+                            LastResyncReason == ShooterClientResyncReason.None ? ShooterClientResyncReason.AuthoritativeHashMismatch : LastResyncReason,
+                            replayTargetFrame,
+                            authoritativeFrame,
+                            predictedHashBeforeCorrection,
+                            authoritativeStateHash);
+                    }
+                    else if (Math.Abs(frameDelta) > _recoveryPolicy.ReplayThreshold)
+                    {
+                        MarkFullSnapshotResyncNeeded(
+                            frameDelta > 0 ? ShooterClientResyncReason.FrameTooFarAhead : ShooterClientResyncReason.FrameTooFarBehind,
+                            replayTargetFrame,
+                            authoritativeFrame,
+                            predictedHashBeforeCorrection,
+                            authoritativeStateHash);
+                    }
+                    else
+                    {
+                        ClearFullSnapshotResync();
+                        RecoveryState = wasAwaitingFullSnapshot && isStrongRecoverySnapshot ? ShooterClientRecoveryState.Recovered : ShooterClientRecoveryState.Normal;
+                    }
+                }
+                else
+                {
+                    MarkFullSnapshotResyncNeeded(
+                        ShooterClientResyncReason.AuthoritativeHashMismatch,
+                        replayTargetFrame,
+                        authoritativeFrame,
+                        predictedHashBeforeCorrection,
+                        authoritativeStateHash);
+                }
+
                 _presentation.PublishReconciliation(in reconciliation);
                 PublishRuntimeSnapshot();
             }
             else
             {
                 LastReconciliationResult = ShooterClientReconciliationResult.None;
+                if (LastSnapshotApplyResult == ShooterSnapshotApplyResult.ImportFailed)
+                {
+                    MarkFullSnapshotResyncNeeded(
+                        ShooterClientResyncReason.ImportFailed,
+                        replayTargetFrame,
+                        0,
+                        predictedHashBeforeCorrection,
+                        0u);
+                }
             }
 
             return LastSnapshotApplyResult;
@@ -171,6 +259,22 @@ namespace AbilityKit.Demo.Shooter.View
             if (!_runtime.IsStarted)
             {
                 return ShooterClientFrameTickResult.NotStarted;
+            }
+
+            if (RecoveryState == ShooterClientRecoveryState.AwaitingFullSnapshot || RecoveryState == ShooterClientRecoveryState.ApplyingFullSnapshot)
+            {
+                _accumulator = 0f;
+                return new ShooterClientFrameTickResult(0, _runtime.CurrentFrame, _runtime.ComputeStateHash());
+            }
+
+            if (RecoveryState == ShooterClientRecoveryState.CatchUp)
+            {
+                return TickCatchUp();
+            }
+
+            if (RecoveryState == ShooterClientRecoveryState.Recovered)
+            {
+                RecoveryState = ShooterClientRecoveryState.Normal;
             }
 
             _accumulator += deltaTime;
@@ -218,15 +322,126 @@ namespace AbilityKit.Demo.Shooter.View
             }
         }
 
+        private ShooterClientFrameTickResult TickCatchUp()
+        {
+            var ticks = 0;
+            while (_runtime.CurrentFrame < _catchUpTargetFrame && ticks < _recoveryPolicy.MaxCatchUpTicksPerUpdate)
+            {
+                if (!StepRuntimeFrameAndCapture())
+                {
+                    MarkFullSnapshotResyncNeeded(
+                        ShooterClientResyncReason.FrameTooFarBehind,
+                        _runtime.CurrentFrame,
+                        _catchUpTargetFrame,
+                        _runtime.ComputeStateHash(),
+                        0u);
+                    break;
+                }
+
+                ticks++;
+            }
+
+            _accumulator = 0f;
+            if (_runtime.CurrentFrame >= _catchUpTargetFrame && RecoveryState == ShooterClientRecoveryState.CatchUp)
+            {
+                RecoveryState = ShooterClientRecoveryState.Normal;
+                _catchUpTargetFrame = 0;
+            }
+
+            if (ticks > 0)
+            {
+                PublishRuntimeSnapshot();
+            }
+
+            return new ShooterClientFrameTickResult(ticks, _runtime.CurrentFrame, _runtime.ComputeStateHash());
+        }
+
         private void RecordPendingInput(int frame, ShooterPlayerCommand[] commands)
         {
             _predictionReconciliation.RecordLocalInput(frame, commands);
         }
 
+        public void MarkGatewayInputResyncRequested(int clientFrame, int authoritativeFrame, uint clientStateHash = 0u, uint authoritativeStateHash = 0u)
+        {
+            MarkFullSnapshotResyncNeeded(
+                ShooterClientResyncReason.ClientHashRejectedByServer,
+                clientFrame,
+                authoritativeFrame,
+                clientStateHash,
+                authoritativeStateHash);
+        }
+
+        public bool TryEnterCatchUp(int authoritativeFrame)
+        {
+            if (!_runtime.IsStarted || authoritativeFrame <= _runtime.CurrentFrame)
+            {
+                return false;
+            }
+
+            var frameDelta = authoritativeFrame - _runtime.CurrentFrame;
+            if (frameDelta > _recoveryPolicy.SmallCatchUpThreshold)
+            {
+                MarkFullSnapshotResyncNeeded(
+                    ShooterClientResyncReason.FrameTooFarBehind,
+                    _runtime.CurrentFrame,
+                    authoritativeFrame,
+                    _runtime.ComputeStateHash(),
+                    0u);
+                return false;
+            }
+
+            RecoveryState = ShooterClientRecoveryState.CatchUp;
+            _catchUpTargetFrame = authoritativeFrame;
+            return true;
+        }
+
+        private void MarkFullSnapshotResyncNeeded(
+            ShooterClientResyncReason reason,
+            int clientFrame,
+            int authoritativeFrame,
+            uint clientStateHash,
+            uint authoritativeStateHash)
+        {
+            NeedsFullSnapshotResync = true;
+            RecoveryState = ShooterClientRecoveryState.AwaitingFullSnapshot;
+            LastResyncReason = reason;
+            LastResyncClientFrame = clientFrame;
+            LastResyncAuthoritativeFrame = authoritativeFrame;
+            LastResyncClientStateHash = clientStateHash;
+            LastResyncAuthoritativeStateHash = authoritativeStateHash;
+        }
+
+        private void ClearFullSnapshotResync()
+        {
+            NeedsFullSnapshotResync = false;
+            LastResyncReason = ShooterClientResyncReason.None;
+            LastResyncClientFrame = 0;
+            LastResyncAuthoritativeFrame = 0;
+            LastResyncClientStateHash = 0u;
+            LastResyncAuthoritativeStateHash = 0u;
+        }
+
+        private static bool IsStrongRecoverySnapshot(uint snapshotFlags)
+        {
+            return (snapshotFlags & (ShooterPackedSnapshotFlags.Full | ShooterPackedSnapshotFlags.AuthorityOverride)) != 0u;
+        }
+
         private void PublishRuntimeSnapshot()
         {
-            _presentation.ApplyShooterSnapshot(_runtime.GetSnapshot());
+            _presentation.ApplyLocalPredictionSnapshot(_runtime.GetSnapshot());
         }
+    }
+
+    public enum ShooterClientResyncReason
+    {
+        None = 0,
+        ImportFailed = 1,
+        AuthoritativeHashMismatch = 2,
+        ClientHashRejectedByServer = 3,
+        FrameTooFarBehind = 4,
+        FrameTooFarAhead = 5,
+        SnapshotTimeout = 6,
+        WorldMismatch = 7
     }
 
     public readonly struct ShooterClientFrameTickResult

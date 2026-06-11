@@ -13,6 +13,7 @@ namespace AbilityKit.Core.Common.Pool
         private readonly int _maxSize;
 
         private readonly Stack<T> _stack;
+        private readonly object _syncRoot = new object();
 
         private int _createdTotal;
         private int _getTotal;
@@ -45,12 +46,41 @@ namespace AbilityKit.Core.Common.Pool
             Prewarm(options.DefaultCapacity);
         }
 
-        public int InactiveCount => _stack.Count;
-        public int ActiveCount => _createdTotal - _stack.Count;
+        public int InactiveCount
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _stack.Count;
+                }
+            }
+        }
+
+        public int ActiveCount
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _createdTotal - _stack.Count;
+                }
+            }
+        }
 
         public int MaxSize => _maxSize;
 
-        public PoolStats Stats => new PoolStats(_createdTotal, _getTotal, _releaseTotal, InactiveCount, ActiveCount);
+        public PoolStats Stats
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    var inactive = _stack.Count;
+                    return new PoolStats(_createdTotal, _getTotal, _releaseTotal, inactive, _createdTotal - inactive);
+                }
+            }
+        }
 
         Type IObjectPoolDebug.ElementType => typeof(T);
         PoolStats IObjectPoolDebug.Stats => Stats;
@@ -64,28 +94,31 @@ namespace AbilityKit.Core.Common.Pool
 
         public T Get()
         {
-            _getTotal++;
-
-            if (_stack.Count > 0)
+            lock (_syncRoot)
             {
-                var obj = _stack.Pop();
+                _getTotal++;
+
+                if (_stack.Count > 0)
+                {
+                    var obj = _stack.Pop();
 
 #if UNITY_EDITOR
-                if (_collectionCheck) _inactiveSet.Remove(obj);
+                    if (_collectionCheck) _inactiveSet.Remove(obj);
 #endif
 
-                obj.TryOnPoolGet();
-                _onGet?.Invoke(obj);
-                return obj;
+                    obj.TryOnPoolGet();
+                    _onGet?.Invoke(obj);
+                    return obj;
+                }
+
+                var created = _createFunc();
+                if (created == null) throw new InvalidOperationException($"Pool createFunc returned null for type {typeof(T).FullName}");
+
+                _createdTotal++;
+                created.TryOnPoolGet();
+                _onGet?.Invoke(created);
+                return created;
             }
-
-            var created = _createFunc();
-            if (created == null) throw new InvalidOperationException($"Pool createFunc returned null for type {typeof(T).FullName}");
-
-            _createdTotal++;
-            created.TryOnPoolGet();
-            _onGet?.Invoke(created);
-            return created;
         }
 
         public PooledObject<T> GetPooled()
@@ -96,54 +129,61 @@ namespace AbilityKit.Core.Common.Pool
         public void Release(T element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
-            _releaseTotal++;
+
+            lock (_syncRoot)
+            {
+                _releaseTotal++;
 
 #if UNITY_EDITOR
-            if (_collectionCheck)
-            {
-                if (_inactiveSet.Contains(element))
+                if (_collectionCheck)
                 {
-                    throw new InvalidOperationException($"Trying to release an object that is already in the pool: {typeof(T).FullName}");
+                    if (_inactiveSet.Contains(element))
+                    {
+                        throw new InvalidOperationException($"Trying to release an object that is already in the pool: {typeof(T).FullName}");
+                    }
                 }
-            }
 #endif
 
-            element.TryOnPoolRelease();
-            _onRelease?.Invoke(element);
+                element.TryOnPoolRelease();
+                _onRelease?.Invoke(element);
 
-            if (_stack.Count >= _maxSize)
-            {
-                element.TryOnPoolDestroy();
-                _onDestroy?.Invoke(element);
-                return;
-            }
+                if (_stack.Count >= _maxSize)
+                {
+                    element.TryOnPoolDestroy();
+                    _onDestroy?.Invoke(element);
+                    return;
+                }
 
-            _stack.Push(element);
+                _stack.Push(element);
 
 #if UNITY_EDITOR
-            if (_collectionCheck) _inactiveSet.Add(element);
+                if (_collectionCheck) _inactiveSet.Add(element);
 #endif
+            }
         }
 
         public void Clear(bool destroy = false)
         {
-            if (!destroy)
+            lock (_syncRoot)
             {
-                _stack.Clear();
+                if (!destroy)
+                {
+                    _stack.Clear();
 #if UNITY_EDITOR
-                _inactiveSet?.Clear();
+                    _inactiveSet?.Clear();
 #endif
-                return;
-            }
+                    return;
+                }
 
-            while (_stack.Count > 0)
-            {
-                var obj = _stack.Pop();
+                while (_stack.Count > 0)
+                {
+                    var obj = _stack.Pop();
 #if UNITY_EDITOR
-                _inactiveSet?.Remove(obj);
+                    _inactiveSet?.Remove(obj);
 #endif
-                obj.TryOnPoolDestroy();
-                _onDestroy?.Invoke(obj);
+                    obj.TryOnPoolDestroy();
+                    _onDestroy?.Invoke(obj);
+                }
             }
         }
 
@@ -151,24 +191,27 @@ namespace AbilityKit.Core.Common.Pool
         {
             if (count <= 0) return;
 
-            if (_stack.Count + count > _maxSize)
+            lock (_syncRoot)
             {
-                count = System.Math.Max(0, _maxSize - _stack.Count);
-            }
+                if (_stack.Count + count > _maxSize)
+                {
+                    count = System.Math.Max(0, _maxSize - _stack.Count);
+                }
 
-            for (int i = 0; i < count; i++)
-            {
-                var obj = _createFunc();
-                if (obj == null) throw new InvalidOperationException($"Pool createFunc returned null for type {typeof(T).FullName}");
+                for (int i = 0; i < count; i++)
+                {
+                    var obj = _createFunc();
+                    if (obj == null) throw new InvalidOperationException($"Pool createFunc returned null for type {typeof(T).FullName}");
 
-                _createdTotal++;
-                obj.TryOnPoolRelease();
-                _onRelease?.Invoke(obj);
-                _stack.Push(obj);
+                    _createdTotal++;
+                    obj.TryOnPoolRelease();
+                    _onRelease?.Invoke(obj);
+                    _stack.Push(obj);
 
 #if UNITY_EDITOR
-                if (_collectionCheck) _inactiveSet.Add(obj);
+                    if (_collectionCheck) _inactiveSet.Add(obj);
 #endif
+                }
             }
         }
     }

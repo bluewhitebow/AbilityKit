@@ -166,6 +166,29 @@ namespace AbilityKit.Protocol.Room
     }
 
     [MemoryPackable]
+    public partial struct WireRequestFullStateSyncReq
+    {
+        [MemoryPackOrder(0)] public string SessionToken { get; set; }
+        [MemoryPackOrder(1)] public string BattleId { get; set; }
+        [MemoryPackOrder(2)] public string RoomId { get; set; }
+        [MemoryPackOrder(3)] public ulong WorldId { get; set; }
+        [MemoryPackOrder(4)] public int ClientFrame { get; set; }
+        [MemoryPackOrder(5)] public int LastAuthoritativeFrame { get; set; }
+        [MemoryPackOrder(6)] public uint ClientStateHash { get; set; }
+        [MemoryPackOrder(7)] public uint AuthoritativeStateHash { get; set; }
+        [MemoryPackOrder(8)] public string Reason { get; set; }
+    }
+
+    [MemoryPackable]
+    public partial struct WireRequestFullStateSyncRes
+    {
+        [MemoryPackOrder(0)] public bool Success { get; set; }
+        [MemoryPackOrder(1)] public bool Accepted { get; set; }
+        [MemoryPackOrder(2)] public string Message { get; set; }
+        [MemoryPackOrder(3)] public long ServerTicks { get; set; }
+    }
+
+    [MemoryPackable]
     public partial struct WireStateSyncSnapshotPush
     {
         [MemoryPackOrder(0)] public ulong WorldId { get; set; }

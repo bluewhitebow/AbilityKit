@@ -156,18 +156,52 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    public readonly struct MobaSkillCastFailure
+    {
+        public static readonly MobaSkillCastFailure None = new MobaSkillCastFailure(null, null, null, null);
+
+        public MobaSkillCastFailure(string source, string stage, string code, string message)
+        {
+            Source = source;
+            Stage = stage;
+            Code = code;
+            Message = message;
+        }
+
+        public string Source { get; }
+        public string Stage { get; }
+        public string Code { get; }
+        public string Message { get; }
+        public bool HasValue => !string.IsNullOrEmpty(Source) || !string.IsNullOrEmpty(Stage) || !string.IsNullOrEmpty(Code) || !string.IsNullOrEmpty(Message);
+
+        public override string ToString()
+        {
+            var prefix = string.IsNullOrEmpty(Source) ? Stage : string.IsNullOrEmpty(Stage) ? Source : Source + "." + Stage;
+            if (string.IsNullOrEmpty(Code)) return string.IsNullOrEmpty(Message) ? prefix ?? "unknown" : Message;
+            if (string.IsNullOrEmpty(Message)) return string.IsNullOrEmpty(prefix) ? Code : prefix + ": " + Code;
+            return string.IsNullOrEmpty(prefix) ? Code + ": " + Message : prefix + ": " + Code + ": " + Message;
+        }
+    }
+
     public readonly struct MobaSkillCastResult
     {
         public MobaSkillCastResult(bool success, string failReason, in MobaSkillCastRuntimeHandle runtimeHandle)
+            : this(success, failReason, in runtimeHandle, MobaSkillCastFailure.None)
+        {
+        }
+
+        public MobaSkillCastResult(bool success, string failReason, in MobaSkillCastRuntimeHandle runtimeHandle, in MobaSkillCastFailure failure)
         {
             Success = success;
             FailReason = failReason;
             RuntimeHandle = runtimeHandle;
+            Failure = failure;
         }
 
         public bool Success { get; }
         public string FailReason { get; }
         public MobaSkillCastRuntimeHandle RuntimeHandle { get; }
+        public MobaSkillCastFailure Failure { get; }
         public long RuntimeId => RuntimeHandle.RuntimeId;
 
         public static MobaSkillCastResult Failed(string failReason)
@@ -175,9 +209,19 @@ namespace AbilityKit.Demo.Moba.Services
             return new MobaSkillCastResult(false, failReason, default);
         }
 
+        public static MobaSkillCastResult Failed(string failReason, in MobaSkillCastFailure failure)
+        {
+            return new MobaSkillCastResult(false, failReason, default, in failure);
+        }
+
         public static MobaSkillCastResult From(bool success, string failReason, in MobaSkillCastRuntimeHandle runtimeHandle)
         {
             return new MobaSkillCastResult(success, failReason, in runtimeHandle);
+        }
+
+        public static MobaSkillCastResult From(bool success, string failReason, in MobaSkillCastRuntimeHandle runtimeHandle, in MobaSkillCastFailure failure)
+        {
+            return new MobaSkillCastResult(success, failReason, in runtimeHandle, in failure);
         }
     }
 }

@@ -5,31 +5,54 @@ namespace AbilityKit.Demo.Shooter.View
 {
     public sealed class ShooterSnapshotViewAdapter
     {
+        private readonly ShooterSnapshotViewModelMapper _mapper;
         private readonly ShooterSnapshotViewModel _viewModel = new ShooterSnapshotViewModel();
+
+        public ShooterSnapshotViewAdapter()
+            : this(new ShooterSnapshotViewModelMapper())
+        {
+        }
+
+        public ShooterSnapshotViewAdapter(ShooterSnapshotViewModelMapper mapper)
+        {
+            _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+        }
 
         public ShooterSnapshotViewModel ViewModel => _viewModel;
 
-        public void ApplyPayload(byte[] payload)
+        public ShooterSnapshotViewBatch CurrentBatch => _viewModel.Current;
+
+        public ShooterSnapshotViewBatch ApplyPayload(byte[] payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
 
             var snapshot = ShooterStateSnapshotCodec.Deserialize(payload);
-            ApplySnapshot(in snapshot);
+            return ApplySnapshot(in snapshot);
         }
 
-        public void ApplySnapshot(in ShooterStateSnapshotPayload snapshot)
+        public ShooterSnapshotViewBatch ApplySnapshot(in ShooterStateSnapshotPayload snapshot)
         {
-            _viewModel.Apply(in snapshot);
+            return ApplySnapshot(in snapshot, ShooterViewBatchSource.LocalPrediction);
         }
 
-        public void ApplyGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
+        public ShooterSnapshotViewBatch ApplySnapshot(in ShooterStateSnapshotPayload snapshot, ShooterViewBatchSource source)
         {
-            _viewModel.Apply(in snapshot);
+            var batch = _mapper.Map(in snapshot, source);
+            _viewModel.Apply(in batch);
+            return batch;
         }
 
-        public void Clear()
+        public ShooterSnapshotViewBatch ApplyGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
+        {
+            var batch = _mapper.Map(in snapshot);
+            _viewModel.Apply(in batch);
+            return batch;
+        }
+
+        public ShooterSnapshotViewBatch Clear()
         {
             _viewModel.Clear();
+            return _viewModel.Current;
         }
     }
 }

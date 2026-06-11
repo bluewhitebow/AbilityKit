@@ -310,6 +310,7 @@ namespace AbilityKit.Demo.Moba.Config.Core
                 OnRemoveEffects = obj["OnRemoveEffects"]?.ToObject<int[]>() ?? Array.Empty<int>(),
                 OnIntervalEffects = obj["OnIntervalEffects"]?.ToObject<int[]>() ?? Array.Empty<int>(),
                 IntervalMs = obj["IntervalMs"]?.Value<int>() ?? 0,
+                PresentationTemplateId = obj["PresentationTemplateId"]?.Value<int>() ?? 0,
                 StackingPolicy = obj["StackingPolicy"]?.Value<int>() ?? 0,
                 RefreshPolicy = obj["RefreshPolicy"]?.Value<int>() ?? 0,
                 MaxStacks = obj["MaxStacks"]?.Value<int>() ?? 1,

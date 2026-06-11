@@ -10,11 +10,19 @@ namespace AbilityKit.Demo.Shooter.View
     public sealed class ShooterClientBattleHandle
     {
         private readonly ShooterClientSession _session;
+        private readonly IShooterRoomGatewayRoomClient? _roomClient;
         private readonly ShooterRoomGatewayFlowResult _flow;
+        private ShooterClientFullStateSyncRequestKey _lastFullStateSyncRequestKey;
 
         public ShooterClientBattleHandle(ShooterClientSession session, ShooterRoomGatewayFlowResult flow)
+            : this(session, flow, null)
+        {
+        }
+
+        public ShooterClientBattleHandle(ShooterClientSession session, ShooterRoomGatewayFlowResult flow, IShooterRoomGatewayRoomClient? roomClient)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _roomClient = roomClient;
             if (string.IsNullOrWhiteSpace(flow.SessionToken))
             {
                 throw new ArgumentException("sessionToken is required.", nameof(flow));
@@ -54,12 +62,53 @@ namespace AbilityKit.Demo.Shooter.View
             return _flow.CreateBattleInputContext(_session.CurrentFrame);
         }
 
-        public Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
+        public async Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
             ShooterPlayerCommand command,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
-            return _session.SubmitLocalInputToGatewayAsync(CreateCurrentFrameInputContext(), command, timeout, cancellationToken);
+            var result = await _session.SubmitLocalInputToGatewayAsync(CreateCurrentFrameInputContext(), command, timeout, cancellationToken).ConfigureAwait(false);
+            await RequestFullSnapshotResyncIfNeededAsync(timeout, cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+
+        public async Task<ShooterGatewayFullStateSyncRequestResult> RequestFullSnapshotResyncIfNeededAsync(
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_roomClient == null || !_session.NeedsFullSnapshotResync)
+            {
+                return ShooterGatewayFullStateSyncRequestResult.NotRequested;
+            }
+
+            var request = CreateFullStateSyncRequest();
+            var requestKey = ShooterClientFullStateSyncRequestKey.FromRequest(in request);
+            if (requestKey.Equals(_lastFullStateSyncRequestKey))
+            {
+                return ShooterGatewayFullStateSyncRequestResult.NotRequested;
+            }
+
+            var result = await _session.RequestFullSnapshotResyncAsync(_roomClient, request, timeout, cancellationToken).ConfigureAwait(false);
+            if (result.Accepted)
+            {
+                _lastFullStateSyncRequestKey = requestKey;
+            }
+
+            return result;
+        }
+
+        public ShooterGatewayFullStateSyncRequest CreateFullStateSyncRequest()
+        {
+            return new ShooterGatewayFullStateSyncRequest(
+                _flow.SessionToken,
+                _flow.BattleId,
+                _flow.RoomId,
+                _flow.WorldId,
+                _session.LastResyncClientFrame,
+                _session.LastResyncAuthoritativeFrame,
+                _session.LastResyncClientStateHash,
+                _session.LastResyncAuthoritativeStateHash,
+                _session.LastResyncReason.ToString());
         }
 
         public Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
@@ -83,6 +132,90 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             return (int)_flow.PlayerId;
+        }
+    }
+
+    internal readonly struct ShooterClientFullStateSyncRequestKey : IEquatable<ShooterClientFullStateSyncRequestKey>
+    {
+        private readonly string _sessionToken;
+        private readonly string _battleId;
+        private readonly string _roomId;
+        private readonly ulong _worldId;
+        private readonly int _clientFrame;
+        private readonly int _lastAuthoritativeFrame;
+        private readonly uint _clientStateHash;
+        private readonly uint _authoritativeStateHash;
+        private readonly string _reason;
+
+        private ShooterClientFullStateSyncRequestKey(
+            string sessionToken,
+            string battleId,
+            string roomId,
+            ulong worldId,
+            int clientFrame,
+            int lastAuthoritativeFrame,
+            uint clientStateHash,
+            uint authoritativeStateHash,
+            string reason)
+        {
+            _sessionToken = sessionToken ?? string.Empty;
+            _battleId = battleId ?? string.Empty;
+            _roomId = roomId ?? string.Empty;
+            _worldId = worldId;
+            _clientFrame = clientFrame;
+            _lastAuthoritativeFrame = lastAuthoritativeFrame;
+            _clientStateHash = clientStateHash;
+            _authoritativeStateHash = authoritativeStateHash;
+            _reason = reason ?? string.Empty;
+        }
+
+        public static ShooterClientFullStateSyncRequestKey FromRequest(in ShooterGatewayFullStateSyncRequest request)
+        {
+            return new ShooterClientFullStateSyncRequestKey(
+                request.SessionToken,
+                request.BattleId,
+                request.RoomId,
+                request.WorldId,
+                request.ClientFrame,
+                request.LastAuthoritativeFrame,
+                request.ClientStateHash,
+                request.AuthoritativeStateHash,
+                request.Reason);
+        }
+
+        public bool Equals(ShooterClientFullStateSyncRequestKey other)
+        {
+            return string.Equals(_sessionToken, other._sessionToken, StringComparison.Ordinal)
+                && string.Equals(_battleId, other._battleId, StringComparison.Ordinal)
+                && string.Equals(_roomId, other._roomId, StringComparison.Ordinal)
+                && _worldId == other._worldId
+                && _clientFrame == other._clientFrame
+                && _lastAuthoritativeFrame == other._lastAuthoritativeFrame
+                && _clientStateHash == other._clientStateHash
+                && _authoritativeStateHash == other._authoritativeStateHash
+                && string.Equals(_reason, other._reason, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is ShooterClientFullStateSyncRequestKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = StringComparer.Ordinal.GetHashCode(_sessionToken);
+                hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(_battleId);
+                hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(_roomId);
+                hash = (hash * 397) ^ _worldId.GetHashCode();
+                hash = (hash * 397) ^ _clientFrame;
+                hash = (hash * 397) ^ _lastAuthoritativeFrame;
+                hash = (hash * 397) ^ (int)_clientStateHash;
+                hash = (hash * 397) ^ (int)_authoritativeStateHash;
+                hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(_reason);
+                return hash;
+            }
         }
     }
 }

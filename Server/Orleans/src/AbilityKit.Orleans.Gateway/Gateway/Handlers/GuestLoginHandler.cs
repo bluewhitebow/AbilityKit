@@ -9,7 +9,7 @@ namespace AbilityKit.Orleans.Gateway.Handlers;
 /// <summary>
 /// Guest 登录 Handler
 /// </summary>
-[Core.GatewayHandler(100)]
+[Core.GatewayHandler(RoomGatewayOpCodes.GuestLogin)]
 public sealed class GuestLoginHandler : GatewayRequestHandlerBase
 {
     private readonly IClusterClient _clusterClient;

@@ -1,0 +1,307 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+
+namespace AbilityKit.Demo.Shooter.View
+{
+    public sealed class ShooterSnapshotViewProjection
+    {
+        private readonly ShooterViewEntityStore _store;
+
+        public ShooterSnapshotViewProjection()
+            : this(new ShooterViewEntityStore())
+        {
+        }
+
+        public ShooterSnapshotViewProjection(ShooterViewEntityStore store)
+        {
+            _store = store ?? throw new ArgumentNullException(nameof(store));
+        }
+
+        public ShooterViewEntityStore Store => _store;
+
+        public ShooterViewProjectionApplyResult LastApplyResult { get; private set; } = ShooterViewProjectionApplyResult.Empty;
+
+        public void Clear()
+        {
+            _store.Clear();
+            LastApplyResult = ShooterViewProjectionApplyResult.Empty;
+        }
+ 
+        public ShooterViewProjectionApplyResult Apply(in ShooterSnapshotViewBatch batch)
+        {
+            var missingEntityRemovals = 0;
+            if (batch.ShouldReplaceMissingEntities)
+            {
+                missingEntityRemovals = RemoveEntitiesMissingFromFullSnapshot(in batch);
+            }
+ 
+            var explicitEntityRemovals = ApplyRemovedEntities(in batch);
+            var entityChangeResult = ApplyEntityChanges(in batch);
+            var componentUpdates =
+                ApplyTransformChanges(in batch) +
+                ApplyHealthChanges(in batch) +
+                ApplyScoreChanges(in batch) +
+                ApplyProjectileLifetimeChanges(in batch);
+
+            LastApplyResult = new ShooterViewProjectionApplyResult(
+                batch.WorldId,
+                batch.Frame,
+                batch.Sequence,
+                batch.SnapshotKind,
+                batch.Source,
+                entityChangeResult.AddedEntities,
+                entityChangeResult.UpdatedEntities,
+                missingEntityRemovals + explicitEntityRemovals + entityChangeResult.DeadEntityRemovals,
+                missingEntityRemovals,
+                explicitEntityRemovals,
+                entityChangeResult.DeadEntityRemovals,
+                componentUpdates,
+                _store.EntityCount,
+                _store.PlayerCount,
+                _store.BulletCount);
+            return LastApplyResult;
+        }
+ 
+        private int RemoveEntitiesMissingFromFullSnapshot(in ShooterSnapshotViewBatch batch)
+        {
+            var present = new HashSet<ShooterViewEntityKey>();
+            var entityChanges = batch.EntityChanges;
+            for (int i = 0; i < entityChanges.Count; i++)
+            {
+                var change = entityChanges[i];
+                if (change.Alive)
+                {
+                    present.Add(change.Key);
+                }
+            }
+
+            var staleEntities = new List<ShooterViewEntityKey>();
+            foreach (var key in _store.Entities.Keys)
+            {
+                if (!present.Contains(key))
+                {
+                    staleEntities.Add(key);
+                }
+            }
+
+            var removedCount = 0;
+            for (int i = 0; i < staleEntities.Count; i++)
+            {
+                if (_store.RemoveEntity(staleEntities[i]))
+                {
+                    removedCount++;
+                }
+            }
+
+            return removedCount;
+        }
+ 
+        private int ApplyRemovedEntities(in ShooterSnapshotViewBatch batch)
+        {
+            var removedCount = 0;
+            var removed = batch.RemovedEntities;
+            for (int i = 0; i < removed.Count; i++)
+            {
+                if (_store.RemoveEntity(removed[i]))
+                {
+                    removedCount++;
+                }
+            }
+
+            return removedCount;
+        }
+ 
+        private EntityChangeApplyResult ApplyEntityChanges(in ShooterSnapshotViewBatch batch)
+        {
+            var added = 0;
+            var updated = 0;
+            var deadRemovals = 0;
+            var changes = batch.EntityChanges;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                var change = changes[i];
+                var existed = _store.ContainsEntity(change.Key);
+                _store.UpsertEntity(change);
+                if (!change.Alive)
+                {
+                    if (existed)
+                    {
+                        deadRemovals++;
+                    }
+                }
+                else if (existed)
+                {
+                    updated++;
+                }
+                else
+                {
+                    added++;
+                }
+            }
+
+            return new EntityChangeApplyResult(added, updated, deadRemovals);
+        }
+ 
+        private int ApplyTransformChanges(in ShooterSnapshotViewBatch batch)
+        {
+            var applied = 0;
+            var changes = batch.TransformChanges;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                if (!_store.ContainsEntity(changes[i].Key)) continue;
+
+                _store.UpsertTransform(changes[i]);
+                applied++;
+            }
+
+            return applied;
+        }
+ 
+        private int ApplyHealthChanges(in ShooterSnapshotViewBatch batch)
+        {
+            var applied = 0;
+            var changes = batch.HealthChanges;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                if (!_store.ContainsEntity(changes[i].Key)) continue;
+
+                _store.UpsertHealth(changes[i]);
+                applied++;
+            }
+
+            return applied;
+        }
+ 
+        private int ApplyScoreChanges(in ShooterSnapshotViewBatch batch)
+        {
+            var applied = 0;
+            var changes = batch.ScoreChanges;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                if (!_store.ContainsEntity(changes[i].Key)) continue;
+
+                _store.UpsertScore(changes[i]);
+                applied++;
+            }
+
+            return applied;
+        }
+ 
+        private int ApplyProjectileLifetimeChanges(in ShooterSnapshotViewBatch batch)
+        {
+            var applied = 0;
+            var changes = batch.ProjectileLifetimeChanges;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                if (!_store.ContainsEntity(changes[i].Key)) continue;
+
+                _store.UpsertProjectileLifetime(changes[i]);
+                applied++;
+            }
+
+            return applied;
+        }
+
+        private readonly struct EntityChangeApplyResult
+        {
+            public EntityChangeApplyResult(int addedEntities, int updatedEntities, int deadEntityRemovals)
+            {
+                AddedEntities = addedEntities;
+                UpdatedEntities = updatedEntities;
+                DeadEntityRemovals = deadEntityRemovals;
+            }
+
+            public int AddedEntities { get; }
+
+            public int UpdatedEntities { get; }
+
+            public int DeadEntityRemovals { get; }
+        }
+    }
+
+    public readonly struct ShooterViewProjectionApplyResult
+    {
+        public static readonly ShooterViewProjectionApplyResult Empty = new ShooterViewProjectionApplyResult(
+            0UL,
+            0,
+            0UL,
+            ShooterViewSnapshotKind.Full,
+            ShooterViewBatchSource.DebugSnapshot,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
+
+        public ShooterViewProjectionApplyResult(
+            ulong worldId,
+            int frame,
+            ulong sequence,
+            ShooterViewSnapshotKind snapshotKind,
+            ShooterViewBatchSource source,
+            int addedEntities,
+            int updatedEntities,
+            int removedEntities,
+            int missingEntityRemovals,
+            int explicitEntityRemovals,
+            int deadEntityRemovals,
+            int componentUpdates,
+            int finalEntityCount,
+            int finalPlayerCount,
+            int finalBulletCount)
+        {
+            WorldId = worldId;
+            Frame = frame;
+            Sequence = sequence;
+            SnapshotKind = snapshotKind;
+            Source = source;
+            AddedEntities = addedEntities;
+            UpdatedEntities = updatedEntities;
+            RemovedEntities = removedEntities;
+            MissingEntityRemovals = missingEntityRemovals;
+            ExplicitEntityRemovals = explicitEntityRemovals;
+            DeadEntityRemovals = deadEntityRemovals;
+            ComponentUpdates = componentUpdates;
+            FinalEntityCount = finalEntityCount;
+            FinalPlayerCount = finalPlayerCount;
+            FinalBulletCount = finalBulletCount;
+        }
+
+        public ulong WorldId { get; }
+
+        public int Frame { get; }
+
+        public ulong Sequence { get; }
+
+        public ShooterViewSnapshotKind SnapshotKind { get; }
+
+        public ShooterViewBatchSource Source { get; }
+
+        public int AddedEntities { get; }
+
+        public int UpdatedEntities { get; }
+
+        public int RemovedEntities { get; }
+
+        public int MissingEntityRemovals { get; }
+
+        public int ExplicitEntityRemovals { get; }
+
+        public int DeadEntityRemovals { get; }
+
+        public int ComponentUpdates { get; }
+
+        public int FinalEntityCount { get; }
+
+        public int FinalPlayerCount { get; }
+
+        public int FinalBulletCount { get; }
+    }
+}

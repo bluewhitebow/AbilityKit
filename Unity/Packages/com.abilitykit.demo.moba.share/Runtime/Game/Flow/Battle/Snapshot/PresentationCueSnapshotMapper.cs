@@ -56,7 +56,26 @@ namespace AbilityKit.Demo.Moba.Share
                 colorR: entry.ColorR,
                 colorG: entry.ColorG,
                 colorB: entry.ColorB,
-                colorA: entry.ColorA);
+                colorA: entry.ColorA,
+                ownerKind: entry.OwnerKind,
+                instanceId: entry.InstanceId,
+                instanceKey: entry.InstanceKey,
+                stackCount: entry.StackCount,
+                maxStackCount: entry.MaxStackCount,
+                elapsedSeconds: entry.ElapsedSeconds,
+                remainingSeconds: entry.RemainingSeconds,
+                lifecycleReason: entry.LifecycleReason,
+                contextKind: entry.ContextKind,
+                originKind: entry.OriginKind,
+                sourceContextId: entry.SourceContextId,
+                rootContextId: entry.RootContextId,
+                ownerContextId: entry.OwnerContextId,
+                sourceConfigId: entry.SourceConfigId,
+                contextEventId: entry.ContextEventId,
+                numericParamKeys: entry.NumericParamKeys ?? Array.Empty<int>(),
+                numericParamValues: entry.NumericParamValues ?? Array.Empty<float>(),
+                stringParamKeys: entry.StringParamKeys ?? Array.Empty<string>(),
+                stringParamValues: entry.StringParamValues ?? Array.Empty<string>());
         }
 
         private static SnapshotVec3[] DecodePositions(float[] values)

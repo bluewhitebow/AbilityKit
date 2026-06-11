@@ -62,9 +62,9 @@ public sealed class ShooterPackedSnapshotSyncControllerTests
         Assert.Equal(packed.Frame, controller.LastAppliedFrame);
         Assert.Equal(packed.StateHash, controller.LastAppliedStateHash);
         Assert.Equal(packed.Frame, presentation.ViewModel.Frame);
-        Assert.Equal(2, presentation.ViewModel.Players.Count);
-        Assert.Single(presentation.ViewModel.Bullets);
-        Assert.True(presentation.ViewModel.Players.ContainsKey(1));
-        Assert.True(presentation.ViewModel.Players.ContainsKey(2));
+        Assert.Equal(2, presentation.ViewModel.Current.EntityChanges.Count(change => change.Kind == ShooterViewEntityKind.Player));
+        Assert.Single(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Bullet);
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 1)));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 2)));
     }
 }

@@ -36,7 +36,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (string.IsNullOrEmpty(eventId)) return;
             if (ctx == null) return;
 
-            SkillLogger.Instance.LogTriggerEvent(ctx.CasterActorId, ctx.SkillId, ctx.SourceContextId, eventId);
+            ResolveLogger(ctx).LogTriggerEvent(ctx.CasterActorId, ctx.SkillId, ctx.SourceContextId, eventId);
 
             try
             {
@@ -69,6 +69,17 @@ namespace AbilityKit.Demo.Moba.Services
             {
                 Log.Exception(ex, $"[MobaSkillTriggering] Forward to plan eventBus failed. eventId={eventId}");
             }
+        }
+
+        private static ISkillLogger ResolveLogger(SkillCastContext ctx)
+        {
+            var services = ctx != null ? ctx.WorldServices : null;
+            if (services != null && services.TryResolve<ISkillLogger>(out var logger) && logger != null)
+            {
+                return logger;
+            }
+
+            return SkillLogger.Instance;
         }
     }
 }

@@ -13,10 +13,27 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
     /// </summary>
     internal sealed class TriggerPlanConverter
     {
+        private const string TemplateParamKind = "TemplateParam";
+        private System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.NumericValueRefDto> _templateBindings;
+
         internal TriggerPlan<object> Convert(TriggerPlanJsonDatabase.TriggerPlanDto dto, ITriggerCue cue = null)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
 
+            var previousBindings = _templateBindings;
+            _templateBindings = BuildTemplateBindings(dto.Template);
+            try
+            {
+                return ConvertCore(dto, cue);
+            }
+            finally
+            {
+                _templateBindings = previousBindings;
+            }
+        }
+
+        private TriggerPlan<object> ConvertCore(TriggerPlanJsonDatabase.TriggerPlanDto dto, ITriggerCue cue)
+        {
             var actions = ConvertActions(dto.Actions);
             var pred = dto.Predicate;
 
@@ -89,6 +106,20 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         {
             if (dto == null) return null;
 
+            var previousBindings = _templateBindings;
+            _templateBindings = BuildTemplateBindings(dto.Template);
+            try
+            {
+                return ConvertExecutionRootCore(dto);
+            }
+            finally
+            {
+                _templateBindings = previousBindings;
+            }
+        }
+
+        private ITriggerPlanExecutable ConvertExecutionRootCore(TriggerPlanJsonDatabase.TriggerPlanDto dto)
+        {
             var explicitRoot = ConvertExecutionNode(dto.ExecutionRoot);
             if (explicitRoot != null)
                 return explicitRoot;
@@ -284,6 +315,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         {
             if (dto == null) return default;
 
+            dto = ResolveTemplateParam(dto, new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
             if (!Enum.TryParse<ENumericValueRefKind>(dto.Kind, out var kind))
             {
                 throw new InvalidOperationException($"Unknown NumericValueRef kind: {dto.Kind}");
@@ -298,6 +331,44 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 ENumericValueRefKind.Expr => NumericValueRef.Expr(dto.ExprText),
                 _ => throw new InvalidOperationException($"Unsupported NumericValueRef kind: {kind}")
             };
+        }
+
+        private static System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.NumericValueRefDto> BuildTemplateBindings(TriggerPlanJsonDatabase.TriggerTemplateBindingDto dto)
+        {
+            if (dto == null || dto.Bindings == null || dto.Bindings.Count == 0)
+            {
+                return null;
+            }
+
+            return new System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.NumericValueRefDto>(dto.Bindings, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private TriggerPlanJsonDatabase.NumericValueRefDto ResolveTemplateParam(
+            TriggerPlanJsonDatabase.NumericValueRefDto dto,
+            System.Collections.Generic.HashSet<string> resolving)
+        {
+            while (dto != null && string.Equals(dto.Kind, TemplateParamKind, StringComparison.OrdinalIgnoreCase))
+            {
+                var key = dto.Key;
+                if (string.IsNullOrEmpty(key))
+                {
+                    throw new InvalidOperationException("TemplateParam NumericValueRef requires Key.");
+                }
+
+                if (_templateBindings == null || !_templateBindings.TryGetValue(key, out var bound) || bound == null)
+                {
+                    throw new InvalidOperationException($"Template parameter is not bound: {key}");
+                }
+
+                if (!resolving.Add(key))
+                {
+                    throw new InvalidOperationException($"Cyclic template parameter binding detected: {key}");
+                }
+
+                dto = bound;
+            }
+
+            return dto;
         }
 
         private PredicateExprPlan ConvertPredicateExpr(TriggerPlanJsonDatabase.PredicatePlanDto dto)

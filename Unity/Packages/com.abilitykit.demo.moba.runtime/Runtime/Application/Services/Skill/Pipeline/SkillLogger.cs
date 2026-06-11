@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using AbilityKit.Ability.World.DI;
+using AbilityKit.Ability.World.Services;
+using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Math;
 using AbilityKit.Core.Common.Event;
 using AbilityKit.Triggering.Runtime;
@@ -15,6 +18,7 @@ namespace AbilityKit.Demo.Moba.Services
         void Log(SkillLogEntry entry);
         void SetLevel(SkillLogLevel level);
         void SetFilter(ISkillLogFilter filter);
+        void AddSink(ISkillLogSink sink);
 
         void LogInfo(string message);
         void LogWarning(string message);
@@ -98,20 +102,33 @@ namespace AbilityKit.Demo.Moba.Services
 
     #region Default Implementation
 
-    public sealed class SkillLogger : ISkillLogger
+    [WorldService(typeof(ISkillLogger), WorldLifetime.Scoped)]
+    [WorldService(typeof(SkillLogger), WorldLifetime.Scoped)]
+    public sealed class SkillLogger : ISkillLogger, IService
     {
         private static SkillLogger _instance;
-        private static ISkillLogFilter _defaultFilter = new DefaultSkillLogFilter();
+        private static readonly ISkillLogFilter DefaultFilter = new DefaultSkillLogFilter();
 
         private SkillLogLevel _level = SkillLogLevel.Debug;
-        private ISkillLogFilter _filter = _defaultFilter;
+        private ISkillLogFilter _filter;
         private readonly SkillLogSink _sink;
 
         public static SkillLogger Instance => _instance ??= new SkillLogger();
 
-        private SkillLogger()
+        public SkillLogger()
+            : this(new DefaultSkillLogSink(), DefaultFilter)
         {
-            _sink = new SkillLogSink();
+        }
+
+        public SkillLogger(ISkillLogSink sink)
+            : this(sink, DefaultFilter)
+        {
+        }
+
+        public SkillLogger(ISkillLogSink sink, ISkillLogFilter filter)
+        {
+            _sink = new SkillLogSink(sink ?? new DefaultSkillLogSink());
+            _filter = filter ?? DefaultFilter;
         }
 
         public static void SetInstance(SkillLogger logger)
@@ -126,6 +143,8 @@ namespace AbilityKit.Demo.Moba.Services
 
         public void Log(SkillLogEntry entry)
         {
+            if (entry == null) return;
+            if (_level == SkillLogLevel.Off) return;
             if (entry.Level > _level) return;
             if (_filter != null && !_filter.ShouldLog(entry)) return;
 
@@ -134,39 +153,38 @@ namespace AbilityKit.Demo.Moba.Services
         }
 
         public void SetLevel(SkillLogLevel level) => _level = level;
-        public void SetFilter(ISkillLogFilter filter) => _filter = filter ?? _defaultFilter;
+        public void SetFilter(ISkillLogFilter filter) => _filter = filter ?? DefaultFilter;
+        public void AddSink(ISkillLogSink sink) => _sink.AddSink(sink);
 
         public SkillLogLevel GetLevel() => _level;
 
         public void LogInfo(string message)
         {
-            var entry = new SkillLogEntry { Level = SkillLogLevel.Info, Type = "Skill", Message = message };
-            entry.BuildMessage();
-            _sink.Write(entry);
+            Log(new SkillLogEntry { Level = SkillLogLevel.Info, Type = "Skill", Message = message });
         }
 
         public void LogWarning(string message)
         {
-            var entry = new SkillLogEntry { Level = SkillLogLevel.Warning, Type = "Skill", Message = message };
-            entry.BuildMessage();
-            _sink.Write(entry);
+            Log(new SkillLogEntry { Level = SkillLogLevel.Warning, Type = "Skill", Message = message });
         }
 
         public void LogError(string message)
         {
-            var entry = new SkillLogEntry { Level = SkillLogLevel.Error, Type = "Skill", Message = message };
-            entry.BuildMessage();
-            _sink.Write(entry);
+            Log(new SkillLogEntry { Level = SkillLogLevel.Error, Type = "Skill", Message = message });
+        }
+
+        public void Dispose()
+        {
         }
     }
 
     public sealed class SkillLogScope : ISkillLogScope
     {
-        private readonly SkillLogger _logger;
+        private readonly ISkillLogger _logger;
         private readonly SkillLogEntry _entry;
         private bool _disposed;
 
-        internal SkillLogScope(SkillLogger logger, int casterActorId, int skillId, long instanceId)
+        internal SkillLogScope(ISkillLogger logger, int casterActorId, int skillId, long instanceId)
         {
             _logger = logger;
             _entry = new SkillLogEntry
@@ -231,13 +249,13 @@ namespace AbilityKit.Demo.Moba.Services
 
     #region Sink
 
-    public class SkillLogSink
+    public class SkillLogSink : ISkillLogSink
     {
         private readonly List<ISkillLogSink> _sinks = new List<ISkillLogSink>();
 
-        public SkillLogSink()
+        public SkillLogSink(ISkillLogSink defaultSink)
         {
-            _sinks.Add(new DefaultSkillLogSink());
+            AddSink(defaultSink ?? new DefaultSkillLogSink());
         }
 
         public void AddSink(ISkillLogSink sink)
@@ -323,7 +341,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         public CompositeSkillLogFilter Add(ISkillLogFilter filter)
         {
-            _filters.Add(filter);
+            if (filter != null) _filters.Add(filter);
             return this;
         }
 

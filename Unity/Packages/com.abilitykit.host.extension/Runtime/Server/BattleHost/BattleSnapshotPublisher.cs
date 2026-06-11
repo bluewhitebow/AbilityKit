@@ -36,19 +36,38 @@ namespace AbilityKit.Ability.Host.Extensions.Server.BattleHost
             var sentCount = 0;
             for (int i = 0; i < observers.Count; i++)
             {
-                var observer = observers[i];
-                try
+                if (Send(observers[i], snapshot))
                 {
-                    _sender(observer, snapshot);
                     sentCount++;
-                }
-                catch (Exception ex)
-                {
-                    _errorHandler(observer, ex);
                 }
             }
 
             return sentCount;
+        }
+
+        public int PublishTo(TObserver observer, int frame, bool isFullSnapshot)
+        {
+            if (observer == null)
+            {
+                return 0;
+            }
+
+            var snapshot = _factory(frame, isFullSnapshot);
+            return Send(observer, snapshot) ? 1 : 0;
+        }
+
+        private bool Send(TObserver observer, TSnapshot snapshot)
+        {
+            try
+            {
+                _sender(observer, snapshot);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _errorHandler(observer, ex);
+                return false;
+            }
         }
     }
 }

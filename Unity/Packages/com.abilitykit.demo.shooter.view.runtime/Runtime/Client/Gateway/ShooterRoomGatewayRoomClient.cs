@@ -35,6 +35,11 @@ namespace AbilityKit.Demo.Shooter.View
             ShooterGatewayStateSyncSubscriptionRequest request,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default);
+
+        Task<ShooterGatewayFullStateSyncRequestResult> RequestFullStateSyncAsync(
+            ShooterGatewayFullStateSyncRequest request,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default);
     }
 
     public sealed class ShooterRoomGatewayRoomClient : IShooterRoomGatewayRoomClient
@@ -179,6 +184,31 @@ namespace AbilityKit.Demo.Shooter.View
             return new ShooterGatewayStateSyncSubscriptionResult(wire.Success, wire.Message ?? string.Empty);
         }
 
+        public async Task<ShooterGatewayFullStateSyncRequestResult> RequestFullStateSyncAsync(
+            ShooterGatewayFullStateSyncRequest request,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            ValidateFullStateSyncRequest(in request);
+
+            var req = new WireRequestFullStateSyncReq
+            {
+                SessionToken = request.SessionToken,
+                BattleId = request.BattleId,
+                RoomId = request.RoomId,
+                WorldId = request.WorldId,
+                ClientFrame = request.ClientFrame,
+                LastAuthoritativeFrame = request.LastAuthoritativeFrame,
+                ClientStateHash = request.ClientStateHash,
+                AuthoritativeStateHash = request.AuthoritativeStateHash,
+                Reason = request.Reason
+            };
+            var payload = WireRoomGatewayBinary.Serialize(in req);
+            var respPayload = await _transport.SendRequestAsync(_opCodes.RequestFullStateSync, payload, timeout, cancellationToken).ConfigureAwait(false);
+            var wire = WireRoomGatewayBinary.Deserialize<WireRequestFullStateSyncRes>(respPayload);
+            return new ShooterGatewayFullStateSyncRequestResult(wire.Success, wire.Accepted, wire.Message ?? string.Empty, wire.ServerTicks);
+        }
+
         private static void ValidateCreateRoom(in ShooterGatewayCreateRoomRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.SessionToken)) throw new ArgumentException("sessionToken is required.", nameof(request));
@@ -211,6 +241,13 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         private static void ValidateStateSyncSubscription(in ShooterGatewayStateSyncSubscriptionRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.SessionToken)) throw new ArgumentException("sessionToken is required.", nameof(request));
+            if (string.IsNullOrWhiteSpace(request.BattleId)) throw new ArgumentException("battleId is required.", nameof(request));
+            if (string.IsNullOrWhiteSpace(request.RoomId)) throw new ArgumentException("roomId is required.", nameof(request));
+        }
+
+        private static void ValidateFullStateSyncRequest(in ShooterGatewayFullStateSyncRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.SessionToken)) throw new ArgumentException("sessionToken is required.", nameof(request));
             if (string.IsNullOrWhiteSpace(request.BattleId)) throw new ArgumentException("battleId is required.", nameof(request));
@@ -256,21 +293,29 @@ namespace AbilityKit.Demo.Shooter.View
             RoomGatewayOpCodes.JoinRoom,
             RoomGatewayOpCodes.SubscribeStateSync,
             RoomGatewayOpCodes.SetReady,
-            RoomGatewayOpCodes.StartBattle);
+            RoomGatewayOpCodes.StartBattle,
+            RoomGatewayOpCodes.RequestFullStateSync);
 
         public readonly uint CreateRoom;
         public readonly uint JoinRoom;
         public readonly uint SubscribeStateSync;
         public readonly uint SetReady;
         public readonly uint StartBattle;
+        public readonly uint RequestFullStateSync;
 
         public ShooterRoomGatewayRoomOpCodes(uint createRoom, uint joinRoom, uint subscribeStateSync, uint setReady, uint startBattle)
+            : this(createRoom, joinRoom, subscribeStateSync, setReady, startBattle, RoomGatewayOpCodes.RequestFullStateSync)
+        {
+        }
+
+        public ShooterRoomGatewayRoomOpCodes(uint createRoom, uint joinRoom, uint subscribeStateSync, uint setReady, uint startBattle, uint requestFullStateSync)
         {
             CreateRoom = createRoom;
             JoinRoom = joinRoom;
             SubscribeStateSync = subscribeStateSync;
             SetReady = setReady;
             StartBattle = startBattle;
+            RequestFullStateSync = requestFullStateSync;
         }
     }
 
@@ -363,6 +408,41 @@ namespace AbilityKit.Demo.Shooter.View
             SessionToken = sessionToken ?? string.Empty;
             BattleId = battleId ?? string.Empty;
             RoomId = roomId ?? string.Empty;
+        }
+    }
+
+    public readonly struct ShooterGatewayFullStateSyncRequest
+    {
+        public readonly string SessionToken;
+        public readonly string BattleId;
+        public readonly string RoomId;
+        public readonly ulong WorldId;
+        public readonly int ClientFrame;
+        public readonly int LastAuthoritativeFrame;
+        public readonly uint ClientStateHash;
+        public readonly uint AuthoritativeStateHash;
+        public readonly string Reason;
+
+        public ShooterGatewayFullStateSyncRequest(
+            string sessionToken,
+            string battleId,
+            string roomId,
+            ulong worldId,
+            int clientFrame,
+            int lastAuthoritativeFrame,
+            uint clientStateHash,
+            uint authoritativeStateHash,
+            string reason)
+        {
+            SessionToken = sessionToken ?? string.Empty;
+            BattleId = battleId ?? string.Empty;
+            RoomId = roomId ?? string.Empty;
+            WorldId = worldId;
+            ClientFrame = clientFrame;
+            LastAuthoritativeFrame = lastAuthoritativeFrame;
+            ClientStateHash = clientStateHash;
+            AuthoritativeStateHash = authoritativeStateHash;
+            Reason = reason ?? string.Empty;
         }
     }
 
@@ -478,6 +558,24 @@ namespace AbilityKit.Demo.Shooter.View
         {
             Success = success;
             Message = message ?? string.Empty;
+        }
+    }
+
+    public readonly struct ShooterGatewayFullStateSyncRequestResult
+    {
+        public static readonly ShooterGatewayFullStateSyncRequestResult NotRequested = new ShooterGatewayFullStateSyncRequestResult(false, false, "not requested", 0L);
+
+        public readonly bool Success;
+        public readonly bool Accepted;
+        public readonly string Message;
+        public readonly long ServerTicks;
+
+        public ShooterGatewayFullStateSyncRequestResult(bool success, bool accepted, string message, long serverTicks)
+        {
+            Success = success;
+            Accepted = accepted;
+            Message = message ?? string.Empty;
+            ServerTicks = serverTicks;
         }
     }
 

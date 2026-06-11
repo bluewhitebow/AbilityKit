@@ -141,10 +141,12 @@ namespace AbilityKit.Demo.Moba.Services
             services.TryResolve(out MobaConfigDatabase configs);
             services.TryResolve(out AbilityKit.Triggering.Eventing.IEventBus eventBus);
             services.TryResolve(out MobaEffectExecutionService effects);
-
+            services.TryResolve(out MobaPresentationCueSnapshotService cueSnapshots);
+ 
             var buffEvents = new BuffEventPublisher(eventBus);
             var stageEffects = new BuffStageEffectExecutor(effects);
-            RegisterIntervalHandler(new BuffContinuousIntervalHandler(configs, buffEvents, stageEffects));
+            var presentationCues = new MobaBuffPresentationCueReporter(configs, cueSnapshots);
+            RegisterIntervalHandler(new BuffContinuousIntervalHandler(configs, buffEvents, stageEffects, presentationCues));
         }
 
         private void RegisterDefaultModifierProjectors(IWorldResolver services)

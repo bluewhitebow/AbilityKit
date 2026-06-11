@@ -101,7 +101,7 @@ public sealed class ShooterRoomGatewayConnectionTests
         Assert.Equal(authority.CurrentFrame, session.CurrentFrame);
         Assert.Equal(authority.ComputeStateHash(), runtime.ComputeStateHash());
         Assert.Equal(authority.CurrentFrame, presentation.ViewModel.Frame);
-        Assert.True(presentation.ViewModel.Players.ContainsKey(21));
-        Assert.True(presentation.ViewModel.Players.ContainsKey(22));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 21)));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 22)));
     }
 }

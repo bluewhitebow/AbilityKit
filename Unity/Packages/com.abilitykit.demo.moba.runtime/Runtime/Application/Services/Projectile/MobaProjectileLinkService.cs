@@ -80,6 +80,18 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             return _retainByProjectile.TryGetValue(projectileId, out retainHandle) && retainHandle.IsValid;
         }
 
+        public bool TryConsumeRetain(ProjectileId projectileId, out MobaSkillRuntimeRetainHandle retainHandle)
+        {
+            if (!_retainByProjectile.TryGetValue(projectileId, out retainHandle) || !retainHandle.IsValid)
+            {
+                retainHandle = default;
+                return false;
+            }
+
+            _retainByProjectile.Remove(projectileId);
+            return true;
+        }
+
         public bool TryGetLauncherSource(int launcherActorId, out ProjectileSourceContext source)
         {
             return _sourceByLauncherActorId.TryGetValue(launcherActorId, out source) && source.IsValid;
@@ -88,6 +100,18 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
         public bool TryGetLauncherRetain(int launcherActorId, out MobaSkillRuntimeRetainHandle retainHandle)
         {
             return _retainByLauncherActorId.TryGetValue(launcherActorId, out retainHandle) && retainHandle.IsValid;
+        }
+
+        public bool TryConsumeLauncherRetain(int launcherActorId, out MobaSkillRuntimeRetainHandle retainHandle)
+        {
+            if (!_retainByLauncherActorId.TryGetValue(launcherActorId, out retainHandle) || !retainHandle.IsValid)
+            {
+                retainHandle = default;
+                return false;
+            }
+
+            _retainByLauncherActorId.Remove(launcherActorId);
+            return true;
         }
 
         public bool TryGetProjectileId(int actorId, out ProjectileId projectileId)

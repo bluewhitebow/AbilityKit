@@ -37,6 +37,7 @@ namespace AbilityKit.Demo.Moba.Share.Config
         public int[] OnRemoveEffects;
         public int[] OnIntervalEffects;
         public int IntervalMs;
+        public int PresentationTemplateId;
         public int StackingPolicy;
         public int RefreshPolicy;
         public int MaxStacks;

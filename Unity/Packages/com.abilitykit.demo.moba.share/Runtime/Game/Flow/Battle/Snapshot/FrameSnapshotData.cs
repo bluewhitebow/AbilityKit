@@ -314,6 +314,25 @@ namespace AbilityKit.Demo.Moba.Share
         public float ColorG { get; }
         public float ColorB { get; }
         public float ColorA { get; }
+        public string OwnerKind { get; }
+        public long InstanceId { get; }
+        public string InstanceKey { get; }
+        public int StackCount { get; }
+        public int MaxStackCount { get; }
+        public float ElapsedSeconds { get; }
+        public float RemainingSeconds { get; }
+        public int LifecycleReason { get; }
+        public int ContextKind { get; }
+        public int OriginKind { get; }
+        public long SourceContextId { get; }
+        public long RootContextId { get; }
+        public long OwnerContextId { get; }
+        public int SourceConfigId { get; }
+        public string ContextEventId { get; }
+        public IReadOnlyList<int> NumericParamKeys { get; }
+        public IReadOnlyList<float> NumericParamValues { get; }
+        public IReadOnlyList<string> StringParamKeys { get; }
+        public IReadOnlyList<string> StringParamValues { get; }
 
         public PresentationCueData(
             PresentationCueStage stage,
@@ -347,7 +366,26 @@ namespace AbilityKit.Demo.Moba.Share
             float colorR,
             float colorG,
             float colorB,
-            float colorA)
+            float colorA,
+            string ownerKind = null,
+            long instanceId = 0,
+            string instanceKey = null,
+            int stackCount = 0,
+            int maxStackCount = 0,
+            float elapsedSeconds = 0f,
+            float remainingSeconds = 0f,
+            int lifecycleReason = 0,
+            int contextKind = 0,
+            int originKind = 0,
+            long sourceContextId = 0,
+            long rootContextId = 0,
+            long ownerContextId = 0,
+            int sourceConfigId = 0,
+            string contextEventId = null,
+            IReadOnlyList<int> numericParamKeys = null,
+            IReadOnlyList<float> numericParamValues = null,
+            IReadOnlyList<string> stringParamKeys = null,
+            IReadOnlyList<string> stringParamValues = null)
         {
             Stage = stage;
             CueKind = cueKind;
@@ -381,6 +419,25 @@ namespace AbilityKit.Demo.Moba.Share
             ColorG = colorG;
             ColorB = colorB;
             ColorA = colorA;
+            OwnerKind = ownerKind;
+            InstanceId = instanceId;
+            InstanceKey = instanceKey;
+            StackCount = stackCount;
+            MaxStackCount = maxStackCount;
+            ElapsedSeconds = elapsedSeconds;
+            RemainingSeconds = remainingSeconds;
+            LifecycleReason = lifecycleReason;
+            ContextKind = contextKind;
+            OriginKind = originKind;
+            SourceContextId = sourceContextId;
+            RootContextId = rootContextId;
+            OwnerContextId = ownerContextId;
+            SourceConfigId = sourceConfigId;
+            ContextEventId = contextEventId;
+            NumericParamKeys = numericParamKeys ?? Array.Empty<int>();
+            NumericParamValues = numericParamValues ?? Array.Empty<float>();
+            StringParamKeys = stringParamKeys ?? Array.Empty<string>();
+            StringParamValues = stringParamValues ?? Array.Empty<string>();
         }
     }
 
@@ -393,6 +450,13 @@ namespace AbilityKit.Demo.Moba.Share
         Executed = 4,
         Interrupted = 5,
         Skipped = 6,
+        Started = 20,
+        Ticked = 21,
+        Refreshed = 22,
+        StackChanged = 23,
+        Expired = 24,
+        Removed = 25,
+        Completed = 26,
     }
 
     public readonly struct SnapshotVec3

@@ -6,6 +6,7 @@ using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Common.Projectile;
 using AbilityKit.Core.Math;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Trace;
 
 namespace AbilityKit.Demo.Moba.Services.Area
 {
@@ -15,6 +16,7 @@ namespace AbilityKit.Demo.Moba.Services.Area
         [WorldInject(required: false)] private IProjectileService _projectiles;
         [WorldInject(required: false)] private IFrameTime _frameTime;
         [WorldInject(required: false)] private IMobaTemporaryEntityLifecycleService _lifecycle;
+        [WorldInject(required: false)] private MobaTraceRegistry _trace;
 
         private readonly Dictionary<int, MobaAreaRuntimeInfo> _areas = new Dictionary<int, MobaAreaRuntimeInfo>();
         private readonly Dictionary<int, List<int>> _areasByOwner = new Dictionary<int, List<int>>();
@@ -74,6 +76,7 @@ namespace AbilityKit.Demo.Moba.Services.Area
 
             _areas.Remove(areaId.Value);
             Unindex(info);
+            EndAreaTrace(in info, TraceLifecycleReason.Completed);
             _lifecycle?.RecordDespawn(MobaTemporaryEntityKind.Area, ActiveCount, CurrentFrame);
             return true;
         }
@@ -114,13 +117,7 @@ namespace AbilityKit.Demo.Moba.Services.Area
             if (!_areas.ContainsKey(areaId)) return false;
             if (_projectiles == null) return false;
 
-            var ok = _projectiles.DespawnArea(new AreaId(areaId), CurrentFrame);
-            if (ok)
-            {
-                Unregister(new AreaId(areaId));
-            }
-
-            return ok;
+            return _projectiles.DespawnArea(new AreaId(areaId), CurrentFrame);
         }
 
         public int DespawnAreas(int ownerActorId, int templateId, bool removeAll)
@@ -198,6 +195,13 @@ namespace AbilityKit.Demo.Moba.Services.Area
         {
             RemoveIndexed(_areasByOwner, info.OwnerActorId, info.AreaId);
             RemoveIndexed(_areasByTemplate, info.TemplateId, info.AreaId);
+        }
+
+        private void EndAreaTrace(in MobaAreaRuntimeInfo info, TraceLifecycleReason reason)
+        {
+            if (_trace == null) return;
+            if (info.SourceContextId == 0L) return;
+            _trace.EndContext(info.SourceContextId, reason);
         }
 
         private static void Index(Dictionary<int, List<int>> index, int key, int areaId)

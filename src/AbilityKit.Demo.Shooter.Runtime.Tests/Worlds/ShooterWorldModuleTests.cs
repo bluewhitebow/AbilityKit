@@ -97,8 +97,8 @@ public sealed class ShooterWorldModuleTests
             ShooterPackedSnapshotFlags.Full,
             0u,
             0,
-            Array.Empty<ShooterPackedEntityChunk>(),
-            Array.Empty<byte>());
+            Array.Empty<byte>(),
+            Array.Empty<ShooterPackedComponentChunk>());
 
         Assert.True(runtime.ImportPackedSnapshot(in emptySnapshot));
         Assert.Equal(0, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
@@ -106,13 +106,11 @@ public sealed class ShooterWorldModuleTests
     }
 
     [Fact]
-    public void BlueprintCreatedWorldResolvesShooterSveltoServices()
+    public void BlueprintRegistrationCreatedWorldResolvesShooterSveltoServices()
     {
-        var blueprints = new WorldBlueprintRegistry()
-            .Register(new ShooterBattleWorldBlueprint());
-        var baseFactory = new RegistryWorldFactory(new WorldTypeRegistry()
-            .Register(ShooterGameplay.WorldType, options => new TestWorld(options)));
-        var manager = new WorldManager(new DefaultWorldFactory(blueprints, baseFactory));
+        var registry = new WorldTypeRegistry();
+        ShooterWorldBlueprintsRegistration.RegisterAll(registry);
+        var manager = new WorldManager(new RegistryWorldFactory(registry));
 
         var world = manager.Create(new WorldCreateOptions(new WorldId("shooter-world-1"), ShooterGameplay.WorldType));
 
@@ -137,42 +135,32 @@ public sealed class ShooterWorldModuleTests
         manager.DisposeAll();
     }
 
-    private sealed class TestWorld : IWorld
+    [Fact]
+    public void ShooterWorldHostCreatesAndDrivesBattleWorldRuntime()
     {
-        private readonly WorldContainer _container;
+        var host = new ShooterWorldHost();
+        var world = host.CreateBattleWorld("host-world-1");
 
-        public TestWorld(WorldCreateOptions options)
-        {
-            if (options == null) throw new ArgumentNullException(nameof(options));
+        Assert.Equal(ShooterGameplay.WorldType, world.WorldType);
+        Assert.True(host.TryGetBattleWorld("host-world-1", out var resolvedWorld));
+        Assert.Same(world, resolvedWorld);
+        Assert.True(world.Services.TryResolve<IShooterBattleRuntimePort>(out var runtime));
+        Assert.True(world.Services.TryResolve<ISveltoWorldContext>(out var svelto));
 
-            Id = options.Id;
-            WorldType = options.WorldType;
-            var builder = options.ServiceBuilder ?? new WorldContainerBuilder();
-            for (int i = 0; i < options.Modules.Count; i++)
-            {
-                builder.AddModule(options.Modules[i]);
-            }
+        var start = new ShooterStartGamePayload(
+            "host-world",
+            30,
+            1,
+            new[] { new ShooterStartPlayer(1, "P1", 0f, 0f) });
 
-            _container = builder.Build();
-        }
+        Assert.True(runtime.StartGame(in start));
+        Assert.Equal(0, runtime.CurrentFrame);
 
-        public WorldId Id { get; }
+        host.Tick(1f / 30f);
 
-        public string WorldType { get; }
-
-        public IWorldResolver Services => _container;
-
-        public void Initialize()
-        {
-        }
-
-        public void Tick(float deltaTime)
-        {
-        }
-
-        public void Dispose()
-        {
-            _container.Dispose();
-        }
+        Assert.Equal(1, runtime.CurrentFrame);
+        Assert.Equal(1, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
+        Assert.True(host.DestroyBattleWorld("host-world-1"));
+        Assert.False(host.TryGetBattleWorld("host-world-1", out _));
     }
 }

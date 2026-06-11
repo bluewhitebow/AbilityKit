@@ -51,6 +51,24 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var stayIntervalFrames = Math.Max(0, args.StayIntervalFrames);
             var frame = ResolveFrame(ctx.Context);
 
+            ctx.Context.TryResolve<MobaAreaRuntimeService>(out var areaRuntime);
+            var sourceContextId = 0L;
+            var rootContextId = 0L;
+            var ownerContextId = 0L;
+            if (areaRuntime != null)
+            {
+                var origin = input.BuildOrigin(input.CasterActorId, input.TargetActorId, MobaTraceKind.AreaSpawn, args.AreaId);
+                if (origin.EffectiveParentContextId == 0L)
+                {
+                    LogRejected(ctx, $"requires source context. areaId={args.AreaId} caster={input.CasterActorId}");
+                    return;
+                }
+
+                sourceContextId = origin.EffectiveParentContextId;
+                rootContextId = origin.EffectiveRootContextId;
+                ownerContextId = origin.OwnerContextId;
+            }
+
             var spawnParams = new AreaSpawnParams(input.CasterActorId, in center, radius, lifetimeFrames, collisionLayerMask, stayIntervalFrames);
             var areaId = projectiles.SpawnArea(in spawnParams, frame);
             if (areaId.Value <= 0)
@@ -59,14 +77,8 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 return;
             }
 
-            if (ctx.Context.TryResolve<MobaAreaRuntimeService>(out var areaRuntime) && areaRuntime != null)
+            if (areaRuntime != null)
             {
-                var origin = input.BuildOrigin(input.CasterActorId, input.TargetActorId, MobaTraceKind.AreaSpawn, args.AreaId);
-                if (origin.EffectiveParentContextId == 0L)
-                {
-                    throw new InvalidOperationException($"SpawnArea requires source context. areaId={args.AreaId} caster={input.CasterActorId}");
-                }
-
                 areaRuntime.RegisterSpawn(
                     areaId,
                     args.AreaId,
@@ -76,9 +88,9 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                     collisionLayerMask,
                     aoe.MaxTargets,
                     frame,
-                    origin.EffectiveParentContextId,
-                    origin.EffectiveRootContextId,
-                    origin.OwnerContextId);
+                    sourceContextId,
+                    rootContextId,
+                    ownerContextId);
             }
 
             LogApplied(ctx, $"templateId={args.AreaId} runtimeId={areaId.Value} caster={input.CasterActorId} radius={radius} lifetimeFrames={lifetimeFrames}");

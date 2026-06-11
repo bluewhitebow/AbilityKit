@@ -6,12 +6,11 @@ namespace AbilityKit.Demo.Shooter.View
 {
     public sealed class ShooterSnapshotStream
     {
-        public event Action<ShooterSnapshotViewModel>? SnapshotApplied;
+        public event Action<ShooterSnapshotViewBatch>? SnapshotApplied;
 
-        public void Publish(ShooterSnapshotViewModel viewModel)
+        public void Publish(in ShooterSnapshotViewBatch batch)
         {
-            if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
-            SnapshotApplied?.Invoke(viewModel);
+            SnapshotApplied?.Invoke(batch);
         }
     }
 }

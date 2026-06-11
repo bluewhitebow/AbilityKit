@@ -10,10 +10,10 @@ namespace AbilityKit.Demo.Shooter.View
 {
     public sealed class ShooterClientSession
     {
-        private readonly IShooterBattleRuntimePort _runtime;
+        private readonly ShooterPresentationSessionContext _presentationSession;
         private readonly ShooterPresentationFacade _presentation;
-        private readonly ShooterClientFrameSyncController _frameSync;
-        private readonly IShooterRoomGatewayClient? _gateway;
+        private readonly ShooterClientFrameSyncCoordinator _frameSync;
+        private readonly ShooterClientInputCoordinator _input;
 
         public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationFacade presentation, int tickRate)
             : this(runtime, presentation, tickRate, (ShooterGatewaySnapshotDecoder?)null)
@@ -26,65 +26,82 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationFacade presentation, int tickRate, ShooterGatewaySnapshotDecoder? decoder, IShooterRoomGatewayClient? gateway)
+            : this(runtime, ShooterPresentationSessionContext.CreateFromFacade(presentation), tickRate, decoder, gateway)
         {
-            _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-            _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
-            _frameSync = new ShooterClientFrameSyncController(_runtime, _presentation, tickRate, decoder);
-            _gateway = gateway;
         }
 
-        public bool IsStarted => _runtime.IsStarted;
+        public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationSessionContext presentationSession, int tickRate)
+            : this(runtime, presentationSession, tickRate, (ShooterGatewaySnapshotDecoder?)null)
+        {
+        }
+
+        public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationSessionContext presentationSession, int tickRate, ShooterGatewaySnapshotDecoder? decoder)
+            : this(runtime, presentationSession, tickRate, decoder, null)
+        {
+        }
+
+        public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationSessionContext presentationSession, int tickRate, ShooterGatewaySnapshotDecoder? decoder, IShooterRoomGatewayClient? gateway)
+        {
+            _presentationSession = presentationSession ?? throw new ArgumentNullException(nameof(presentationSession));
+            _presentation = _presentationSession.Presentation;
+            _frameSync = new ShooterClientFrameSyncCoordinator(runtime, _presentation, tickRate, decoder);
+            _input = new ShooterClientInputCoordinator(_frameSync, gateway);
+        }
+
+        public bool IsStarted => _frameSync.IsStarted;
 
         public int CurrentFrame => _frameSync.CurrentFrame;
 
+        public ShooterPresentationSessionContext PresentationSession => _presentationSession;
+
         public ShooterPresentationFacade Presentation => _presentation;
 
-        public ShooterClientFrameSyncController FrameSync => _frameSync;
+        public ShooterClientFrameSyncController FrameSync => _frameSync.Controller;
+
+        public ShooterClientFrameSyncCoordinator FrameSyncCoordinator => _frameSync;
+
+        public ShooterClientInputCoordinator InputCoordinator => _input;
 
         public ShooterClientReconciliationResult LastReconciliationResult => _frameSync.LastReconciliationResult;
 
-        public bool HasGateway => _gateway != null;
+        public bool NeedsFullSnapshotResync => _frameSync.NeedsFullSnapshotResync;
+
+        public ShooterClientRecoveryState RecoveryState => _frameSync.RecoveryState;
+
+        public ShooterClientResyncReason LastResyncReason => _frameSync.LastResyncReason;
+
+        public int LastResyncClientFrame => _frameSync.LastResyncClientFrame;
+
+        public int LastResyncAuthoritativeFrame => _frameSync.LastResyncAuthoritativeFrame;
+
+        public uint LastResyncClientStateHash => _frameSync.LastResyncClientStateHash;
+
+        public uint LastResyncAuthoritativeStateHash => _frameSync.LastResyncAuthoritativeStateHash;
+
+        public bool HasGateway => _input.HasGateway;
 
         public bool StartGame(in ShooterStartGamePayload startGame)
         {
-            if (!_runtime.StartGame(in startGame))
-            {
-                return false;
-            }
-
-            _presentation.ApplyShooterSnapshot(_runtime.GetSnapshot());
-            return true;
+            return _frameSync.StartGame(in startGame);
         }
 
         public ShooterClientInputSubmitResult SubmitLocalInput(int playerId, float moveX, float moveY, float aimX, float aimY, bool fire)
         {
-            var packet = ShooterClientInputBuilder.CreatePacket(playerId, moveX, moveY, aimX, aimY, fire);
-            var accepted = _frameSync.SubmitLocalInput(packet.Command);
-            return new ShooterClientInputSubmitResult(accepted, CurrentFrame, packet);
+            return _input.SubmitLocalInput(playerId, moveX, moveY, aimX, aimY, fire);
         }
 
         public ShooterClientInputSubmitResult SubmitLocalInput(in ShooterPlayerCommand command)
         {
-            var payload = ShooterInputCodec.Serialize(new[] { command });
-            var packet = new ShooterInputPacket(ShooterOpCodes.Input.PlayerCommand, payload, in command);
-            var accepted = _frameSync.SubmitLocalInput(in command);
-            return new ShooterClientInputSubmitResult(accepted, CurrentFrame, packet);
+            return _input.SubmitLocalInput(in command);
         }
 
-        public async Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
+        public Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
             ShooterGatewayBattleInputContext context,
             ShooterPlayerCommand command,
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
-            if (_gateway == null)
-            {
-                throw new InvalidOperationException("Shooter room gateway client is not configured.");
-            }
-
-            var local = SubmitLocalInput(in command).WithRequestedFrame(context.Frame);
-            var remote = await _gateway.SubmitBattleInputAsync(context, local.Packet, timeout, cancellationToken).ConfigureAwait(false);
-            return new ShooterClientGatewayInputSubmitResult(in local, in remote);
+            return _input.SubmitLocalInputToGatewayAsync(context, command, timeout, cancellationToken);
         }
 
         public ShooterClientFrameTickResult Tick(float deltaTime)
@@ -95,6 +112,21 @@ namespace AbilityKit.Demo.Shooter.View
         public ShooterClientFrameTickResult CatchUpToFrame(int targetFrame)
         {
             return _frameSync.CatchUpToFrame(targetFrame);
+        }
+
+        public bool TryEnterCatchUp(int authoritativeFrame)
+        {
+            return _frameSync.TryEnterCatchUp(authoritativeFrame);
+        }
+
+        public Task<ShooterGatewayFullStateSyncRequestResult> RequestFullSnapshotResyncAsync(
+            IShooterRoomGatewayRoomClient roomClient,
+            ShooterGatewayFullStateSyncRequest request,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (roomClient == null) throw new ArgumentNullException(nameof(roomClient));
+            return roomClient.RequestFullStateSyncAsync(request, timeout, cancellationToken);
         }
 
         public ShooterSnapshotApplyResult ApplyGatewayPush(uint opCode, ArraySegment<byte> payload)

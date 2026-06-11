@@ -45,6 +45,7 @@ namespace AbilityKit.Demo.Moba.Services
         }
 
         private readonly Dictionary<int, List<int>> _summonsByRootOwner = new Dictionary<int, List<int>>();
+        private readonly Dictionary<int, SummonSourceContext> _sourceBySummonActorId = new Dictionary<int, SummonSourceContext>();
         private readonly List<int> _queryBuffer = new List<int>(16);
 
         public int ActiveCount => CountAllTrackedSummons();
@@ -133,6 +134,7 @@ namespace AbilityKit.Demo.Moba.Services
             TryInitSkillLoadout(entity, summon.SkillIds, summon.PassiveSkillIds);
 
             TrackSummon(rootOwner, actorId);
+            TrackSourceContext(actorId, in spawnSourceContext);
             _lifecycle?.RecordSpawn(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
 
             PublishSummonEvent(MobaSummonTriggering.Events.Spawned, rootOwner, casterActorId, actorId, summonId, (int)SummonDespawnReason.None, in spawnSourceContext);
@@ -211,22 +213,24 @@ namespace AbilityKit.Demo.Moba.Services
             catch (Exception ex) { Log.Exception(ex, $"[MobaSummonService] unregister summon failed (summonActorId={summonActorId}, summonId={summonId})"); }
 
             UntrackSummon(rootOwner, summonActorId);
+            var sourceContext = ConsumeSourceContext(summonActorId);
+            EndSpawnTrace(in sourceContext, reason);
             _lifecycle?.RecordDespawn(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
             if (reason == SummonDespawnReason.ReplacedByLimit) _lifecycle?.RecordReplaced(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
 
             if (reason == SummonDespawnReason.Killed)
             {
-                PublishSummonEvent(MobaSummonTriggering.Events.Died, rootOwner, owner, summonActorId, summonId, (int)reason, sourceContext: default);
+                PublishSummonEvent(MobaSummonTriggering.Events.Died, rootOwner, owner, summonActorId, summonId, (int)reason, in sourceContext);
                 if (rootOwner > 0)
                 {
-                    PublishSummonEvent(MobaSummonTriggering.Events.DiedByOwner(rootOwner), rootOwner, owner, summonActorId, summonId, (int)reason, sourceContext: default);
+                    PublishSummonEvent(MobaSummonTriggering.Events.DiedByOwner(rootOwner), rootOwner, owner, summonActorId, summonId, (int)reason, in sourceContext);
                 }
             }
 
-            PublishSummonEvent(MobaSummonTriggering.Events.Despawned, rootOwner, owner, summonActorId, summonId, (int)reason, sourceContext: default);
+            PublishSummonEvent(MobaSummonTriggering.Events.Despawned, rootOwner, owner, summonActorId, summonId, (int)reason, in sourceContext);
             if (rootOwner > 0)
             {
-                PublishSummonEvent(MobaSummonTriggering.Events.DespawnedByOwner(rootOwner), rootOwner, owner, summonActorId, summonId, (int)reason, sourceContext: default);
+                PublishSummonEvent(MobaSummonTriggering.Events.DespawnedByOwner(rootOwner), rootOwner, owner, summonActorId, summonId, (int)reason, in sourceContext);
             }
 
             try { e.Destroy(); }
@@ -349,6 +353,28 @@ namespace AbilityKit.Demo.Moba.Services
             if (!_summonsByRootOwner.TryGetValue(rootOwnerActorId, out var list) || list == null) return;
             list.Remove(summonActorId);
             if (list.Count == 0) _summonsByRootOwner.Remove(rootOwnerActorId);
+        }
+
+        private void TrackSourceContext(int summonActorId, in SummonSourceContext sourceContext)
+        {
+            if (summonActorId <= 0) return;
+            if (!sourceContext.IsValid) return;
+            _sourceBySummonActorId[summonActorId] = sourceContext;
+        }
+
+        private SummonSourceContext ConsumeSourceContext(int summonActorId)
+        {
+            if (summonActorId <= 0) return default;
+            if (!_sourceBySummonActorId.TryGetValue(summonActorId, out var sourceContext)) return default;
+            _sourceBySummonActorId.Remove(summonActorId);
+            return sourceContext;
+        }
+
+        private void EndSpawnTrace(in SummonSourceContext sourceContext, SummonDespawnReason reason)
+        {
+            if (_trace == null) return;
+            if (sourceContext.SourceContextId == 0L) return;
+            _trace.EndContext(sourceContext.SourceContextId, ToTraceReason(reason));
         }
 
         private void CompactTrackedSummons(int rootOwnerActorId, List<int> list)
@@ -528,6 +554,26 @@ namespace AbilityKit.Demo.Moba.Services
             }
         }
 
+        private static TraceLifecycleReason ToTraceReason(SummonDespawnReason reason)
+        {
+            switch (reason)
+            {
+                case SummonDespawnReason.OwnerDead:
+                case SummonDespawnReason.Killed:
+                    return TraceLifecycleReason.Dead;
+                case SummonDespawnReason.ReplacedByLimit:
+                    return TraceLifecycleReason.Replaced;
+                case SummonDespawnReason.SceneCleanup:
+                    return TraceLifecycleReason.Cancelled;
+                case SummonDespawnReason.ManualRemove:
+                    return TraceLifecycleReason.Dispelled;
+                case SummonDespawnReason.Timeout:
+                case SummonDespawnReason.None:
+                default:
+                    return TraceLifecycleReason.Completed;
+            }
+        }
+
         private int CurrentFrame
         {
             get
@@ -553,6 +599,7 @@ namespace AbilityKit.Demo.Moba.Services
         public void Dispose()
         {
             _summonsByRootOwner.Clear();
+            _sourceBySummonActorId.Clear();
             _lifecycle?.SetActive(MobaTemporaryEntityKind.Summon, 0, CurrentFrame);
         }
     }

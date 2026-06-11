@@ -166,11 +166,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         public ShooterPackedSnapshotPayload ExportPackedSnapshot(ulong worldId, bool isFullSnapshot = true, bool authorityOverride = false)
         {
-            var chunks = new[]
-            {
-                ExportPlayerChunk(),
-                ExportProjectileChunk()
-            };
+            var componentChunks = ExportComponentChunks();
 
             return new ShooterPackedSnapshotPayload(
                 ShooterPackedSnapshotCodec.CurrentVersion,
@@ -180,13 +176,13 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 CreateSnapshotFlags(isFullSnapshot, authorityOverride),
                 ComputeStateHash(),
                 _entities.PlayerCount + _entities.ProjectileCount,
-                chunks,
-                Array.Empty<byte>());
+                Array.Empty<byte>(),
+                componentChunks);
         }
 
         public bool ImportPackedSnapshot(in ShooterPackedSnapshotPayload snapshot)
         {
-            if (snapshot.Version <= 0 || snapshot.Chunks == null)
+            if (snapshot.Version <= 0)
             {
                 return false;
             }
@@ -194,19 +190,13 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _state.Reset(default);
             _state.CurrentFrame = snapshot.Frame;
 
-            for (int i = 0; i < snapshot.Chunks.Length; i++)
+            var componentChunks = snapshot.ComponentChunks;
+            if (componentChunks == null || componentChunks.Length == 0)
             {
-                var chunk = snapshot.Chunks[i];
-                switch (chunk.EntityKind)
-                {
-                    case ShooterPackedEntityKinds.Player:
-                        ImportPlayerChunk(in chunk);
-                        break;
-                    case ShooterPackedEntityKinds.Projectile:
-                        ImportProjectileChunk(in chunk);
-                        break;
-                }
+                return snapshot.EntityCount == 0;
             }
+
+            ImportComponentChunks(componentChunks);
 
             _state.IsStarted = _entities.PlayerCount > 0;
             return _state.IsStarted || snapshot.EntityCount == 0;
@@ -224,11 +214,94 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return ImportPackedSnapshot(in snapshot);
         }
 
-        private ShooterPackedEntityChunk ExportPlayerChunk()
+        private ShooterPackedComponentChunk[] ExportComponentChunks()
+        {
+            return new[]
+            {
+                ExportPlayerLifecycleChunk(),
+                ExportProjectileLifecycleChunk(),
+                ExportPlayerTransformChunk(),
+                ExportProjectileTransformChunk(),
+                ExportPlayerHealthChunk(),
+                ExportPlayerScoreChunk(),
+                ExportProjectileLifetimeChunk()
+            };
+        }
+
+        private ShooterPackedComponentChunk ExportPlayerLifecycleChunk()
         {
             if (_entities.PlayerCount == 0)
             {
-                return ShooterPackedEntityChunk.Empty(ShooterPackedEntityKinds.Player);
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Player);
+            }
+
+            var entityIds = CopyAndSort(_entities.PlayerIds);
+            var flags = new byte[entityIds.Length];
+            var ownerIds = new int[entityIds.Length];
+            for (int i = 0; i < entityIds.Length; i++)
+            {
+                _entities.TryGetPlayer(entityIds[i], out var player);
+                flags[i] = (byte)ShooterPackedEntityFlags.Player;
+                if (player.Alive)
+                {
+                    flags[i] |= ShooterPackedEntityFlags.Alive;
+                }
+
+                ownerIds[i] = player.PlayerId;
+            }
+
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.EntityLifecycle,
+                ShooterPackedEntityKinds.Player,
+                entityIds.Length,
+                entityIds,
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<int>(),
+                flags,
+                ownerIds,
+                Array.Empty<int>());
+        }
+
+        private ShooterPackedComponentChunk ExportProjectileLifecycleChunk()
+        {
+            if (_entities.ProjectileCount == 0)
+            {
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Projectile);
+            }
+
+            var entityIds = CopyAndSort(_entities.ProjectileIds);
+            var flags = new byte[entityIds.Length];
+            var ownerIds = new int[entityIds.Length];
+            for (int i = 0; i < entityIds.Length; i++)
+            {
+                _entities.TryGetProjectile(entityIds[i], out var bullet);
+                flags[i] = (byte)(ShooterPackedEntityFlags.Alive | ShooterPackedEntityFlags.Projectile);
+                ownerIds[i] = bullet.OwnerPlayerId;
+            }
+
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.EntityLifecycle,
+                ShooterPackedEntityKinds.Projectile,
+                entityIds.Length,
+                entityIds,
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<int>(),
+                flags,
+                ownerIds,
+                Array.Empty<int>());
+        }
+
+        private ShooterPackedComponentChunk ExportPlayerTransformChunk()
+        {
+            if (_entities.PlayerCount == 0)
+            {
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Player);
             }
 
             var entityIds = CopyAndSort(_entities.PlayerIds);
@@ -238,11 +311,6 @@ namespace AbilityKit.Demo.Shooter.Runtime
             var velY = new float[entityIds.Length];
             var facingX = new float[entityIds.Length];
             var facingY = new float[entityIds.Length];
-            var hp = new short[entityIds.Length];
-            var flags = new byte[entityIds.Length];
-            var ownerIds = new int[entityIds.Length];
-            var aux = new int[entityIds.Length];
-
             for (int i = 0; i < entityIds.Length; i++)
             {
                 _entities.TryGetPlayer(entityIds[i], out var player);
@@ -250,12 +318,6 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 posY[i] = player.Y;
                 facingX[i] = player.AimX;
                 facingY[i] = player.AimY;
-                hp[i] = ClampToShort(player.Hp);
-                flags[i] = (byte)(ShooterPackedEntityFlags.Player | ShooterPackedEntityFlags.DirtyTransform | ShooterPackedEntityFlags.DirtyStats);
-                if (player.Alive)
-                {
-                    flags[i] |= ShooterPackedEntityFlags.Alive;
-                }
 
                 if (_state.LatestCommands.TryGetValue(player.PlayerId, out var command))
                 {
@@ -267,19 +329,28 @@ namespace AbilityKit.Demo.Shooter.Runtime
                         velY[i] = moveY * ShooterBattleTuning.PlayerSpeed;
                     }
                 }
-
-                ownerIds[i] = player.PlayerId;
-                aux[i] = player.Score;
             }
 
-            return new ShooterPackedEntityChunk(ShooterPackedEntityKinds.Player, entityIds.Length, entityIds, posX, posY, velX, velY, facingX, facingY, hp, flags, ownerIds, aux);
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.Transform,
+                ShooterPackedEntityKinds.Player,
+                entityIds.Length,
+                entityIds,
+                posX,
+                posY,
+                facingX,
+                facingY,
+                Array.Empty<int>(),
+                Array.Empty<byte>(),
+                Array.Empty<int>(),
+                PackPairValues(velX, velY));
         }
 
-        private ShooterPackedEntityChunk ExportProjectileChunk()
+        private ShooterPackedComponentChunk ExportProjectileTransformChunk()
         {
             if (_entities.ProjectileCount == 0)
             {
-                return ShooterPackedEntityChunk.Empty(ShooterPackedEntityKinds.Projectile);
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Projectile);
             }
 
             var entityIds = CopyAndSort(_entities.ProjectileIds);
@@ -289,11 +360,6 @@ namespace AbilityKit.Demo.Shooter.Runtime
             var velY = new float[entityIds.Length];
             var facingX = new float[entityIds.Length];
             var facingY = new float[entityIds.Length];
-            var hp = new short[entityIds.Length];
-            var flags = new byte[entityIds.Length];
-            var ownerIds = new int[entityIds.Length];
-            var aux = new int[entityIds.Length];
-
             for (int i = 0; i < entityIds.Length; i++)
             {
                 _entities.TryGetProjectile(entityIds[i], out var bullet);
@@ -306,60 +372,269 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 Normalize(ref dirX, ref dirY);
                 facingX[i] = dirX;
                 facingY[i] = dirY;
-                hp[i] = ClampToShort(bullet.RemainingFrames);
-                flags[i] = (byte)(ShooterPackedEntityFlags.Alive | ShooterPackedEntityFlags.Projectile | ShooterPackedEntityFlags.DirtyTransform);
-                ownerIds[i] = bullet.OwnerPlayerId;
-                aux[i] = bullet.RemainingFrames;
             }
 
-            return new ShooterPackedEntityChunk(ShooterPackedEntityKinds.Projectile, entityIds.Length, entityIds, posX, posY, velX, velY, facingX, facingY, hp, flags, ownerIds, aux);
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.Transform,
+                ShooterPackedEntityKinds.Projectile,
+                entityIds.Length,
+                entityIds,
+                posX,
+                posY,
+                facingX,
+                facingY,
+                Array.Empty<int>(),
+                Array.Empty<byte>(),
+                Array.Empty<int>(),
+                PackPairValues(velX, velY));
         }
 
-        private void ImportPlayerChunk(in ShooterPackedEntityChunk chunk)
+        private ShooterPackedComponentChunk ExportPlayerHealthChunk()
+        {
+            if (_entities.PlayerCount == 0)
+            {
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.Health, ShooterPackedEntityKinds.Player);
+            }
+
+            var entityIds = CopyAndSort(_entities.PlayerIds);
+            var hp = new int[entityIds.Length];
+            for (int i = 0; i < entityIds.Length; i++)
+            {
+                _entities.TryGetPlayer(entityIds[i], out var player);
+                hp[i] = player.Hp;
+            }
+
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.Health,
+                ShooterPackedEntityKinds.Player,
+                entityIds.Length,
+                entityIds,
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                hp,
+                Array.Empty<byte>(),
+                Array.Empty<int>(),
+                Array.Empty<int>());
+        }
+
+        private ShooterPackedComponentChunk ExportPlayerScoreChunk()
+        {
+            if (_entities.PlayerCount == 0)
+            {
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.Score, ShooterPackedEntityKinds.Player);
+            }
+
+            var entityIds = CopyAndSort(_entities.PlayerIds);
+            var scores = new int[entityIds.Length];
+            for (int i = 0; i < entityIds.Length; i++)
+            {
+                _entities.TryGetPlayer(entityIds[i], out var player);
+                scores[i] = player.Score;
+            }
+
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.Score,
+                ShooterPackedEntityKinds.Player,
+                entityIds.Length,
+                entityIds,
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                scores,
+                Array.Empty<byte>(),
+                Array.Empty<int>(),
+                Array.Empty<int>());
+        }
+
+        private ShooterPackedComponentChunk ExportProjectileLifetimeChunk()
+        {
+            if (_entities.ProjectileCount == 0)
+            {
+                return ShooterPackedComponentChunk.Empty(ShooterPackedComponentKinds.ProjectileLifetime, ShooterPackedEntityKinds.Projectile);
+            }
+
+            var entityIds = CopyAndSort(_entities.ProjectileIds);
+            var remainingFrames = new int[entityIds.Length];
+            for (int i = 0; i < entityIds.Length; i++)
+            {
+                _entities.TryGetProjectile(entityIds[i], out var bullet);
+                remainingFrames[i] = bullet.RemainingFrames;
+            }
+
+            return new ShooterPackedComponentChunk(
+                ShooterPackedComponentKinds.ProjectileLifetime,
+                ShooterPackedEntityKinds.Projectile,
+                entityIds.Length,
+                entityIds,
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                Array.Empty<float>(),
+                remainingFrames,
+                Array.Empty<byte>(),
+                Array.Empty<int>(),
+                Array.Empty<int>());
+        }
+
+        private void ImportComponentChunks(ShooterPackedComponentChunk[] componentChunks)
+        {
+            var players = new Dictionary<int, ShooterSveltoPlayerComponent>();
+            var projectiles = new Dictionary<int, ShooterSveltoProjectileComponent>();
+
+            for (int i = 0; i < componentChunks.Length; i++)
+            {
+                var chunk = componentChunks[i];
+                switch (chunk.ComponentKind)
+                {
+                    case ShooterPackedComponentKinds.EntityLifecycle:
+                        ImportLifecycleComponentChunk(in chunk, players, projectiles);
+                        break;
+                    case ShooterPackedComponentKinds.Transform:
+                        ImportTransformComponentChunk(in chunk, players, projectiles);
+                        break;
+                    case ShooterPackedComponentKinds.Health:
+                        ImportHealthComponentChunk(in chunk, players);
+                        break;
+                    case ShooterPackedComponentKinds.Score:
+                        ImportScoreComponentChunk(in chunk, players);
+                        break;
+                    case ShooterPackedComponentKinds.ProjectileLifetime:
+                        ImportProjectileLifetimeComponentChunk(in chunk, projectiles);
+                        break;
+                }
+            }
+
+            foreach (var player in players.Values)
+            {
+                var value = player;
+                _entities.AddPlayer(in value);
+            }
+
+            foreach (var projectile in projectiles.Values)
+            {
+                var value = projectile;
+                _entities.AddProjectile(in value);
+                _state.AdvanceBulletIdPast(value.BulletId);
+            }
+        }
+
+        private void ImportLifecycleComponentChunk(
+            in ShooterPackedComponentChunk chunk,
+            Dictionary<int, ShooterSveltoPlayerComponent> players,
+            Dictionary<int, ShooterSveltoProjectileComponent> projectiles)
         {
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
             {
-                var playerId = GetInt(chunk.EntityIds, i);
-                if (playerId <= 0) continue;
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0) continue;
 
                 var flags = GetByte(chunk.Flags, i);
-                var player = new ShooterSveltoPlayerComponent
+                if (chunk.EntityKind == ShooterPackedEntityKinds.Player)
                 {
-                    PlayerId = playerId,
-                    X = GetFloat(chunk.PosX, i),
-                    Y = GetFloat(chunk.PosY, i),
-                    AimX = GetFloat(chunk.FacingX, i, 1f),
-                    AimY = GetFloat(chunk.FacingY, i),
-                    Hp = GetShort(chunk.Hp, i),
-                    Score = GetInt(chunk.Aux, i),
-                    Alive = (flags & ShooterPackedEntityFlags.Alive) != 0
-                };
-                _entities.AddPlayer(in player);
+                    players[entityId] = new ShooterSveltoPlayerComponent
+                    {
+                        PlayerId = entityId,
+                        AimX = 1f,
+                        Hp = ShooterGameplay.DefaultPlayerHp,
+                        Alive = (flags & ShooterPackedEntityFlags.Alive) != 0
+                    };
+                }
+                else if (chunk.EntityKind == ShooterPackedEntityKinds.Projectile)
+                {
+                    projectiles[entityId] = new ShooterSveltoProjectileComponent
+                    {
+                        BulletId = entityId,
+                        OwnerPlayerId = GetInt(chunk.OwnerIds, i)
+                    };
+                }
             }
         }
 
-        private void ImportProjectileChunk(in ShooterPackedEntityChunk chunk)
+        private void ImportTransformComponentChunk(
+            in ShooterPackedComponentChunk chunk,
+            Dictionary<int, ShooterSveltoPlayerComponent> players,
+            Dictionary<int, ShooterSveltoProjectileComponent> projectiles)
         {
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
             {
-                var bulletId = GetInt(chunk.EntityIds, i);
-                if (bulletId <= 0) continue;
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0) continue;
 
-                var remainingFrames = GetInt(chunk.Aux, i, GetShort(chunk.Hp, i));
-                var bullet = new ShooterSveltoProjectileComponent
+                if (chunk.EntityKind == ShooterPackedEntityKinds.Player && players.TryGetValue(entityId, out var player))
                 {
-                    BulletId = bulletId,
-                    OwnerPlayerId = GetInt(chunk.OwnerIds, i),
-                    X = GetFloat(chunk.PosX, i),
-                    Y = GetFloat(chunk.PosY, i),
-                    VelocityX = GetFloat(chunk.VelX, i),
-                    VelocityY = GetFloat(chunk.VelY, i),
-                    RemainingFrames = remainingFrames
-                };
-                _entities.AddProjectile(in bullet);
-                _state.AdvanceBulletIdPast(bulletId);
+                    player.X = GetFloat(chunk.ValueX, i);
+                    player.Y = GetFloat(chunk.ValueY, i);
+                    player.AimX = GetFloat(chunk.ValueZ, i, 1f);
+                    player.AimY = GetFloat(chunk.ValueW, i);
+                    players[entityId] = player;
+                }
+                else if (chunk.EntityKind == ShooterPackedEntityKinds.Projectile && projectiles.TryGetValue(entityId, out var projectile))
+                {
+                    projectile.X = GetFloat(chunk.ValueX, i);
+                    projectile.Y = GetFloat(chunk.ValueY, i);
+                    projectile.VelocityX = GetPackedPairValue(chunk.Aux, i, 0);
+                    projectile.VelocityY = GetPackedPairValue(chunk.Aux, i, 1);
+                    projectiles[entityId] = projectile;
+                }
+            }
+        }
+
+        private void ImportHealthComponentChunk(in ShooterPackedComponentChunk chunk, Dictionary<int, ShooterSveltoPlayerComponent> players)
+        {
+            if (chunk.EntityKind != ShooterPackedEntityKinds.Player)
+            {
+                return;
+            }
+
+            var count = Math.Max(0, chunk.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0 || !players.TryGetValue(entityId, out var player)) continue;
+
+                player.Hp = GetInt(chunk.IntValues, i, player.Hp);
+                players[entityId] = player;
+            }
+        }
+
+        private void ImportScoreComponentChunk(in ShooterPackedComponentChunk chunk, Dictionary<int, ShooterSveltoPlayerComponent> players)
+        {
+            if (chunk.EntityKind != ShooterPackedEntityKinds.Player)
+            {
+                return;
+            }
+
+            var count = Math.Max(0, chunk.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0 || !players.TryGetValue(entityId, out var player)) continue;
+
+                player.Score = GetInt(chunk.IntValues, i, player.Score);
+                players[entityId] = player;
+            }
+        }
+
+        private void ImportProjectileLifetimeComponentChunk(in ShooterPackedComponentChunk chunk, Dictionary<int, ShooterSveltoProjectileComponent> projectiles)
+        {
+            if (chunk.EntityKind != ShooterPackedEntityKinds.Projectile)
+            {
+                return;
+            }
+
+            var count = Math.Max(0, chunk.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0 || !projectiles.TryGetValue(entityId, out var projectile)) continue;
+
+                projectile.RemainingFrames = GetInt(chunk.IntValues, i, projectile.RemainingFrames);
+                projectiles[entityId] = projectile;
             }
         }
 
@@ -379,13 +654,6 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return flags;
         }
 
-        private static short ClampToShort(int value)
-        {
-            if (value < short.MinValue) return short.MinValue;
-            if (value > short.MaxValue) return short.MaxValue;
-            return (short)value;
-        }
-
         private static int GetInt(int[] values, int index, int fallback = 0)
         {
             return values != null && index >= 0 && index < values.Length ? values[index] : fallback;
@@ -396,14 +664,32 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return values != null && index >= 0 && index < values.Length ? values[index] : fallback;
         }
 
-        private static int GetShort(short[] values, int index, int fallback = 0)
+        private static byte GetByte(byte[] values, int index, byte fallback = 0)
         {
             return values != null && index >= 0 && index < values.Length ? values[index] : fallback;
         }
 
-        private static byte GetByte(byte[] values, int index, byte fallback = 0)
+        private static int[] PackPairValues(float[] left, float[] right)
         {
-            return values != null && index >= 0 && index < values.Length ? values[index] : fallback;
+            var count = Math.Max(left?.Length ?? 0, right?.Length ?? 0);
+            if (count == 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            var values = new int[count * 2];
+            for (int i = 0; i < count; i++)
+            {
+                values[(i * 2)] = Quantize(GetFloat(left, i));
+                values[(i * 2) + 1] = Quantize(GetFloat(right, i));
+            }
+
+            return values;
+        }
+
+        private static float GetPackedPairValue(int[] values, int index, int slot)
+        {
+            return GetInt(values, (index * 2) + slot) / 10000f;
         }
 
         private static int Quantize(float value)

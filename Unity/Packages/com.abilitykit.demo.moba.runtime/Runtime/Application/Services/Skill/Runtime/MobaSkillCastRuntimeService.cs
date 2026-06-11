@@ -160,11 +160,12 @@ namespace AbilityKit.Demo.Moba.Services
             if (!_retains.TryGetValue(retainHandle.RetainId, out var stored)) return false;
             if (!stored.Equals(retainHandle)) return false;
 
+            _retains.Remove(retainHandle.RetainId);
+
             var runtimeHandle = retainHandle.Runtime;
             var child = retainHandle.Child;
-            if (!TryGet(in runtimeHandle, out var runtime)) return false;
+            if (!TryGet(in runtimeHandle, out var runtime)) return true;
 
-            _retains.Remove(retainHandle.RetainId);
             var released = runtime.ReleaseChild(in child);
             if (released)
             {

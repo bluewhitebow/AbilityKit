@@ -290,7 +290,17 @@ namespace AbilityKit.Demo.Moba.Services
 
             var lineageInput = MobaEffectLineageInputResolver.Resolve(payload);
             var executionSnapshot = CreateExecutionSnapshot(payload, in lineageInput, triggerId, configId);
-            return MobaCombatExecutionContextFactory.Create(payload, in lineageInput, in executionSnapshot, executionSnapshot.Frame != 0 ? executionSnapshot.Frame : CurrentBudgetFrame);
+            var frame = executionSnapshot.Frame != 0 ? executionSnapshot.Frame : CurrentBudgetFrame;
+            try
+            {
+                return MobaCombatExecutionContextFactory.Create(payload, in lineageInput, in executionSnapshot, frame);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException(
+                    $"[MobaEffectExecutionService] Failed to create combat execution context. triggerId={triggerId}, configId={configId}, payloadType={payload.GetType().FullName}, frame={frame}, lineageSourceActorId={lineageInput.SourceActorId}, lineageTargetActorId={lineageInput.TargetActorId}, lineageParentContextId={lineageInput.ParentContextId}, lineageRootContextId={lineageInput.RootContextId}, snapshotSourceActorId={executionSnapshot.SourceActorId}, snapshotTargetActorId={executionSnapshot.TargetActorId}, snapshotSourceContextId={executionSnapshot.SourceContextId}, snapshotRootContextId={executionSnapshot.RootContextId}.",
+                    ex);
+            }
         }
 
         private bool TryEnterExecutionBudget(int triggerId, in MobaCombatExecutionContext executionContext, out MobaTriggerExecutionBudgetToken token, out MobaTriggerConditionContext conditionContext)

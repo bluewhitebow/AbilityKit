@@ -9,14 +9,13 @@ namespace AbilityKit.Orleans.Grains.Battle;
 /// 状态同步 Observer Grain
 /// 桥接 BattleLogicHostGrain 和 Gateway，负责向客户端推送状态快照
 /// </summary>
-public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain, IStateSyncObserver
+public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain
 {
     private readonly ILogger<StateSyncObserverGrain> _logger;
 
+    private readonly StateSyncObserverSubscriptionState _subscriptionState = new();
     private string _accountId = string.Empty;
     private string _roomId = string.Empty;
-    private bool _subscribed;
-    private string _currentBattleKey = string.Empty;
 
     public StateSyncObserverGrain(ILogger<StateSyncObserverGrain> logger)
     {
@@ -44,16 +43,26 @@ public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain, ISt
     /// </summary>
     public async Task SubscribeAsync(string battleGrainKey)
     {
-        if (_subscribed)
+        var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(battleGrainKey);
+        var decision = _subscriptionState.DecideSubscribe(battleGrainKey);
+        if (decision.Action == StateSyncObserverSubscriptionAction.RefreshFullSnapshot)
         {
-            _logger.LogWarning("[StateSyncObserver] Already subscribed, ignoring duplicate subscription");
+            _logger.LogInformation(
+                "[StateSyncObserver] Duplicate subscription refreshed full snapshot. Battle: {BattleKey}, Account: {AccountId}",
+                battleGrainKey,
+                _accountId);
+            await battleGrain.RequestFullSnapshotAsync(this);
             return;
         }
 
-        var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(battleGrainKey);
+        if (decision.Action == StateSyncObserverSubscriptionAction.SwitchBattle)
+        {
+            await UnsubscribeBattleAsync(decision.PreviousBattleKey, "switch battle subscription", logFailureAsWarning: false);
+            battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(battleGrainKey);
+        }
+
         await battleGrain.SubscribeAsync(this);
-        _subscribed = true;
-        _currentBattleKey = battleGrainKey;
+        _subscriptionState.MarkSubscribed(battleGrainKey);
 
         _logger.LogInformation(
             "[StateSyncObserver] Subscribed to battle: {BattleKey}, Account: {AccountId}",
@@ -63,29 +72,15 @@ public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain, ISt
     /// <summary>
     /// 取消订阅
     /// </summary>
-    public async Task UnsubscribeAsync(string battleGrainKey)
+    public Task UnsubscribeAsync(string battleGrainKey)
     {
-        if (!_subscribed)
-            return;
-
-        var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(battleGrainKey);
-        await battleGrain.UnsubscribeAsync(this);
-        _subscribed = false;
-        _currentBattleKey = string.Empty;
-
-        _logger.LogInformation("[StateSyncObserver] Unsubscribed from battle: {BattleKey}", battleGrainKey);
+        return UnsubscribeBattleAsync(battleGrainKey, "explicit unsubscribe", logFailureAsWarning: true);
     }
 
     /// <summary>
-    /// 实现 IStateSyncObserver.OnSnapshotPushed
-    /// 将快照推送到客户端
+    /// 接收 BattleLogicHostGrain 的状态快照推送。
     /// </summary>
-    async void IStateSyncObserver.OnSnapshotPushed(StateSyncPush push)
-    {
-        await OnSnapshotPushedAsync(push);
-    }
-
-    private async Task OnSnapshotPushedAsync(StateSyncPush push)
+    public async Task OnSnapshotPushedAsync(StateSyncPush push)
     {
         try
         {
@@ -98,9 +93,10 @@ public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain, ISt
 
             if (!success)
             {
-                _logger.LogWarning(
-                    "[StateSyncObserver] Failed to push snapshot to account: {AccountId}, Frame: {Frame}",
+                _logger.LogDebug(
+                    "[StateSyncObserver] Snapshot push target is offline. Account: {AccountId}, Frame: {Frame}",
                     _accountId, push.Frame);
+                await UnsubscribeCurrentBattleAsync("gateway push target offline");
             }
         }
         catch (Exception ex)
@@ -149,13 +145,44 @@ public sealed class StateSyncObserverGrain : Grain, IStateSyncObserverGrain, ISt
         };
     }
 
+    private Task UnsubscribeCurrentBattleAsync(string reason)
+    {
+        return UnsubscribeBattleAsync(_subscriptionState.CurrentBattleKey, reason, logFailureAsWarning: false);
+    }
+
+    private async Task UnsubscribeBattleAsync(string battleGrainKey, string reason, bool logFailureAsWarning)
+    {
+        if (!_subscriptionState.IsSubscribed || string.IsNullOrWhiteSpace(battleGrainKey))
+        {
+            return;
+        }
+
+        try
+        {
+            var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(battleGrainKey);
+            await battleGrain.UnsubscribeAsync(this);
+            _logger.LogInformation(
+                "[StateSyncObserver] Unsubscribed from battle: {BattleKey}, Reason: {Reason}",
+                battleGrainKey,
+                reason);
+        }
+        catch (Exception ex) when (!logFailureAsWarning)
+        {
+            _logger.LogDebug(
+                ex,
+                "[StateSyncObserver] Ignored unsubscribe failure. BattleKey: {BattleKey}, Reason: {Reason}",
+                battleGrainKey,
+                reason);
+        }
+        finally
+        {
+            _subscriptionState.Clear();
+        }
+    }
+
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
-        if (_subscribed && !string.IsNullOrEmpty(_currentBattleKey))
-        {
-            var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(_currentBattleKey);
-            await battleGrain.UnsubscribeAsync(this);
-        }
+        await UnsubscribeCurrentBattleAsync($"deactivate: {reason}");
 
         _logger.LogInformation("[StateSyncObserver] Deactivating: {Reason}", reason);
         await base.OnDeactivateAsync(reason, cancellationToken);

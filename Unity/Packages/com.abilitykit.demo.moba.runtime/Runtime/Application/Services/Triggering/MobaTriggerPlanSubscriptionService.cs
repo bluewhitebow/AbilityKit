@@ -67,11 +67,12 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
             if (triggerIds == null || triggerIds.Count == 0) return;
             if (_db == null || _runner == null) return;
 
-            if (!_regsByOwnerKey.TryGetValue(ownerKey, out var regs) || regs == null)
+            if (_regsByOwnerKey.ContainsKey(ownerKey))
             {
-                regs = new List<IDisposable>(triggerIds.Count);
-                _regsByOwnerKey[ownerKey] = regs;
+                Stop(ownerKey);
             }
+
+            var regs = new List<IDisposable>(triggerIds.Count);
 
             for (int i = 0; i < triggerIds.Count; i++)
             {
@@ -103,6 +104,11 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
                 {
                     Log.Exception(ex, $"[MobaTriggerPlanSubscriptionService] register plan failed. triggerId={triggerId}");
                 }
+            }
+
+            if (regs.Count > 0)
+            {
+                _regsByOwnerKey[ownerKey] = regs;
             }
         }
 

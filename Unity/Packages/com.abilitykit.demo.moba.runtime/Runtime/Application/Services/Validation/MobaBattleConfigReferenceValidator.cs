@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Share.Config;
+using AbilityKit.Triggering.Runtime.Config.Plans;
 using AbilityKit.Triggering.Runtime.Plan.Json;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -76,7 +77,7 @@ namespace AbilityKit.Demo.Moba.Services
             foreach (var passive in All<PassiveSkillMO>(config))
             {
                 if (passive == null) continue;
-                ValidateTriggerRefs(triggers, passive.TriggerIds, report, $"passiveSkill.{passive.Id}.triggerIds", passive.Id);
+                ValidateTriggerRefs(triggers, passive.TriggerIds, report, $"passiveSkill.{passive.Id}.triggerIds", passive.Id, TriggerPlanScope.OwnerBound);
             }
         }
 
@@ -105,7 +106,7 @@ namespace AbilityKit.Demo.Moba.Services
                 ValidateTriggerRefs(triggers, buff.OnAddEffects, report, path + ".onAddEffects", buff.Id);
                 ValidateTriggerRefs(triggers, buff.OnRemoveEffects, report, path + ".onRemoveEffects", buff.Id);
                 ValidateTriggerRefs(triggers, buff.OnIntervalEffects, report, path + ".onIntervalEffects", buff.Id);
-                ValidateTriggerRefs(triggers, buff.TriggerIds, report, path + ".triggerIds", buff.Id);
+                ValidateTriggerRefs(triggers, buff.TriggerIds, report, path + ".triggerIds", buff.Id, TriggerPlanScope.OwnerBound);
                 OptionalRef(Ref<ContinuousTagTemplateMO>(config.TryGetContinuousTagTemplate), buff.ContinuousTagTemplateId, report, path + ".continuousTagTemplateId", "continuous tag template", buff.Id);
 
                 ValidateBuffModifiers(config, buff, report);
@@ -276,7 +277,7 @@ namespace AbilityKit.Demo.Moba.Services
             foreach (var gameplay in All<GameplayMO>(config))
             {
                 if (gameplay == null) continue;
-                ValidateTriggerRefs(triggers, gameplay.TriggerIds, report, $"gameplay.{gameplay.Id}.triggerIds", gameplay.Id);
+                ValidateTriggerRefs(triggers, gameplay.TriggerIds, report, $"gameplay.{gameplay.Id}.triggerIds", gameplay.Id, TriggerPlanScope.Global);
 
                 if (gameplay.DefaultDurationMs < 0)
                 {
@@ -409,16 +410,16 @@ namespace AbilityKit.Demo.Moba.Services
             }
         }
 
-        private static void ValidateTriggerRefs(TriggerPlanJsonDatabase triggers, IReadOnlyList<int> ids, MobaRuntimeValidationReport report, string path, int businessId)
+        private static void ValidateTriggerRefs(TriggerPlanJsonDatabase triggers, IReadOnlyList<int> ids, MobaRuntimeValidationReport report, string path, int businessId, TriggerPlanScope? expectedScope = null)
         {
             if (ids == null || ids.Count == 0) return;
             for (int i = 0; i < ids.Count; i++)
             {
-                RequiredTriggerRef(triggers, ids[i], report, $"{path}[{i}]", businessId);
+                RequiredTriggerRef(triggers, ids[i], report, $"{path}[{i}]", businessId, expectedScope);
             }
         }
 
-        private static void RequiredTriggerRef(TriggerPlanJsonDatabase triggers, int id, MobaRuntimeValidationReport report, string path, int businessId)
+        private static void RequiredTriggerRef(TriggerPlanJsonDatabase triggers, int id, MobaRuntimeValidationReport report, string path, int businessId, TriggerPlanScope? expectedScope = null)
         {
             if (id <= 0)
             {
@@ -432,9 +433,15 @@ namespace AbilityKit.Demo.Moba.Services
                 return;
             }
 
-            if (!triggers.TryGetRecordByTriggerId(id, out _))
+            if (!triggers.TryGetRecordByTriggerId(id, out var record))
             {
                 report.Error(Source, path, $"trigger id '{id}' does not exist.", businessId.ToString());
+                return;
+            }
+
+            if (expectedScope.HasValue && record.Scope != expectedScope.Value)
+            {
+                report.Error(Source, path, $"trigger id '{id}' scope is {record.Scope}; expected {expectedScope.Value}.", businessId.ToString());
             }
         }
 

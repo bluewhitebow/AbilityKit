@@ -6,9 +6,11 @@ using AbilityKit.Ability.Config.Source;
 using AbilityKit.Ability.Editor.Utilities;
 using AbilityKit.Ability.Triggering.Runtime;
 using AbilityKit.Triggering.Eventing;
+using AbilityKit.Triggering.Blackboard;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime.Plan;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace AbilityKit.Ability.Editor.Utilities
@@ -83,6 +85,8 @@ namespace AbilityKit.Ability.Editor.Utilities
 
             // 1. 构建名称→ID 映射表
             BuildNameToIdMaps(source, result);
+            var conditionCatalog = BuildConditionCatalog(source.ConditionGroups);
+            var actionCatalog = BuildActionCatalog(source.ActionGroups);
 
             // 2. 转换触发器
             if (source.Triggers != null)
@@ -90,7 +94,7 @@ namespace AbilityKit.Ability.Editor.Utilities
                 for (int i = 0; i < source.Triggers.Count; i++)
                 {
                     var trigger = source.Triggers[i];
-                    ConvertTrigger(trigger, planDb, result);
+                    ConvertTrigger(trigger, planDb, result, conditionCatalog, actionCatalog);
                 }
             }
 
@@ -148,7 +152,12 @@ namespace AbilityKit.Ability.Editor.Utilities
         /// <summary>
         /// 转换单个触发器
         /// </summary>
-        private static void ConvertTrigger(SourceTriggerConfig trigger, TriggerPlanDatabaseDto planDb, ConvertResult result)
+        private static void ConvertTrigger(
+            SourceTriggerConfig trigger,
+            TriggerPlanDatabaseDto planDb,
+            ConvertResult result,
+            Dictionary<string, SourceConditionGroupConfig> conditionCatalog,
+            Dictionary<string, SourceActionGroupConfig> actionCatalog)
         {
             if (trigger == null) return;
 
@@ -164,7 +173,10 @@ namespace AbilityKit.Ability.Editor.Utilities
                 return;
             }
 
-            if (trigger.Actions == null || trigger.Actions.Count == 0)
+            var resolvedConditions = ResolveConditionList(trigger.Conditions, trigger.ConditionRefs, conditionCatalog, result, $"trigger:{trigger.Id}", new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            var resolvedActions = ResolveActionList(trigger.Actions, trigger.ActionRefs, actionCatalog, result, $"trigger:{trigger.Id}", new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+            if (resolvedActions.Count == 0)
             {
                 result.AddWarning($"Trigger {trigger.Id} '{trigger.Name}' has no actions, skipped");
                 return;
@@ -176,7 +188,8 @@ namespace AbilityKit.Ability.Editor.Utilities
                 EventName = trigger.Event ?? string.Empty,
                 AllowExternal = trigger.AllowExternal,
                 Phase = GetPhaseValue(trigger.Phase),
-                Priority = trigger.Priority
+                Priority = trigger.Priority,
+                Template = ConvertTemplate(trigger.Template, planDb.Strings, result)
             };
 
             // 解析 EventId
@@ -186,10 +199,10 @@ namespace AbilityKit.Ability.Editor.Utilities
             }
 
             // 转换条件
-            dto.Predicate = ConvertCondition(trigger.Conditions, result);
+            dto.Predicate = ConvertCondition(resolvedConditions, result, conditionCatalog);
 
             // 转换动作
-            dto.Actions = ConvertActions(trigger.Actions, planDb.Strings, result);
+            dto.Actions = ConvertActions(resolvedActions, planDb.Strings, result, actionCatalog);
 
             if (dto.Actions == null || dto.Actions.Count == 0)
             {
@@ -203,7 +216,10 @@ namespace AbilityKit.Ability.Editor.Utilities
         /// <summary>
         /// 转换条件列表
         /// </summary>
-        private static PredicatePlanDto ConvertCondition(List<SourceConditionConfig> conditions, ConvertResult result)
+        private static PredicatePlanDto ConvertCondition(
+            List<SourceConditionConfig> conditions,
+            ConvertResult result,
+            Dictionary<string, SourceConditionGroupConfig> conditionCatalog)
         {
             var predicate = new PredicatePlanDto
             {
@@ -220,13 +236,13 @@ namespace AbilityKit.Ability.Editor.Utilities
             if (conditions.Count == 1)
             {
                 var singleCondition = conditions[0];
-                ConvertConditionToExpr(singleCondition, predicate.Nodes, result);
+                ConvertConditionToExpr(singleCondition, predicate.Nodes, result, conditionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             }
             else
             {
                 // 多个条件用 AND 连接
                 var allCondition = new SourceConditionConfig { Type = "all", Items = conditions };
-                ConvertConditionToExpr(allCondition, predicate.Nodes, result);
+                ConvertConditionToExpr(allCondition, predicate.Nodes, result, conditionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             }
 
             return predicate;
@@ -235,59 +251,70 @@ namespace AbilityKit.Ability.Editor.Utilities
         /// <summary>
         /// 转换条件为表达式节点
         /// </summary>
-        private static void ConvertConditionToExpr(SourceConditionConfig condition, List<BoolExprNodeDto> nodes, ConvertResult result)
+        private static void ConvertConditionToExpr(
+            SourceConditionConfig condition,
+            List<BoolExprNodeDto> nodes,
+            ConvertResult result,
+            Dictionary<string, SourceConditionGroupConfig> conditionCatalog,
+            HashSet<string> resolving)
         {
             if (condition == null) return;
 
-            // 复合条件处理
-            if (condition.Type == "all" || condition.Type == "any")
+            if (!string.IsNullOrEmpty(condition.Ref))
             {
-                if (condition.Items != null)
-                {
-                    foreach (var item in condition.Items)
-                    {
-                        ConvertConditionToExpr(item, nodes, result);
-                    }
-                }
-                // 注意：这里简单地按顺序展开，实际运行时通过逻辑运算符组合
+                var resolved = ResolveConditionRef(condition.Ref, conditionCatalog, result, "condition", resolving);
+                ConvertConditionListToExpr(resolved, SourceConditionPlanMapping.BoolKindAnd, nodes, result, conditionCatalog, resolving);
                 return;
             }
 
-            if (condition.Type == "not")
+            var type = condition.Type ?? string.Empty;
+            if (string.Equals(type, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(type, "and", StringComparison.OrdinalIgnoreCase))
             {
+                var resolvedItems = ResolveConditionList(condition.Items, condition.ConditionRefs, conditionCatalog, result, condition.Type, resolving);
+                ConvertConditionListToExpr(resolvedItems, SourceConditionPlanMapping.BoolKindAnd, nodes, result, conditionCatalog, resolving);
+                return;
+            }
+
+            if (string.Equals(type, "any", StringComparison.OrdinalIgnoreCase) || string.Equals(type, "or", StringComparison.OrdinalIgnoreCase))
+            {
+                var resolvedItems = ResolveConditionList(condition.Items, condition.ConditionRefs, conditionCatalog, result, condition.Type, resolving);
+                ConvertConditionListToExpr(resolvedItems, SourceConditionPlanMapping.BoolKindOr, nodes, result, conditionCatalog, resolving);
+                return;
+            }
+
+            if (string.Equals(type, "not", StringComparison.OrdinalIgnoreCase))
+            {
+                var inlineItems = new List<SourceConditionConfig>();
                 if (condition.Item != null)
                 {
-                    // NOT 条件的处理需要在运行时处理，这里先展开子条件
-                    ConvertConditionToExpr(condition.Item, nodes, result);
+                    inlineItems.Add(condition.Item);
                 }
+
+                if (condition.Items != null)
+                {
+                    inlineItems.AddRange(condition.Items);
+                }
+
+                var resolvedItems = ResolveConditionList(inlineItems, condition.ConditionRefs, conditionCatalog, result, condition.Type, resolving);
+                ConvertConditionListToExpr(resolvedItems, SourceConditionPlanMapping.BoolKindAnd, nodes, result, conditionCatalog, resolving);
+                nodes.Add(new BoolExprNodeDto { Kind = SourceConditionPlanMapping.BoolKindNot });
                 return;
             }
 
-            // 原子条件转换为 BoolExprNode
-            var node = new BoolExprNodeDto { Kind = "compare" };
-
-            if (condition.Type == "arg_eq")
-            {
-                node.CompareOp = "==";
-            }
-            else if (condition.Type == "arg_gt")
-            {
-                node.CompareOp = ">";
-            }
-            else if (condition.Type == "num_var_gt")
-            {
-                node.CompareOp = ">";
-            }
-            else
+            if (!SourceConditionPlanMapping.TryGetCompareOpForConditionType(type, out var compareOp))
             {
                 result.AddWarning($"Unknown condition type: {condition.Type}, skipped");
                 return;
             }
 
-            // 解析参数
+            var node = new BoolExprNodeDto
+            {
+                Kind = SourceConditionPlanMapping.BoolKindCompareNumeric,
+                CompareOp = compareOp
+            };
+
             if (condition.Args != null)
             {
-                // Left side - 参数引用
                 if (condition.Args.TryGetValue("arg_name", out var argNameObj) ||
                     condition.Args.TryGetValue("var_name", out argNameObj))
                 {
@@ -295,18 +322,43 @@ namespace AbilityKit.Ability.Editor.Utilities
                     node.Left = CreatePayloadRef(argName);
                 }
 
-                // Right side - 比较值
                 if (condition.Args.TryGetValue("value", out var valueObj))
                 {
-                    node.Right = CreateConstRef(valueObj);
+                    node.Right = ConvertValue("value", valueObj, null, result);
                 }
                 else if (condition.Args.TryGetValue("threshold", out valueObj))
                 {
-                    node.Right = CreateConstRef(valueObj);
+                    node.Right = ConvertValue("threshold", valueObj, null, result);
                 }
             }
 
+            node.Left = node.Left ?? CreatePayloadRef("arg1");
+            node.Right = node.Right ?? CreateConstRef(0);
             nodes.Add(node);
+        }
+
+        private static void ConvertConditionListToExpr(
+            List<SourceConditionConfig> conditions,
+            string logicalOp,
+            List<BoolExprNodeDto> nodes,
+            ConvertResult result,
+            Dictionary<string, SourceConditionGroupConfig> conditionCatalog,
+            HashSet<string> resolving)
+        {
+            if (conditions == null || conditions.Count == 0)
+            {
+                nodes.Add(new BoolExprNodeDto { Kind = SourceConditionPlanMapping.BoolKindConst, ConstValue = true });
+                return;
+            }
+
+            for (var i = 0; i < conditions.Count; i++)
+            {
+                ConvertConditionToExpr(conditions[i], nodes, result, conditionCatalog, resolving);
+                if (i > 0)
+                {
+                    nodes.Add(new BoolExprNodeDto { Kind = logicalOp });
+                }
+            }
         }
 
         /// <summary>
@@ -315,7 +367,8 @@ namespace AbilityKit.Ability.Editor.Utilities
         private static List<ActionCallPlanDto> ConvertActions(
             List<SourceActionConfig> actions,
             Dictionary<int, string> stringTable,
-            ConvertResult result)
+            ConvertResult result,
+            Dictionary<string, SourceActionGroupConfig> actionCatalog)
         {
             var plans = new List<ActionCallPlanDto>();
 
@@ -323,7 +376,14 @@ namespace AbilityKit.Ability.Editor.Utilities
 
             foreach (var action in actions)
             {
-                var plan = ConvertAction(action, stringTable, result);
+                if (action != null && string.Equals(action.Type, "seq", StringComparison.OrdinalIgnoreCase))
+                {
+                    var resolvedItems = ResolveActionList(action.Items, action.ActionRefs, actionCatalog, result, action.Type, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    plans.AddRange(ConvertActions(resolvedItems, stringTable, result, actionCatalog));
+                    continue;
+                }
+
+                var plan = ConvertAction(action, stringTable, result, actionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
                 if (plan != null)
                 {
                     plans.Add(plan);
@@ -339,9 +399,23 @@ namespace AbilityKit.Ability.Editor.Utilities
         private static ActionCallPlanDto ConvertAction(
             SourceActionConfig action,
             Dictionary<int, string> stringTable,
-            ConvertResult result)
+            ConvertResult result,
+            Dictionary<string, SourceActionGroupConfig> actionCatalog,
+            HashSet<string> resolving)
         {
             if (action == null) return null;
+
+            if (!string.IsNullOrEmpty(action.Ref))
+            {
+                var resolved = ResolveActionRef(action.Ref, actionCatalog, result, "action", resolving);
+                if (resolved.Count != 1)
+                {
+                    result.AddWarning($"Action reference '{action.Ref}' must resolve to exactly one action in this context");
+                    return null;
+                }
+
+                return ConvertAction(resolved[0], stringTable, result, actionCatalog, resolving);
+            }
 
             var plan = new ActionCallPlanDto();
 
@@ -355,16 +429,9 @@ namespace AbilityKit.Ability.Editor.Utilities
 
             plan.ActionId = actionId.Value;
 
-            // 处理 seq 复合动作 - 展平
-            if (action.Type == "seq" && action.Items != null && action.Items.Count > 0)
+            // 处理 seq 复合动作 - ConvertActions 会在列表层展平。
+            if (action.Type == "seq")
             {
-                // seq 本身不需要生成 plan，子动作会分别生成
-                var subPlans = ConvertActions(action.Items, stringTable, result);
-                if (subPlans.Count > 0)
-                {
-                    // 返回第一个，子动作会被递归处理
-                    return subPlans[0];
-                }
                 return null;
             }
 
@@ -389,6 +456,245 @@ namespace AbilityKit.Ability.Editor.Utilities
             MapActionParams(action.Type, action.Args, plan, stringTable, result);
 
             return plan;
+        }
+
+        private static TriggerTemplateBindingDto ConvertTemplate(
+            SourceTriggerTemplateConfig template,
+            Dictionary<int, string> stringTable,
+            ConvertResult result)
+        {
+            if (template == null)
+            {
+                return null;
+            }
+
+            var dto = new TriggerTemplateBindingDto
+            {
+                TemplateId = template.Id,
+                Bindings = new Dictionary<string, NumericValueRefDto>(StringComparer.OrdinalIgnoreCase)
+            };
+
+            if (template.Bindings != null)
+            {
+                foreach (var kvp in template.Bindings)
+                {
+                    if (string.IsNullOrEmpty(kvp.Key))
+                    {
+                        result.AddWarning("Template binding with empty key skipped");
+                        continue;
+                    }
+
+                    dto.Bindings[kvp.Key] = ConvertValue(kvp.Key, kvp.Value, stringTable, result);
+                }
+            }
+
+            return string.IsNullOrEmpty(dto.TemplateId) && dto.Bindings.Count == 0 ? null : dto;
+        }
+
+        private static Dictionary<string, SourceConditionGroupConfig> BuildConditionCatalog(Dictionary<string, SourceConditionGroupConfig> groups)
+        {
+            var catalog = new Dictionary<string, SourceConditionGroupConfig>(StringComparer.OrdinalIgnoreCase);
+            if (groups == null) return catalog;
+
+            foreach (var kvp in groups)
+            {
+                if (!string.IsNullOrEmpty(kvp.Key) && kvp.Value != null)
+                {
+                    catalog[kvp.Key] = kvp.Value;
+                }
+
+                if (!string.IsNullOrEmpty(kvp.Value?.Id))
+                {
+                    catalog[kvp.Value.Id] = kvp.Value;
+                }
+            }
+
+            return catalog;
+        }
+
+        private static Dictionary<string, SourceActionGroupConfig> BuildActionCatalog(Dictionary<string, SourceActionGroupConfig> groups)
+        {
+            var catalog = new Dictionary<string, SourceActionGroupConfig>(StringComparer.OrdinalIgnoreCase);
+            if (groups == null) return catalog;
+
+            foreach (var kvp in groups)
+            {
+                if (!string.IsNullOrEmpty(kvp.Key) && kvp.Value != null)
+                {
+                    catalog[kvp.Key] = kvp.Value;
+                }
+
+                if (!string.IsNullOrEmpty(kvp.Value?.Id))
+                {
+                    catalog[kvp.Value.Id] = kvp.Value;
+                }
+            }
+
+            return catalog;
+        }
+
+        private static List<SourceConditionConfig> ResolveConditionList(
+            List<SourceConditionConfig> inlineConditions,
+            List<string> conditionRefs,
+            Dictionary<string, SourceConditionGroupConfig> catalog,
+            ConvertResult result,
+            string sourcePath,
+            HashSet<string> resolving)
+        {
+            var resolved = new List<SourceConditionConfig>();
+            if (conditionRefs != null)
+            {
+                foreach (var refId in conditionRefs)
+                {
+                    resolved.AddRange(ResolveConditionRef(refId, catalog, result, sourcePath, resolving));
+                }
+            }
+
+            if (inlineConditions != null)
+            {
+                foreach (var condition in inlineConditions)
+                {
+                    if (condition == null) continue;
+                    if (!string.IsNullOrEmpty(condition.Ref))
+                    {
+                        resolved.AddRange(ResolveConditionRef(condition.Ref, catalog, result, sourcePath, resolving));
+                    }
+                    else
+                    {
+                        resolved.Add(condition);
+                    }
+                }
+            }
+
+            return resolved;
+        }
+
+        private static List<SourceConditionConfig> ResolveConditionRef(
+            string refId,
+            Dictionary<string, SourceConditionGroupConfig> catalog,
+            ConvertResult result,
+            string sourcePath,
+            HashSet<string> resolving)
+        {
+            var resolved = new List<SourceConditionConfig>();
+            if (string.IsNullOrEmpty(refId)) return resolved;
+
+            if (catalog == null || !catalog.TryGetValue(refId, out var group) || group == null)
+            {
+                result.AddError($"Condition group reference not found: {refId} at {sourcePath}");
+                return resolved;
+            }
+
+            if (!resolving.Add(refId))
+            {
+                result.AddError($"Cyclic condition group reference detected: {refId} at {sourcePath}");
+                return resolved;
+            }
+
+            try
+            {
+                if (group.Conditions == null) return resolved;
+                foreach (var condition in group.Conditions)
+                {
+                    if (condition == null) continue;
+                    if (!string.IsNullOrEmpty(condition.Ref))
+                    {
+                        resolved.AddRange(ResolveConditionRef(condition.Ref, catalog, result, refId, resolving));
+                    }
+                    else
+                    {
+                        resolved.Add(condition);
+                    }
+                }
+            }
+            finally
+            {
+                resolving.Remove(refId);
+            }
+
+            return resolved;
+        }
+
+        private static List<SourceActionConfig> ResolveActionList(
+            List<SourceActionConfig> inlineActions,
+            List<string> actionRefs,
+            Dictionary<string, SourceActionGroupConfig> catalog,
+            ConvertResult result,
+            string sourcePath,
+            HashSet<string> resolving)
+        {
+            var resolved = new List<SourceActionConfig>();
+            if (actionRefs != null)
+            {
+                foreach (var refId in actionRefs)
+                {
+                    resolved.AddRange(ResolveActionRef(refId, catalog, result, sourcePath, resolving));
+                }
+            }
+
+            if (inlineActions != null)
+            {
+                foreach (var action in inlineActions)
+                {
+                    if (action == null) continue;
+                    if (!string.IsNullOrEmpty(action.Ref))
+                    {
+                        resolved.AddRange(ResolveActionRef(action.Ref, catalog, result, sourcePath, resolving));
+                    }
+                    else
+                    {
+                        resolved.Add(action);
+                    }
+                }
+            }
+
+            return resolved;
+        }
+
+        private static List<SourceActionConfig> ResolveActionRef(
+            string refId,
+            Dictionary<string, SourceActionGroupConfig> catalog,
+            ConvertResult result,
+            string sourcePath,
+            HashSet<string> resolving)
+        {
+            var resolved = new List<SourceActionConfig>();
+            if (string.IsNullOrEmpty(refId)) return resolved;
+
+            if (catalog == null || !catalog.TryGetValue(refId, out var group) || group == null)
+            {
+                result.AddError($"Action group reference not found: {refId} at {sourcePath}");
+                return resolved;
+            }
+
+            if (!resolving.Add(refId))
+            {
+                result.AddError($"Cyclic action group reference detected: {refId} at {sourcePath}");
+                return resolved;
+            }
+
+            try
+            {
+                if (group.Actions == null) return resolved;
+                foreach (var action in group.Actions)
+                {
+                    if (action == null) continue;
+                    if (!string.IsNullOrEmpty(action.Ref))
+                    {
+                        resolved.AddRange(ResolveActionRef(action.Ref, catalog, result, refId, resolving));
+                    }
+                    else
+                    {
+                        resolved.Add(action);
+                    }
+                }
+            }
+            finally
+            {
+                resolving.Remove(refId);
+            }
+
+            return resolved;
         }
 
         /// <summary>
@@ -464,9 +770,7 @@ namespace AbilityKit.Ability.Editor.Utilities
         {
             if (args.TryGetValue(sourceKey, out var obj))
             {
-                var value = obj?.ToString() ?? "";
-                var ref_ = CreateEntityRef(value);
-                plan.Args[targetKey] = ref_;
+                plan.Args[targetKey] = ConvertValue(sourceKey, obj, null, null);
             }
         }
 
@@ -477,8 +781,7 @@ namespace AbilityKit.Ability.Editor.Utilities
         {
             if (args.TryGetValue(key, out var obj) && obj != null)
             {
-                var value = System.Convert.ToDouble(obj);
-                plan.Args[key] = new NumericValueRefDto { Kind = "Const", ConstValue = value };
+                plan.Args[key] = ConvertValue(key, obj, null, null);
             }
         }
 
@@ -497,8 +800,7 @@ namespace AbilityKit.Ability.Editor.Utilities
         {
             if (args.TryGetValue(sourceKey, out var obj))
             {
-                var value = obj?.ToString() ?? "";
-                plan.Args[targetKey] = new NumericValueRefDto { Kind = "Expr", ExprText = value };
+                plan.Args[targetKey] = ConvertValue(sourceKey, obj, null, null);
             }
         }
 
@@ -510,6 +812,11 @@ namespace AbilityKit.Ability.Editor.Utilities
             if (value == null)
             {
                 return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            }
+
+            if (value is JToken token)
+            {
+                return ConvertJTokenValue(token, result);
             }
 
             // 字符串可能是实体引用或表达式
@@ -544,6 +851,76 @@ namespace AbilityKit.Ability.Editor.Utilities
             return ConvertStringValue(value.ToString());
         }
 
+        private static NumericValueRefDto ConvertJTokenValue(JToken token, ConvertResult result)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            }
+
+            if (token.Type == JTokenType.String)
+            {
+                return ConvertStringValue(token.Value<string>());
+            }
+
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                return new NumericValueRefDto { Kind = "Const", ConstValue = token.Value<double>() };
+            }
+
+            if (token.Type == JTokenType.Boolean)
+            {
+                return new NumericValueRefDto { Kind = "Const", ConstValue = token.Value<bool>() ? 1 : 0 };
+            }
+
+            if (token is JObject obj)
+            {
+                return ConvertObjectValue(obj, result);
+            }
+
+            return ConvertStringValue(token.ToString(Formatting.None));
+        }
+
+        private static NumericValueRefDto ConvertObjectValue(JObject obj, ConvertResult result)
+        {
+            if (obj == null)
+            {
+                return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            }
+
+            var kind = ReadString(obj, "Kind") ?? ReadString(obj, "kind");
+            if (string.IsNullOrEmpty(kind))
+            {
+                result?.AddWarning("Value object without Kind was converted to Const(0)");
+                return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            }
+
+            var dto = new NumericValueRefDto { Kind = kind };
+            dto.ConstValue = ReadDouble(obj, "ConstValue", ReadDouble(obj, "constValue", 0));
+            dto.BoardId = ReadInt(obj, "BoardId", ReadInt(obj, "boardId", 0));
+            dto.KeyId = ReadInt(obj, "KeyId", ReadInt(obj, "keyId", 0));
+            dto.FieldId = ReadInt(obj, "FieldId", ReadInt(obj, "fieldId", 0));
+            dto.DomainId = ReadString(obj, "DomainId") ?? ReadString(obj, "domainId");
+            dto.Key = ReadString(obj, "Key") ?? ReadString(obj, "key");
+            dto.ExprText = ReadString(obj, "ExprText") ?? ReadString(obj, "exprText");
+            return dto;
+        }
+
+        private static string ReadString(JObject obj, string key)
+        {
+            return obj.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var value) ? value.Value<string>() : null;
+        }
+
+        private static int ReadInt(JObject obj, string key, int defaultValue)
+        {
+            return obj.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var value) && value.Type != JTokenType.Null ? value.Value<int>() : defaultValue;
+        }
+
+        private static double ReadDouble(JObject obj, string key, double defaultValue)
+        {
+            return obj.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var value) && value.Type != JTokenType.Null ? value.Value<double>() : defaultValue;
+        }
+
         /// <summary>
         /// 转换字符串值为 NumericValueRefDto
         /// </summary>
@@ -552,6 +929,18 @@ namespace AbilityKit.Ability.Editor.Utilities
             if (string.IsNullOrEmpty(value))
             {
                 return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            }
+
+            // 模板参数引用
+            if (value.StartsWith("@"))
+            {
+                return new NumericValueRefDto { Kind = "TemplateParam", Key = value.Substring(1) };
+            }
+
+            // 黑板引用：bb:actor.hp / blackboard:actor.hp
+            if (TryCreateBlackboardRef(value, out var blackboardRef))
+            {
+                return blackboardRef;
             }
 
             // 实体引用
@@ -574,6 +963,45 @@ namespace AbilityKit.Ability.Editor.Utilities
 
             // 默认作为常量字符串（会存入字符串表）
             return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+        }
+
+        private static bool TryCreateBlackboardRef(string value, out NumericValueRefDto dto)
+        {
+            dto = null;
+            if (string.IsNullOrEmpty(value)) return false;
+
+            const string shortPrefix = "bb:";
+            const string longPrefix = "blackboard:";
+            string path;
+            if (value.StartsWith(shortPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                path = value.Substring(shortPrefix.Length);
+            }
+            else if (value.StartsWith(longPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                path = value.Substring(longPrefix.Length);
+            }
+            else
+            {
+                return false;
+            }
+
+            var split = path.IndexOf('.');
+            if (split <= 0 || split >= path.Length - 1)
+            {
+                dto = new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+                return true;
+            }
+
+            var boardName = path.Substring(0, split);
+            var keyName = path.Substring(split + 1);
+            dto = new NumericValueRefDto
+            {
+                Kind = "Blackboard",
+                BoardId = BlackboardIdMapper.BoardId(boardName),
+                KeyId = BlackboardIdMapper.KeyId($"{boardName}.{keyName}")
+            };
+            return true;
         }
 
         /// <summary>
@@ -613,19 +1041,7 @@ namespace AbilityKit.Ability.Editor.Utilities
         /// </summary>
         private static NumericValueRefDto CreateConstRef(object value)
         {
-            if (value == null) return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
-
-            if (value is double d) return new NumericValueRefDto { Kind = "Const", ConstValue = d };
-            if (value is int i) return new NumericValueRefDto { Kind = "Const", ConstValue = i };
-            if (value is long l) return new NumericValueRefDto { Kind = "Const", ConstValue = l };
-            if (value is bool b) return new NumericValueRefDto { Kind = "Const", ConstValue = b ? 1 : 0 };
-
-            if (double.TryParse(value.ToString(), out var dValue))
-            {
-                return new NumericValueRefDto { Kind = "Const", ConstValue = dValue };
-            }
-
-            return new NumericValueRefDto { Kind = "Const", ConstValue = 0 };
+            return ConvertValue(null, value, null, null);
         }
 
         /// <summary>

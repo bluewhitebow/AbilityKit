@@ -63,8 +63,8 @@ public sealed class ShooterClientFrameSyncControllerTests
         Assert.Equal(overwrittenFrame + 1, tickResult.Frame);
         Assert.Equal(local.CurrentFrame, presentation.ViewModel.Frame);
         Assert.NotEqual(overwrittenHash, tickResult.StateHash);
-        Assert.True(presentation.ViewModel.Players.ContainsKey(1));
-        Assert.True(presentation.ViewModel.Players.ContainsKey(2));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 1)));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 2)));
     }
 
     [Fact]
@@ -153,8 +153,8 @@ public sealed class ShooterClientFrameSyncControllerTests
         Assert.Equal(reconciliation.AuthoritativeFrame, publishedDiagnostics.AuthoritativeFrame);
         Assert.Equal(reconciliation.FinalFrame, publishedDiagnostics.FinalFrame);
         Assert.Equal(reconciliation.FinalStateHash, publishedDiagnostics.FinalStateHash);
-        Assert.True(presentation.ViewModel.Players.ContainsKey(1));
-        Assert.True(presentation.ViewModel.Players.ContainsKey(2));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 1)));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 2)));
     }
 
     [Fact]
@@ -288,6 +288,205 @@ public sealed class ShooterClientFrameSyncControllerTests
         Assert.Equal(predictedFrameBeforeLatePacket, local.CurrentFrame);
         Assert.Equal(predictedHashBeforeLatePacket, local.ComputeStateHash());
         Assert.Equal(ShooterClientReconciliationResult.None.ApplyResult, controller.LastReconciliationResult.ApplyResult);
+    }
+
+    [Fact]
+    public void ClientFrameSyncControllerMarksResyncWhenPackedSnapshotImportFails()
+    {
+        var start = new ShooterStartGamePayload(
+            "import-failed-resync",
+            30,
+            6901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30);
+        var invalidPacked = new ShooterPackedSnapshotPayload(
+            version: 0,
+            worldId: 6991ul,
+            frame: 1,
+            serverTick: 10L,
+            snapshotFlags: ShooterPackedSnapshotFlags.Full,
+            stateHash: 0u,
+            entityCount: 1,
+            extensionPayload: Array.Empty<byte>(),
+            componentChunks: Array.Empty<ShooterPackedComponentChunk>());
+        var payload = CreatePackedPushPayload(in invalidPacked, timestamp: 1010.5, serverTicks: 1010500L);
+
+        var applyResult = controller.ApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, payload);
+
+        Assert.Equal(ShooterSnapshotApplyResult.ImportFailed, applyResult);
+        Assert.True(controller.NeedsFullSnapshotResync);
+        Assert.Equal(ShooterClientResyncReason.ImportFailed, controller.LastResyncReason);
+        Assert.Equal(ShooterClientRecoveryState.AwaitingFullSnapshot, controller.RecoveryState);
+        Assert.Equal(0, controller.SubmitLocalInput(new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, false)));
+        Assert.Equal(0, controller.Tick(1f / 30f).Ticks);
+        Assert.Equal(ShooterClientReconciliationResult.None.ApplyResult, controller.LastReconciliationResult.ApplyResult);
+    }
+
+    [Fact]
+    public void ClientFrameSyncControllerMarksResyncWhenAuthoritativeHashDoesNotMatchImportedState()
+    {
+        var start = new ShooterStartGamePayload(
+            "hash-mismatch-resync",
+            30,
+            7901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var authority = new ShooterBattleRuntimePort();
+        Assert.True(authority.StartGame(in start));
+        Assert.True(authority.Tick(1f / 30f));
+        var packed = authority.ExportPackedSnapshot(7991ul, isFullSnapshot: true, authorityOverride: true);
+        var corruptedHashPacked = new ShooterPackedSnapshotPayload(
+            packed.Version,
+            packed.WorldId,
+            packed.Frame,
+            packed.ServerTick,
+            packed.SnapshotFlags,
+            packed.StateHash + 1u,
+            packed.EntityCount,
+            packed.ExtensionPayload,
+            packed.ComponentChunks);
+        var payload = CreatePackedPushPayload(in corruptedHashPacked, timestamp: 1020.5, serverTicks: 1020500L);
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30);
+
+        var applyResult = controller.ApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, payload);
+        var reconciliation = controller.LastReconciliationResult;
+
+        Assert.Equal(ShooterSnapshotApplyResult.AppliedPackedSnapshot, applyResult);
+        Assert.False(reconciliation.AuthoritativeHashMatched);
+        Assert.True(controller.NeedsFullSnapshotResync);
+        Assert.Equal(ShooterClientRecoveryState.AwaitingFullSnapshot, controller.RecoveryState);
+        Assert.Equal(ShooterClientResyncReason.AuthoritativeHashMismatch, controller.LastResyncReason);
+        Assert.Equal(0, controller.SubmitLocalInput(new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, false)));
+    }
+
+    [Fact]
+    public void ClientFrameSyncControllerClearsResyncAfterMatchedAuthoritySnapshot()
+    {
+        var start = new ShooterStartGamePayload(
+            "clear-resync",
+            30,
+            8901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var authority = new ShooterBattleRuntimePort();
+        Assert.True(authority.StartGame(in start));
+        Assert.True(authority.Tick(1f / 30f));
+        var packed = authority.ExportPackedSnapshot(8991ul, isFullSnapshot: true, authorityOverride: true);
+        var corruptedHashPacked = new ShooterPackedSnapshotPayload(
+            packed.Version,
+            packed.WorldId,
+            packed.Frame,
+            packed.ServerTick,
+            packed.SnapshotFlags,
+            packed.StateHash + 1u,
+            packed.EntityCount,
+            packed.ExtensionPayload,
+            packed.ComponentChunks);
+        var mismatchPayload = CreatePackedPushPayload(in corruptedHashPacked, timestamp: 1030.5, serverTicks: 1030500L);
+        Assert.True(authority.Tick(1f / 30f));
+        var matchedPacked = authority.ExportPackedSnapshot(8991ul, isFullSnapshot: true, authorityOverride: true);
+        var matchedPayload = CreatePackedPushPayload(in matchedPacked, timestamp: 1031.5, serverTicks: 1031500L);
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30);
+
+        Assert.Equal(ShooterSnapshotApplyResult.AppliedPackedSnapshot, controller.ApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, mismatchPayload));
+        Assert.True(controller.NeedsFullSnapshotResync);
+
+        Assert.Equal(ShooterSnapshotApplyResult.AppliedPackedSnapshot, controller.ApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, matchedPayload));
+
+        Assert.False(controller.NeedsFullSnapshotResync);
+        Assert.Equal(ShooterClientResyncReason.None, controller.LastResyncReason);
+        Assert.Equal(ShooterClientRecoveryState.Recovered, controller.RecoveryState);
+        Assert.True(controller.LastReconciliationResult.AuthoritativeHashMatched);
+    }
+
+    [Fact]
+    public void ClientFrameSyncControllerUsesCatchUpStateForSmallFrameGap()
+    {
+        var start = new ShooterStartGamePayload(
+            "small-catch-up",
+            30,
+            9901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var policy = new ShooterClientDriftRecoveryPolicy(
+            smallCatchUpThreshold: 4,
+            replayThreshold: 120,
+            maxCatchUpTicksPerUpdate: 2,
+            snapshotTimeoutTicks: 0L);
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30, decoder: null, rollbackWorldId: 0ul, rollbackBufferFrames: 240, policy);
+
+        Assert.True(controller.TryEnterCatchUp(3));
+        Assert.Equal(ShooterClientRecoveryState.CatchUp, controller.RecoveryState);
+
+        var firstTick = controller.Tick(1f / 30f);
+        Assert.Equal(2, firstTick.Ticks);
+        Assert.Equal(2, firstTick.Frame);
+        Assert.Equal(ShooterClientRecoveryState.CatchUp, controller.RecoveryState);
+
+        var secondTick = controller.Tick(1f / 30f);
+        Assert.Equal(1, secondTick.Ticks);
+        Assert.Equal(3, secondTick.Frame);
+        Assert.Equal(ShooterClientRecoveryState.Normal, controller.RecoveryState);
+    }
+
+    [Fact]
+    public void ClientFrameSyncControllerRequestsFullSnapshotWhenCatchUpGapIsTooLarge()
+    {
+        var start = new ShooterStartGamePayload(
+            "large-catch-up",
+            30,
+            9902,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 8f, 0f)
+            });
+
+        var local = new ShooterBattleRuntimePort();
+        Assert.True(local.StartGame(in start));
+        var presentation = new ShooterPresentationFacade();
+        var policy = new ShooterClientDriftRecoveryPolicy(
+            smallCatchUpThreshold: 2,
+            replayThreshold: 120,
+            maxCatchUpTicksPerUpdate: 2,
+            snapshotTimeoutTicks: 0L);
+        var controller = new ShooterClientFrameSyncController(local, presentation, tickRate: 30, decoder: null, rollbackWorldId: 0ul, rollbackBufferFrames: 240, policy);
+
+        Assert.False(controller.TryEnterCatchUp(5));
+        Assert.True(controller.NeedsFullSnapshotResync);
+        Assert.Equal(ShooterClientRecoveryState.AwaitingFullSnapshot, controller.RecoveryState);
+        Assert.Equal(ShooterClientResyncReason.FrameTooFarBehind, controller.LastResyncReason);
     }
 
     private static ArraySegment<byte> CreatePackedPushPayload(in ShooterPackedSnapshotPayload packed, double timestamp, long serverTicks)

@@ -15,4 +15,9 @@ public interface IStateSyncObserverGrain : IGrainWithStringKey
     /// 取消订阅
     /// </summary>
     Task UnsubscribeAsync(string battleGrainKey);
+
+    /// <summary>
+    /// 接收战斗状态快照推送。
+    /// </summary>
+    Task OnSnapshotPushedAsync(StateSyncPush push);
 }

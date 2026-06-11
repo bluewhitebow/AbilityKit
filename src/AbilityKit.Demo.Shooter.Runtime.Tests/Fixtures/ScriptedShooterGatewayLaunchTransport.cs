@@ -23,6 +23,14 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
 
     public long StartServerNowTicks { get; set; } = 123456L;
 
+    public string JoinBattleId { get; set; } = "battle-prelaunch";
+
+    public ulong JoinWorldId { get; set; }
+
+    public bool JoinCanStart { get; set; } = true;
+
+    public WireRoomJoinKind JoinKind { get; set; } = WireRoomJoinKind.TeamLobby;
+
     public ArraySegment<byte> LastPayload { get; private set; }
 
     public Task<ArraySegment<byte>> SendRequestAsync(uint opCode, ArraySegment<byte> payload, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -46,10 +54,10 @@ internal sealed class ScriptedShooterGatewayLaunchTransport : IShooterRoomGatewa
                     Success = true,
                     RoomId = "room-launch",
                     NumericRoomId = 1041ul,
-                    Snapshot = new WireRoomSnapshot { BattleId = "battle-prelaunch", CanStart = true, WorldId = 0ul },
+                    Snapshot = new WireRoomSnapshot { BattleId = JoinBattleId, CanStart = JoinCanStart, WorldId = JoinWorldId },
                     WorldStartAnchor = CreateAnchor(),
                     Message = "joined",
-                    JoinKind = WireRoomJoinKind.TeamLobby,
+                    JoinKind = JoinKind,
                     ServerNowTicks = JoinServerNowTicks
                 }));
             case RoomGatewayOpCodes.SetReady:

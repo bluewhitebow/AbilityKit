@@ -46,26 +46,7 @@ namespace AbilityKit.Demo.Moba.Services
                 if (effectId <= 0) continue;
 
                 var eventId = MobaBuffTriggering.Events.WithEffect(baseEventId, effectId);
-                var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId);
-                var key = new EventKey<BuffEventArgs>(eid);
-                var args = new BuffEventArgs
-                {
-                    EventId = eventId,
-                    SourceActorId = sourceActorId,
-                    TargetActorId = targetActorId,
-                    BuffId = runtime != null ? runtime.BuffId : 0,
-                    EffectId = effectId,
-                    Stage = stage,
-                    StackCount = runtime != null ? runtime.StackCount : 0,
-                    DurationSeconds = 0f,
-                    RemoveReason = TraceLifecycleReason.None,
-                    SourceContextId = runtime != null ? runtime.SourceContextId : 0,
-                    Runtime = runtime,
-                };
-
-                _eventBus.Publish(key, in args);
-                object boxed = args;
-                _eventBus.Publish(new EventKey<object>(eid), in boxed);
+                PublishEvent(CreateArgs(eventId, runtime != null ? runtime.BuffId : 0, effectId, stage, sourceActorId, targetActorId, 0f, TraceLifecycleReason.None, runtime));
             }
         }
 
@@ -74,51 +55,12 @@ namespace AbilityKit.Demo.Moba.Services
             if (_eventBus == null) return;
             if (buff == null) return;
 
-            var eventId = MobaBuffTriggering.Events.Interval;
-            var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId);
-            var key = new EventKey<BuffEventArgs>(eid);
-            var args = new BuffEventArgs
-            {
-                EventId = eventId,
-                SourceActorId = sourceActorId,
-                TargetActorId = targetActorId,
-                BuffId = runtime != null ? runtime.BuffId : 0,
-                EffectId = 0,
-                Stage = MobaBuffTriggering.Stages.Interval,
-                StackCount = runtime != null ? runtime.StackCount : 0,
-                DurationSeconds = 0f,
-                RemoveReason = TraceLifecycleReason.None,
-                SourceContextId = runtime != null ? runtime.SourceContextId : 0,
-                Runtime = runtime,
-            };
-
-            _eventBus.Publish(key, in args);
-            object boxed = args;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            PublishEvent(CreateArgs(MobaBuffTriggering.Events.Interval, runtime != null ? runtime.BuffId : 0, 0, MobaBuffTriggering.Stages.Interval, sourceActorId, targetActorId, 0f, TraceLifecycleReason.None, runtime));
         }
 
         private void PublishBaseEvent(string eventId, int buffId, int sourceActorId, int targetActorId, float durationSeconds, BuffRuntime runtime)
         {
-            var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId);
-            var key = new EventKey<BuffEventArgs>(eid);
-            var args = new BuffEventArgs
-            {
-                EventId = eventId,
-                SourceActorId = sourceActorId,
-                TargetActorId = targetActorId,
-                BuffId = buffId,
-                EffectId = 0,
-                Stage = null,
-                StackCount = runtime != null ? runtime.StackCount : 0,
-                DurationSeconds = durationSeconds,
-                RemoveReason = TraceLifecycleReason.None,
-                SourceContextId = runtime != null ? runtime.SourceContextId : 0,
-                Runtime = runtime,
-            };
-
-            _eventBus.Publish(key, in args);
-            object boxed = args;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            PublishEvent(CreateArgs(eventId, buffId, 0, null, sourceActorId, targetActorId, durationSeconds, TraceLifecycleReason.None, runtime));
         }
 
         private void PublishStageEvent(string baseEventId, IReadOnlyList<int> effectIds, string stage, int buffId, int sourceActorId, int targetActorId, BuffRuntime runtime, TraceLifecycleReason reason)
@@ -126,26 +68,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (_eventBus == null) return;
             if (string.IsNullOrEmpty(baseEventId)) return;
 
-            var eventId0 = baseEventId;
-            var eid0 = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId0);
-            var key0 = new EventKey<BuffEventArgs>(eid0);
-            var args0 = new BuffEventArgs
-            {
-                EventId = eventId0,
-                SourceActorId = sourceActorId,
-                TargetActorId = targetActorId,
-                BuffId = buffId,
-                EffectId = 0,
-                Stage = stage,
-                StackCount = runtime != null ? runtime.StackCount : 0,
-                DurationSeconds = 0f,
-                RemoveReason = reason,
-                SourceContextId = runtime != null ? runtime.SourceContextId : 0,
-                Runtime = runtime,
-            };
-            _eventBus.Publish(key0, in args0);
-            object boxed0 = args0;
-            _eventBus.Publish(new EventKey<object>(eid0), in boxed0);
+            PublishEvent(CreateArgs(baseEventId, buffId, 0, stage, sourceActorId, targetActorId, 0f, reason, runtime));
 
             if (effectIds == null || effectIds.Count == 0) return;
 
@@ -155,27 +78,35 @@ namespace AbilityKit.Demo.Moba.Services
                 if (effectId <= 0) continue;
 
                 var eventId = MobaBuffTriggering.Events.WithEffect(baseEventId, effectId);
-                var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId);
-                var key = new EventKey<BuffEventArgs>(eid);
-                var args = new BuffEventArgs
-                {
-                    EventId = eventId,
-                    SourceActorId = sourceActorId,
-                    TargetActorId = targetActorId,
-                    BuffId = buffId,
-                    EffectId = effectId,
-                    Stage = stage,
-                    StackCount = runtime != null ? runtime.StackCount : 0,
-                    DurationSeconds = 0f,
-                    RemoveReason = reason,
-                    SourceContextId = runtime != null ? runtime.SourceContextId : 0,
-                    Runtime = runtime,
-                };
-
-                _eventBus.Publish(key, in args);
-                object boxed = args;
-                _eventBus.Publish(new EventKey<object>(eid), in boxed);
+                PublishEvent(CreateArgs(eventId, buffId, effectId, stage, sourceActorId, targetActorId, 0f, reason, runtime));
             }
+        }
+
+        private static BuffEventArgs CreateArgs(string eventId, int buffId, int effectId, string stage, int sourceActorId, int targetActorId, float durationSeconds, TraceLifecycleReason reason, BuffRuntime runtime)
+        {
+            return new BuffEventArgs
+            {
+                EventId = eventId,
+                SourceActorId = sourceActorId,
+                TargetActorId = targetActorId,
+                BuffId = buffId,
+                EffectId = effectId,
+                Stage = stage,
+                StackCount = runtime != null ? runtime.StackCount : 0,
+                DurationSeconds = durationSeconds,
+                RemoveReason = reason,
+                SourceContextId = runtime != null ? runtime.SourceContextId : 0,
+                Runtime = runtime,
+            };
+        }
+
+        private void PublishEvent(BuffEventArgs args)
+        {
+            var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(args.EventId);
+            var key = new EventKey<BuffEventArgs>(eid);
+            _eventBus.Publish(key, in args);
+            object boxed = args;
+            _eventBus.Publish(new EventKey<object>(eid), in boxed);
         }
     }
 }

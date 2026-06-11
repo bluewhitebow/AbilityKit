@@ -22,10 +22,18 @@ namespace AbilityKit.Ability.Editor.Utilities
         public bool AllowExternal;
         public int Phase;
         public int Priority;
+        public TriggerTemplateBindingDto Template;
         public PredicatePlanDto Predicate;
         public List<ActionCallPlanDto> Actions;
         public LegacyPredicateDto LegacyPredicate;
         public List<LegacyActionDto> LegacyActions;
+    }
+
+    [Serializable]
+    internal sealed class TriggerTemplateBindingDto
+    {
+        public string TemplateId;
+        public Dictionary<string, NumericValueRefDto> Bindings;
     }
 
     [Serializable]

@@ -41,6 +41,16 @@ namespace AbilityKit.Ability.Config.Source
         public Dictionary<string, ConditionTypeDefinition> Conditions;
 
         /// <summary>
+        /// 可复用条件组。触发器可通过 ConditionRefs / condition_refs 引用，导出时会展开为运行时 Predicate。
+        /// </summary>
+        public Dictionary<string, SourceConditionGroupConfig> ConditionGroups;
+
+        /// <summary>
+        /// 可复用动作组。触发器可通过 ActionRefs / action_refs 引用，导出时会展开为运行时 Actions。
+        /// </summary>
+        public Dictionary<string, SourceActionGroupConfig> ActionGroups;
+
+        /// <summary>
         /// 触发器列表
         /// </summary>
         public List<SourceTriggerConfig> Triggers;
@@ -151,9 +161,24 @@ namespace AbilityKit.Ability.Config.Source
         public bool AllowExternal = false;
 
         /// <summary>
+        /// 模板实例绑定。条件和行为参数可通过 @paramName 引用这里的绑定值。
+        /// </summary>
+        public SourceTriggerTemplateConfig Template;
+
+        /// <summary>
+        /// 引用的可复用条件组 ID 列表，会在内联 Conditions 前展开。
+        /// </summary>
+        public List<string> ConditionRefs;
+
+        /// <summary>
         /// 条件列表（为空表示无条件）
         /// </summary>
         public List<SourceConditionConfig> Conditions;
+
+        /// <summary>
+        /// 引用的可复用动作组 ID 列表，会在内联 Actions 前展开。
+        /// </summary>
+        public List<string> ActionRefs;
 
         /// <summary>
         /// 动作列表
@@ -167,15 +192,76 @@ namespace AbilityKit.Ability.Config.Source
     }
 
     /// <summary>
+    /// 触发器模板实例绑定配置。
+    /// </summary>
+    [Serializable]
+    public sealed class SourceTriggerTemplateConfig
+    {
+        /// <summary>
+        /// 模板标识，用于追踪当前触发器来自哪个模板。
+        /// </summary>
+        public string Id;
+
+        /// <summary>
+        /// 模板参数绑定表。value 支持常量、@param、$context、bb:domain.key、=expr 等源值写法。
+        /// </summary>
+        public Dictionary<string, object> Bindings;
+    }
+
+    /// <summary>
+    /// 可复用动作组配置
+    /// </summary>
+    [Serializable]
+    public sealed class SourceActionGroupConfig
+    {
+        /// <summary>
+        /// 可选显式 ID；为空时使用字典 key。
+        /// </summary>
+        public string Id;
+
+        /// <summary>
+        /// 动作列表。
+        /// </summary>
+        public List<SourceActionConfig> Actions;
+    }
+
+    /// <summary>
+    /// 可复用条件组配置
+    /// </summary>
+    [Serializable]
+    public sealed class SourceConditionGroupConfig
+    {
+        /// <summary>
+        /// 可选显式 ID；为空时使用字典 key。
+        /// </summary>
+        public string Id;
+
+        /// <summary>
+        /// 条件列表。
+        /// </summary>
+        public List<SourceConditionConfig> Conditions;
+    }
+
+    /// <summary>
     /// 动作配置
     /// </summary>
     [Serializable]
     public class SourceActionConfig
     {
         /// <summary>
+        /// 可复用动作组引用；存在时 Type 可为空。
+        /// </summary>
+        public string Ref;
+
+        /// <summary>
         /// 动作类型
         /// </summary>
         public string Type;
+
+        /// <summary>
+        /// 复合动作节点引用的可复用动作组 ID 列表，会在内联 Items 前展开。
+        /// </summary>
+        public List<string> ActionRefs;
 
         /// <summary>
         /// 子动作列表（用于 seq 等复合动作）
@@ -197,9 +283,19 @@ namespace AbilityKit.Ability.Config.Source
     public class SourceConditionConfig
     {
         /// <summary>
+        /// 可复用条件组引用；存在时 Type 可为空。
+        /// </summary>
+        public string Ref;
+
+        /// <summary>
         /// 条件类型
         /// </summary>
         public string Type;
+
+        /// <summary>
+        /// 复合条件节点引用的可复用条件组 ID 列表，会在内联 Items 前展开。
+        /// </summary>
+        public List<string> ConditionRefs;
 
         /// <summary>
         /// 子条件列表（用于 all, any 等复合条件）

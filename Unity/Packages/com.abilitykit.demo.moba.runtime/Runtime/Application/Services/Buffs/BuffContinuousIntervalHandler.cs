@@ -9,12 +9,14 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly MobaConfigDatabase _configs;
         private readonly BuffEventPublisher _events;
         private readonly BuffStageEffectExecutor _stageEffects;
-
-        public BuffContinuousIntervalHandler(MobaConfigDatabase configs, BuffEventPublisher events, BuffStageEffectExecutor stageEffects)
+        private readonly MobaBuffPresentationCueReporter _presentationCues;
+ 
+        public BuffContinuousIntervalHandler(MobaConfigDatabase configs, BuffEventPublisher events, BuffStageEffectExecutor stageEffects, MobaBuffPresentationCueReporter presentationCues)
         {
             _configs = configs;
             _events = events;
             _stageEffects = stageEffects;
+            _presentationCues = presentationCues;
         }
 
         public bool CanHandle(IContinuous continuous)
@@ -32,6 +34,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (runtime == null) return;
 
             _events?.PublishInterval(buff, runtime.SourceId, buffContinuous.TargetActorId, runtime);
+            _presentationCues?.Ticked(buff, runtime.SourceId, buffContinuous.TargetActorId, runtime);
             _stageEffects?.Execute(periodicConfig.IntervalEffectIds, buff.Id, runtime.SourceId, buffContinuous.TargetActorId, runtime.SourceContextId, MobaBuffTriggering.Stages.Interval, runtime);
         }
     }

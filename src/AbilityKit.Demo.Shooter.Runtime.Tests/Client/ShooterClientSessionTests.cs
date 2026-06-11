@@ -45,8 +45,8 @@ public sealed class ShooterClientSessionTests
         Assert.Equal(1, tick.Ticks);
         Assert.Equal(1, session.CurrentFrame);
         Assert.Equal(runtime.CurrentFrame, presentation.ViewModel.Frame);
-        Assert.True(presentation.ViewModel.Players.ContainsKey(1));
-        Assert.True(presentation.ViewModel.Players.ContainsKey(2));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 1)));
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 2)));
         Assert.Equal(2, snapshotPublishCount);
     }
 
@@ -149,5 +149,44 @@ public sealed class ShooterClientSessionTests
         Assert.Equal("RejectedTooFarFuture", result.Remote.Status);
         Assert.True(result.Remote.ShouldResync);
         Assert.Equal(987654321L, result.Remote.ServerTicks);
+        Assert.True(session.NeedsFullSnapshotResync);
+        Assert.Equal(ShooterClientRecoveryState.AwaitingFullSnapshot, session.RecoveryState);
+        Assert.Equal(ShooterClientResyncReason.ClientHashRejectedByServer, session.LastResyncReason);
+    }
+
+    [Fact]
+    public async Task ClientSessionRequestsFullSnapshotResyncWithDedicatedFullStateSyncRequest()
+    {
+        var runtime = new ShooterBattleRuntimePort();
+        var presentation = new ShooterPresentationFacade();
+        var session = new ShooterClientSession(runtime, presentation, tickRate: 30);
+        var roomClient = new ScriptedShooterRoomClient();
+        var request = new ShooterGatewayFullStateSyncRequest(
+            "session-token",
+            "battle-1",
+            "room-1",
+            worldId: 9001ul,
+            clientFrame: 123,
+            lastAuthoritativeFrame: 120,
+            clientStateHash: 0xABCDEF01u,
+            authoritativeStateHash: 0x12345678u,
+            reason: ShooterClientResyncReason.AuthoritativeHashMismatch.ToString());
+
+        var result = await session.RequestFullSnapshotResyncAsync(roomClient, request);
+
+        Assert.True(result.Success);
+        Assert.True(result.Accepted);
+        Assert.Equal("accepted", result.Message);
+        Assert.Equal(123456789L, result.ServerTicks);
+        Assert.Equal(request.SessionToken, roomClient.LastFullStateSyncRequest.SessionToken);
+        Assert.Equal(request.BattleId, roomClient.LastFullStateSyncRequest.BattleId);
+        Assert.Equal(request.RoomId, roomClient.LastFullStateSyncRequest.RoomId);
+        Assert.Equal(request.WorldId, roomClient.LastFullStateSyncRequest.WorldId);
+        Assert.Equal(request.ClientFrame, roomClient.LastFullStateSyncRequest.ClientFrame);
+        Assert.Equal(request.LastAuthoritativeFrame, roomClient.LastFullStateSyncRequest.LastAuthoritativeFrame);
+        Assert.Equal(request.ClientStateHash, roomClient.LastFullStateSyncRequest.ClientStateHash);
+        Assert.Equal(request.AuthoritativeStateHash, roomClient.LastFullStateSyncRequest.AuthoritativeStateHash);
+        Assert.Equal(request.Reason, roomClient.LastFullStateSyncRequest.Reason);
+        Assert.Contains("request-full-state:room-1:battle-1:AuthoritativeHashMismatch", roomClient.Calls);
     }
 }

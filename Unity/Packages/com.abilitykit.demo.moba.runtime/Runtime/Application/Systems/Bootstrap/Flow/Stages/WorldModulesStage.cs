@@ -7,9 +7,11 @@ using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Gameplay;
 using AbilityKit.Demo.Moba.Gameplay.Triggering;
 using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Triggering.Blackboard;
 using AbilityKit.Triggering.Payload;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Variables.Numeric;
+using AbilityKit.Triggering.Variables.Numeric.Domains;
 
 namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
 {
@@ -54,10 +56,18 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                 payloads.RegisterDoubleAccessor<object>(skillObjectAccessor);
                 return payloads;
             });
+            builder.Register<IBlackboardResolver>(WorldLifetime.Singleton, _ => new DictionaryBlackboardResolver());
             builder.Register<INumericVarDomainRegistry>(WorldLifetime.Singleton, _ =>
             {
                 var registry = new NumericVarDomainRegistry();
                 registry.Register(new MobaGameplayNumericVarDomain());
+                RegisterDefaultBlackboardDomain(registry, "bb");
+                RegisterDefaultBlackboardDomain(registry, "actor");
+                RegisterDefaultBlackboardDomain(registry, "skill");
+                RegisterDefaultBlackboardDomain(registry, "effect");
+                RegisterDefaultBlackboardDomain(registry, "projectile");
+                RegisterDefaultBlackboardDomain(registry, "battle");
+                RegisterDefaultBlackboardDomain(registry, "global");
                 return registry;
             });
             builder.Register<AbilityKit.Triggering.Runtime.TriggerRunner<IWorldResolver>>(WorldLifetime.Singleton, r =>
@@ -65,12 +75,18 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                     r.Resolve<AbilityKit.Triggering.Eventing.IEventBus>(),
                     r.Resolve<FunctionRegistry>(),
                     r.Resolve<ActionRegistry>(),
+                    blackboards: r.Resolve<IBlackboardResolver>(),
                     payloads: r.Resolve<IPayloadAccessorRegistry>(),
                     numericDomains: r.Resolve<INumericVarDomainRegistry>()));
 
             builder.AddModule(new EntitasEcsWorldModule());
             builder.AddModule(new ProjectileWorldModule());
             builder.AddModule(new MobaServicesAutoModule());
+        }
+
+        private static void RegisterDefaultBlackboardDomain(NumericVarDomainRegistry registry, string domainId)
+        {
+            registry.Register(new BlackboardNumericVarDomain(domainId, BlackboardIdMapper.BoardId(domainId)));
         }
 
         protected internal override void Install(

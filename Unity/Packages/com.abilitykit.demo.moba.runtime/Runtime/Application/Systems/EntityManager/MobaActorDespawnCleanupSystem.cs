@@ -136,7 +136,7 @@ namespace AbilityKit.Demo.Moba.Systems.EntityManager
         private void ReleaseSkillRuntime(ProjectileId projectileId)
         {
             if (_skillRuntimes == null || _projectileLinks == null) return;
-            if (!_projectileLinks.TryGetRetain(projectileId, out var retainHandle)) return;
+            if (!_projectileLinks.TryConsumeRetain(projectileId, out var retainHandle)) return;
 
             try
             {

@@ -81,7 +81,11 @@ namespace AbilityKit.Demo.Moba.Systems
                 var passiveSkillId = rt.PassiveSkillId;
                 if (passiveSkillId <= 0) continue;
 
-                if (!_configs.TryGetPassiveSkill(passiveSkillId, out var mo) || mo == null) continue;
+                if (!_configs.TryGetPassiveSkill(passiveSkillId, out var mo) || mo == null)
+                {
+                    Log.Warning($"[MobaPassiveSkillTriggerRegisterSystem] Passive skill config not found. actor={entity.actorId.Value} passiveSkillId={passiveSkillId} frame={frame}");
+                    continue;
+                }
 
                 if (ContainsListener(listeners, passiveSkillId))
                 {
@@ -94,6 +98,10 @@ namespace AbilityKit.Demo.Moba.Systems
                 };
 
                 EnsurePassiveSkillContext(entity, listeners, passiveSkillId, l, frame);
+                if (l.SourceContextId == 0)
+                {
+                    Log.Warning($"[MobaPassiveSkillTriggerRegisterSystem] Passive skill listener registered without source context. actor={entity.actorId.Value} passiveSkillId={passiveSkillId} frame={frame} hasTrace={_trace != null}");
+                }
 
                 listeners.Add(l);
                 outRegistrations?.Add(new Registration(mo, l));
@@ -214,7 +222,12 @@ namespace AbilityKit.Demo.Moba.Systems
             if (entity == null) return;
             if (l == null) return;
             if (l.SourceContextId != 0) return;
-            if (_trace == null) return;
+            if (_trace == null)
+            {
+                Log.Warning($"[MobaPassiveSkillTriggerRegisterSystem] Cannot create passive skill source context because trace registry is missing. passiveSkillId={passiveSkillId} frame={frame}");
+                return;
+            }
+
             if (!entity.hasActorId) return;
 
             try

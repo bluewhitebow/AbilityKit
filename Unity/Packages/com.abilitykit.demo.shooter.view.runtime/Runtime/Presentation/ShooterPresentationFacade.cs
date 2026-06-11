@@ -64,26 +64,31 @@ namespace AbilityKit.Demo.Shooter.View
 
         public void ApplyGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
         {
-            _adapter.ApplyGatewaySnapshot(in snapshot);
-            _stream.Publish(_adapter.ViewModel);
+            var batch = _adapter.ApplyGatewaySnapshot(in snapshot);
+            _stream.Publish(in batch);
         }
 
         public void ApplyShooterPayload(byte[] payload)
         {
-            _adapter.ApplyPayload(payload);
-            _stream.Publish(_adapter.ViewModel);
+            var batch = _adapter.ApplyPayload(payload);
+            _stream.Publish(in batch);
         }
 
         public void ApplyShooterSnapshot(in ShooterStateSnapshotPayload snapshot)
         {
-            _adapter.ApplySnapshot(in snapshot);
-            _stream.Publish(_adapter.ViewModel);
+            ApplyLocalPredictionSnapshot(in snapshot);
+        }
+
+        public void ApplyLocalPredictionSnapshot(in ShooterStateSnapshotPayload snapshot)
+        {
+            var batch = _adapter.ApplySnapshot(in snapshot, ShooterViewBatchSource.LocalPrediction);
+            _stream.Publish(in batch);
         }
 
         public void Clear()
         {
-            _adapter.Clear();
-            _stream.Publish(_adapter.ViewModel);
+            var batch = _adapter.Clear();
+            _stream.Publish(in batch);
         }
     }
 }

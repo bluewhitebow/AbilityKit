@@ -1,5 +1,6 @@
 using AbilityKit.Ability.World;
 using AbilityKit.Ability.World.DI;
+using AbilityKit.Core.Common.Log;
 using AbilityKit.Demo.Moba.Services;
 
 namespace AbilityKit.Demo.Moba.Systems.Buffs
@@ -33,14 +34,30 @@ namespace AbilityKit.Demo.Moba.Systems.Buffs
 
                 var req = e.removeBuffRequest;
                 e.RemoveRemoveBuffRequest();
-                _lifecycle?.Remove(new BuffRemoveRequest
+                var request = new BuffRemoveRequest
                 {
                     TargetActorId = e.actorId.Value,
                     BuffId = req.BuffId,
                     SourceActorId = req.SourceId,
                     Reason = req.Reason,
-                });
+                };
+
+                if (_lifecycle != null && !_lifecycle.Remove(request))
+                {
+                    var reject = _lifecycle.LastReject;
+                    Log.Warning($"[MobaBuffRemoveSystem] Remove buff rejected. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason} rejectCode={FormatRejectCode(reject.Code)} lifecycleReason={FormatRejectReason(reject.Message)}");
+                }
             }
+        }
+
+        private static string FormatRejectReason(string reason)
+        {
+            return string.IsNullOrEmpty(reason) ? "unknown" : reason;
+        }
+
+        private static string FormatRejectCode(string code)
+        {
+            return string.IsNullOrEmpty(code) ? "buff.lifecycle.rejected" : code;
         }
     }
 }

@@ -69,6 +69,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             public int Phase;
             public int Priority;
             public TriggerPlanScope Scope;
+            public TriggerTemplateBindingDto Template;
             public PredicatePlanDto Predicate;
             public List<ActionCallPlanDto> Actions;
             public ExecutionControlPlanDto ExecutionControl;
@@ -88,6 +89,13 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             /// Cue SFX 标识（供工厂实现使用）
             /// </summary>
             public string CueSfxId;
+        }
+
+        [Serializable]
+        internal sealed class TriggerTemplateBindingDto
+        {
+            public string TemplateId;
+            public Dictionary<string, NumericValueRefDto> Bindings;
         }
 
         [Serializable]

@@ -31,57 +31,64 @@ namespace AbilityKit.Protocol.Shooter
         public const int Enemy = 3;
     }
 
-    [MemoryPackable]
-    public partial struct ShooterPackedEntityChunk
+    public static class ShooterPackedComponentKinds
     {
-        [MemoryPackOrder(0)] public int EntityKind;
-        [MemoryPackOrder(1)] public int Count;
-        [MemoryPackOrder(2)] public int[] EntityIds;
-        [MemoryPackOrder(3)] public float[] PosX;
-        [MemoryPackOrder(4)] public float[] PosY;
-        [MemoryPackOrder(5)] public float[] VelX;
-        [MemoryPackOrder(6)] public float[] VelY;
-        [MemoryPackOrder(7)] public float[] FacingX;
-        [MemoryPackOrder(8)] public float[] FacingY;
-        [MemoryPackOrder(9)] public short[] Hp;
-        [MemoryPackOrder(10)] public byte[] Flags;
-        [MemoryPackOrder(11)] public int[] OwnerIds;
-        [MemoryPackOrder(12)] public int[] Aux;
+        public const int EntityLifecycle = 1;
+        public const int Transform = 2;
+        public const int Health = 3;
+        public const int Score = 4;
+        public const int ProjectileLifetime = 5;
+    }
+
+    [MemoryPackable]
+    public partial struct ShooterPackedComponentChunk
+    {
+        [MemoryPackOrder(0)] public int ComponentKind;
+        [MemoryPackOrder(1)] public int EntityKind;
+        [MemoryPackOrder(2)] public int Count;
+        [MemoryPackOrder(3)] public int[] EntityIds;
+        [MemoryPackOrder(4)] public float[] ValueX;
+        [MemoryPackOrder(5)] public float[] ValueY;
+        [MemoryPackOrder(6)] public float[] ValueZ;
+        [MemoryPackOrder(7)] public float[] ValueW;
+        [MemoryPackOrder(8)] public int[] IntValues;
+        [MemoryPackOrder(9)] public byte[] Flags;
+        [MemoryPackOrder(10)] public int[] OwnerIds;
+        [MemoryPackOrder(11)] public int[] Aux;
 
         [MemoryPackConstructor]
-        public ShooterPackedEntityChunk(
+        public ShooterPackedComponentChunk(
+            int componentKind,
             int entityKind,
             int count,
             int[] entityIds,
-            float[] posX,
-            float[] posY,
-            float[] velX,
-            float[] velY,
-            float[] facingX,
-            float[] facingY,
-            short[] hp,
+            float[] valueX,
+            float[] valueY,
+            float[] valueZ,
+            float[] valueW,
+            int[] intValues,
             byte[] flags,
             int[] ownerIds,
             int[] aux)
         {
+            ComponentKind = componentKind;
             EntityKind = entityKind;
             Count = count;
             EntityIds = entityIds;
-            PosX = posX;
-            PosY = posY;
-            VelX = velX;
-            VelY = velY;
-            FacingX = facingX;
-            FacingY = facingY;
-            Hp = hp;
+            ValueX = valueX;
+            ValueY = valueY;
+            ValueZ = valueZ;
+            ValueW = valueW;
+            IntValues = intValues;
             Flags = flags;
             OwnerIds = ownerIds;
             Aux = aux;
         }
 
-        public static ShooterPackedEntityChunk Empty(int entityKind)
+        public static ShooterPackedComponentChunk Empty(int componentKind, int entityKind)
         {
-            return new ShooterPackedEntityChunk(
+            return new ShooterPackedComponentChunk(
+                componentKind,
                 entityKind,
                 0,
                 Array.Empty<int>(),
@@ -89,9 +96,7 @@ namespace AbilityKit.Protocol.Shooter
                 Array.Empty<float>(),
                 Array.Empty<float>(),
                 Array.Empty<float>(),
-                Array.Empty<float>(),
-                Array.Empty<float>(),
-                Array.Empty<short>(),
+                Array.Empty<int>(),
                 Array.Empty<byte>(),
                 Array.Empty<int>(),
                 Array.Empty<int>());
@@ -108,8 +113,8 @@ namespace AbilityKit.Protocol.Shooter
         [MemoryPackOrder(4)] public uint SnapshotFlags;
         [MemoryPackOrder(5)] public uint StateHash;
         [MemoryPackOrder(6)] public int EntityCount;
-        [MemoryPackOrder(7)] public ShooterPackedEntityChunk[] Chunks;
-        [MemoryPackOrder(8)] public byte[] ExtensionPayload;
+        [MemoryPackOrder(7)] public byte[] ExtensionPayload;
+        [MemoryPackOrder(8)] public ShooterPackedComponentChunk[] ComponentChunks;
 
         [MemoryPackConstructor]
         public ShooterPackedSnapshotPayload(
@@ -120,8 +125,8 @@ namespace AbilityKit.Protocol.Shooter
             uint snapshotFlags,
             uint stateHash,
             int entityCount,
-            ShooterPackedEntityChunk[] chunks,
-            byte[] extensionPayload)
+            byte[] extensionPayload,
+            ShooterPackedComponentChunk[] componentChunks)
         {
             Version = version;
             WorldId = worldId;
@@ -130,8 +135,8 @@ namespace AbilityKit.Protocol.Shooter
             SnapshotFlags = snapshotFlags;
             StateHash = stateHash;
             EntityCount = entityCount;
-            Chunks = chunks;
             ExtensionPayload = extensionPayload;
+            ComponentChunks = componentChunks;
         }
 
         public static ShooterPackedSnapshotPayload Empty(int frame = 0)
@@ -144,14 +149,14 @@ namespace AbilityKit.Protocol.Shooter
                 ShooterPackedSnapshotFlags.Full,
                 0,
                 0,
-                Array.Empty<ShooterPackedEntityChunk>(),
-                Array.Empty<byte>());
+                Array.Empty<byte>(),
+                Array.Empty<ShooterPackedComponentChunk>());
         }
     }
 
     public static class ShooterPackedSnapshotCodec
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
 
         public static byte[] Serialize(in ShooterPackedSnapshotPayload snapshot)
         {
@@ -174,8 +179,8 @@ namespace AbilityKit.Protocol.Shooter
                 value.SnapshotFlags,
                 value.StateHash,
                 value.EntityCount,
-                value.Chunks ?? Array.Empty<ShooterPackedEntityChunk>(),
-                value.ExtensionPayload ?? Array.Empty<byte>());
+                value.ExtensionPayload ?? Array.Empty<byte>(),
+                value.ComponentChunks ?? Array.Empty<ShooterPackedComponentChunk>());
         }
     }
 }

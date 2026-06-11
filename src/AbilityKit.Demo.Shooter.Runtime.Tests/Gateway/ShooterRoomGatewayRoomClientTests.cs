@@ -144,5 +144,38 @@ public sealed class ShooterRoomGatewayRoomClientTests
         Assert.Equal("room-1", subscribeWire.RoomId);
         Assert.True(subscribe.Success);
         Assert.Equal("subscribed", subscribe.Message);
+
+        transport.SetResponse(new WireRequestFullStateSyncRes
+        {
+            Success = true,
+            Accepted = true,
+            Message = "accepted",
+            ServerTicks = 123456789L
+        });
+        var fullStateSync = await roomClient.RequestFullStateSyncAsync(new ShooterGatewayFullStateSyncRequest(
+            "session-token",
+            "battle-1",
+            "room-1",
+            worldId: 9001ul,
+            clientFrame: 123,
+            lastAuthoritativeFrame: 120,
+            clientStateHash: 0xABCDEF01u,
+            authoritativeStateHash: 0x12345678u,
+            reason: "AuthoritativeHashMismatch"));
+        Assert.Equal(RoomGatewayOpCodes.RequestFullStateSync, transport.LastOpCode);
+        var fullStateSyncWire = WireRoomGatewayBinary.Deserialize<WireRequestFullStateSyncReq>(transport.LastPayload);
+        Assert.Equal("session-token", fullStateSyncWire.SessionToken);
+        Assert.Equal("battle-1", fullStateSyncWire.BattleId);
+        Assert.Equal("room-1", fullStateSyncWire.RoomId);
+        Assert.Equal(9001ul, fullStateSyncWire.WorldId);
+        Assert.Equal(123, fullStateSyncWire.ClientFrame);
+        Assert.Equal(120, fullStateSyncWire.LastAuthoritativeFrame);
+        Assert.Equal(0xABCDEF01u, fullStateSyncWire.ClientStateHash);
+        Assert.Equal(0x12345678u, fullStateSyncWire.AuthoritativeStateHash);
+        Assert.Equal("AuthoritativeHashMismatch", fullStateSyncWire.Reason);
+        Assert.True(fullStateSync.Success);
+        Assert.True(fullStateSync.Accepted);
+        Assert.Equal("accepted", fullStateSync.Message);
+        Assert.Equal(123456789L, fullStateSync.ServerTicks);
     }
 }

@@ -52,6 +52,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         private string ConvertSource(TriggerPlanSourceJson source)
         {
             var behaviorCatalog = BuildBehaviorCatalog(source?.behaviors);
+            var conditionCatalog = BuildFragmentCatalog(source?.conditionGroups, source?.condition_groups);
+            var actionCatalog = BuildFragmentCatalog(source?.actionGroups, source?.action_groups);
             using (var sw = new StringWriter())
             {
                 using (var writer = new JsonTextWriter(sw))
@@ -65,7 +67,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                     {
                         foreach (var trigger in source.triggers)
                         {
-                            WriteTrigger(writer, trigger, source.actions, behaviorCatalog);
+                            WriteTrigger(writer, trigger, source.actions, conditionCatalog, actionCatalog, behaviorCatalog);
                         }
                     }
 
@@ -79,7 +81,13 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             }
         }
 
-        private void WriteTrigger(JsonTextWriter writer, TriggerSourceTriggerJson trigger, Dictionary<string, ActionSourceDefJson> actionSchemas, Dictionary<string, JObject> behaviorCatalog)
+        private void WriteTrigger(
+            JsonTextWriter writer,
+            TriggerSourceTriggerJson trigger,
+            Dictionary<string, ActionSourceDefJson> actionSchemas,
+            Dictionary<string, JToken> conditionCatalog,
+            Dictionary<string, JToken> actionCatalog,
+            Dictionary<string, JObject> behaviorCatalog)
         {
             writer.WriteStartObject();
 
@@ -112,17 +120,18 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             writer.WriteValue((int)ParseScope(trigger.scope));
 
             writer.WritePropertyName("Predicate");
-            WritePredicate(writer, trigger.conditions);
+            WritePredicate(writer, ResolveConditionList(trigger.conditions, trigger.conditionRefs, trigger.condition_refs, conditionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
 
             WriteExecutionControl(writer, trigger);
 
             writer.WritePropertyName("Actions");
             writer.WriteStartArray();
-            if (trigger.actions != null)
+            var actions = ResolveActionList(trigger.actions, trigger.actionRefs, trigger.action_refs, actionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            if (actions != null)
             {
-                foreach (var action in trigger.actions)
+                foreach (var action in actions)
                 {
-                    WriteAction(writer, action, actionSchemas);
+                    WriteAction(writer, action, actionSchemas, actionCatalog);
                 }
             }
             writer.WriteEndArray();
@@ -131,7 +140,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             if (root != null)
             {
                 writer.WritePropertyName("ExecutionRoot");
-                WriteExecutionNode(writer, root, actionSchemas, behaviorCatalog, $"trigger:{trigger.id}", "inline", trigger.id.ToString());
+                WriteExecutionNode(writer, root, actionSchemas, conditionCatalog, actionCatalog, behaviorCatalog, $"trigger:{trigger.id}", "inline", trigger.id.ToString(), new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             }
  
             writer.WriteEndObject();
@@ -449,91 +458,110 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             writer.WriteEndObject();
         }
 
-        private void WriteExecutionNode(JsonTextWriter writer, JObject node, Dictionary<string, ActionSourceDefJson> actionSchemas, Dictionary<string, JObject> behaviorCatalog, string sourcePath, string sourceKind, string sourceId)
+        private void WriteExecutionNode(
+            JsonTextWriter writer,
+            JObject node,
+            Dictionary<string, ActionSourceDefJson> actionSchemas,
+            Dictionary<string, JToken> conditionCatalog,
+            Dictionary<string, JToken> actionCatalog,
+            Dictionary<string, JObject> behaviorCatalog,
+            string sourcePath,
+            string sourceKind,
+            string sourceId,
+            HashSet<string> behaviorResolving)
         {
-            node = ResolveBehaviorReference(node, behaviorCatalog, ref sourceKind, ref sourceId, ref sourcePath);
-            writer.WriteStartObject();
+            var resolvedBehaviorId = default(string);
+            node = ResolveBehaviorReference(node, behaviorCatalog, behaviorResolving, ref sourceKind, ref sourceId, ref sourcePath, out resolvedBehaviorId);
 
-            if (node == null)
+            try
             {
+                writer.WriteStartObject();
+
+                if (node == null)
+                {
+                    writer.WritePropertyName("Kind");
+                    writer.WriteValue("Sequence");
+                    writer.WritePropertyName("Children");
+                    writer.WriteStartArray();
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                    return;
+                }
+
+                var type = (node["kind"] ?? node["type"])?.ToString();
+                var normalizedKind = NormalizeExecutionKind(type, node);
+
                 writer.WritePropertyName("Kind");
-                writer.WriteValue("Sequence");
+                writer.WriteValue(normalizedKind);
+                WriteNodeSource(writer, sourceKind, sourceId, sourcePath);
+
+                if (TryGetNodeCondition(node, conditionCatalog, out var conditionNodes))
+                {
+                    writer.WritePropertyName("Condition");
+                    WritePredicate(writer, conditionNodes);
+                }
+
+                var weight = node["weight"]?.Value<float?>();
+                if (weight.HasValue)
+                {
+                    writer.WritePropertyName("Weight");
+                    writer.WriteValue(weight.Value);
+                }
+
+                WriteExecutionNodeOptions(writer, node, normalizedKind, conditionCatalog);
+
+                if (string.Equals(normalizedKind, "Action", StringComparison.OrdinalIgnoreCase))
+                {
+                    var action = node["action"] as JObject ?? node;
+                    writer.WritePropertyName("Action");
+                    WriteAction(writer, ResolveAction(action, actionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase)) ?? action, actionSchemas, actionCatalog);
+                    writer.WriteEndObject();
+                    return;
+                }
+
+                var children = GetNodeChildren(node, behaviorCatalog);
                 writer.WritePropertyName("Children");
                 writer.WriteStartArray();
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-                return;
-            }
-
-            var type = (node["kind"] ?? node["type"])?.ToString();
-            var normalizedKind = NormalizeExecutionKind(type, node);
-
-            writer.WritePropertyName("Kind");
-            writer.WriteValue(normalizedKind);
-            WriteNodeSource(writer, sourceKind, sourceId, sourcePath);
-
-            if (TryGetNodeCondition(node, out var conditionNodes))
-            {
-                writer.WritePropertyName("Condition");
-                WritePredicate(writer, conditionNodes);
-            }
-
-            var weight = node["weight"]?.Value<float?>();
-            if (weight.HasValue)
-            {
-                writer.WritePropertyName("Weight");
-                writer.WriteValue(weight.Value);
-            }
-
-            WriteExecutionNodeOptions(writer, node, normalizedKind);
-
-            if (string.Equals(normalizedKind, "Action", StringComparison.OrdinalIgnoreCase))
-            {
-                var action = node["action"] as JObject ?? node;
-                writer.WritePropertyName("Action");
-                WriteAction(writer, action, actionSchemas);
-                writer.WriteEndObject();
-                return;
-            }
-
-            var children = GetNodeChildren(node);
-            writer.WritePropertyName("Children");
-            writer.WriteStartArray();
-            if (children != null)
-            {
-                var index = 0;
-                foreach (var child in children)
+                if (children != null)
                 {
-                    if (child is JObject childObj)
-                    {
-                        WriteExecutionNode(writer, childObj, actionSchemas, behaviorCatalog, $"{sourcePath}/children[{index}]", sourceKind, sourceId);
-                    }
-                    index++;
-                }
-            }
-            writer.WriteEndArray();
-
-            if (string.Equals(normalizedKind, "If", StringComparison.OrdinalIgnoreCase))
-            {
-                var elseChildren = GetNodeElseChildren(node);
-                if (elseChildren != null)
-                {
-                    writer.WritePropertyName("ElseChildren");
-                    writer.WriteStartArray();
                     var index = 0;
-                    foreach (var child in elseChildren)
+                    foreach (var child in children)
                     {
                         if (child is JObject childObj)
                         {
-                            WriteExecutionNode(writer, childObj, actionSchemas, behaviorCatalog, $"{sourcePath}/else[{index}]", sourceKind, sourceId);
+                            WriteExecutionNode(writer, childObj, actionSchemas, conditionCatalog, actionCatalog, behaviorCatalog, $"{sourcePath}/children[{index}]", sourceKind, sourceId, behaviorResolving);
                         }
                         index++;
                     }
-                    writer.WriteEndArray();
                 }
-            }
+                writer.WriteEndArray();
 
-            writer.WriteEndObject();
+                if (string.Equals(normalizedKind, "If", StringComparison.OrdinalIgnoreCase))
+                {
+                    var elseChildren = GetNodeElseChildren(node);
+                    if (elseChildren != null)
+                    {
+                        writer.WritePropertyName("ElseChildren");
+                        writer.WriteStartArray();
+                        var index = 0;
+                        foreach (var child in elseChildren)
+                        {
+                            if (child is JObject childObj)
+                            {
+                                WriteExecutionNode(writer, childObj, actionSchemas, conditionCatalog, actionCatalog, behaviorCatalog, $"{sourcePath}/else[{index}]", sourceKind, sourceId, behaviorResolving);
+                            }
+                            index++;
+                        }
+                        writer.WriteEndArray();
+                    }
+                }
+
+                writer.WriteEndObject();
+            }
+            finally
+            {
+                EndResolveBehaviorReference(resolvedBehaviorId, behaviorResolving);
+            }
         }
 
         private static string NormalizeExecutionKind(string type, JObject node)
@@ -592,10 +620,30 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         private static bool HasCompositeChildren(JObject node)
         {
-            return node != null && (node["children"] is JArray || node["items"] is JArray || node["then"] is JArray || node["child"] is JObject);
+            return node != null && (node["children"] is JArray || node["items"] is JArray || node["then"] is JArray || node["child"] is JObject || HasBehaviorReferenceList(node));
         }
 
-        private static JArray GetNodeChildren(JObject node)
+        private static JArray GetNodeChildren(JObject node, Dictionary<string, JObject> behaviorCatalog)
+        {
+            if (node == null) return null;
+
+            var merged = new JArray();
+            AddBehaviorReferenceChildren(merged, ReadStringList(node, "behaviorRefs"), behaviorCatalog);
+            AddBehaviorReferenceChildren(merged, ReadStringList(node, "behavior_refs"), behaviorCatalog);
+
+            var inline = GetInlineNodeChildren(node);
+            if (inline != null)
+            {
+                foreach (var child in inline)
+                {
+                    merged.Add(child);
+                }
+            }
+
+            return merged.Count > 0 ? merged : null;
+        }
+
+        private static JArray GetInlineNodeChildren(JObject node)
         {
             if (node == null) return null;
             if (node["children"] is JArray children) return children;
@@ -604,6 +652,27 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             if (node["then"] is JObject thenOne) return new JArray(thenOne);
             if (node["child"] is JObject childOne) return new JArray(childOne);
             return null;
+        }
+
+        private static bool HasBehaviorReferenceList(JObject node)
+        {
+            return node != null && (node["behaviorRefs"] is JArray || node["behavior_refs"] is JArray || node["behaviorRefs"] is JValue || node["behavior_refs"] is JValue);
+        }
+
+        private static void AddBehaviorReferenceChildren(JArray children, List<string> refs, Dictionary<string, JObject> behaviorCatalog)
+        {
+            if (children == null || refs == null) return;
+            for (int i = 0; i < refs.Count; i++)
+            {
+                var refId = refs[i];
+                if (string.IsNullOrEmpty(refId)) continue;
+                if (behaviorCatalog == null || !behaviorCatalog.ContainsKey(refId))
+                {
+                    throw new InvalidOperationException($"Behavior reference not found: {refId}");
+                }
+
+                children.Add(new JObject { ["behaviorRef"] = refId });
+            }
         }
 
         private static JArray GetNodeElseChildren(JObject node)
@@ -615,7 +684,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             return null;
         }
 
-        private void WriteExecutionNodeOptions(JsonTextWriter writer, JObject node, string normalizedKind)
+        private void WriteExecutionNodeOptions(JsonTextWriter writer, JObject node, string normalizedKind, Dictionary<string, JToken> conditionCatalog)
         {
             if (string.Equals(normalizedKind, "Repeat", StringComparison.OrdinalIgnoreCase))
             {
@@ -628,7 +697,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 writer.WritePropertyName("MaxIterations");
                 writer.WriteValue(ReadPositiveInt(node, "maxIterations", "max_iterations", "limit", "count"));
 
-                if (TryGetUntilCondition(node, out var untilConditions))
+                if (TryGetUntilCondition(node, conditionCatalog, out var untilConditions))
                 {
                     writer.WritePropertyName("UntilCondition");
                     WritePredicate(writer, untilConditions);
@@ -661,22 +730,34 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             return 1;
         }
 
-        private static bool TryGetUntilCondition(JObject node, out List<JObject> conditions)
+        private static bool TryGetUntilCondition(JObject node, Dictionary<string, JToken> conditionCatalog, out List<JObject> conditions)
         {
             conditions = null;
             if (node == null) return false;
 
             var token = node["until"] ?? node["untilCondition"] ?? node["until_condition"];
-            return TryBuildConditionList(token, out conditions);
+            if (!TryBuildConditionList(token, out conditions))
+            {
+                return false;
+            }
+
+            conditions = ResolveConditionList(conditions, null, null, conditionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return conditions.Count > 0;
         }
 
-        private static bool TryGetNodeCondition(JObject node, out List<JObject> conditions)
+        private static bool TryGetNodeCondition(JObject node, Dictionary<string, JToken> conditionCatalog, out List<JObject> conditions)
         {
             conditions = null;
             if (node == null) return false;
 
             var token = node["condition"] ?? node["conditions"] ?? node["when"];
-            return TryBuildConditionList(token, out conditions);
+            if (!TryBuildConditionList(token, out conditions))
+            {
+                return false;
+            }
+
+            conditions = ResolveConditionList(conditions, null, null, conditionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return conditions.Count > 0;
         }
 
         private static bool TryBuildConditionList(JToken token, out List<JObject> conditions)
@@ -747,8 +828,407 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             return catalog;
         }
 
-        private static JObject ResolveBehaviorReference(JObject node, Dictionary<string, JObject> behaviorCatalog, ref string sourceKind, ref string sourceId, ref string sourcePath)
+        private static Dictionary<string, JToken> BuildFragmentCatalog(params Dictionary<string, JToken>[] sources)
         {
+            var catalog = new Dictionary<string, JToken>(StringComparer.OrdinalIgnoreCase);
+            if (sources == null) return catalog;
+
+            for (int i = 0; i < sources.Length; i++)
+            {
+                var source = sources[i];
+                if (source == null) continue;
+
+                foreach (var kvp in source)
+                {
+                    if (string.IsNullOrEmpty(kvp.Key) || kvp.Value == null) continue;
+                    catalog[kvp.Key] = kvp.Value;
+                }
+            }
+
+            return catalog;
+        }
+
+        private static List<JObject> ResolveConditionList(
+            List<JObject> inlineConditions,
+            List<string> conditionRefs,
+            List<string> condition_refs,
+            Dictionary<string, JToken> catalog,
+            HashSet<string> resolving)
+        {
+            var result = new List<JObject>();
+            AddReferencedConditions(result, conditionRefs, catalog, resolving);
+            AddReferencedConditions(result, condition_refs, catalog, resolving);
+
+            if (inlineConditions != null)
+            {
+                for (int i = 0; i < inlineConditions.Count; i++)
+                {
+                    AddCondition(result, inlineConditions[i], catalog, resolving);
+                }
+            }
+
+            return result;
+        }
+
+        private static void AddReferencedConditions(List<JObject> result, List<string> refs, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            if (refs == null) return;
+            for (int i = 0; i < refs.Count; i++)
+            {
+                AddConditionRef(result, refs[i], catalog, resolving);
+            }
+        }
+
+        private static void AddCondition(List<JObject> result, JObject condition, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            if (condition == null) return;
+
+            var refId = GetFragmentReferenceId(condition, "conditionRef", "conditionId", "conditionGroup", "conditionGroupId");
+            if (!string.IsNullOrEmpty(refId))
+            {
+                AddConditionRef(result, refId, catalog, resolving);
+                return;
+            }
+
+            result.Add(NormalizeConditionNode(condition, catalog, resolving));
+        }
+
+        private static JObject NormalizeConditionNode(JObject condition, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            var normalized = (JObject)condition.DeepClone();
+            var type = normalized["type"]?.ToString();
+            if (!IsKind(type, "all", "and", "any", "or", "not"))
+            {
+                return normalized;
+            }
+
+            var inlineItems = ReadConditionItems(normalized);
+            var conditionRefs = ReadStringList(normalized, "conditionRefs");
+            var conditionRefsSnake = ReadStringList(normalized, "condition_refs");
+            var mergedItems = ResolveConditionList(inlineItems, conditionRefs, conditionRefsSnake, catalog, resolving);
+
+            RemoveProperties(normalized, "conditionRefs", "condition_refs", "conditions", "condition", "item");
+            normalized["items"] = new JArray(mergedItems);
+            return normalized;
+        }
+
+        private static void AddConditionRef(List<JObject> result, string refId, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            var fragment = BeginResolveFragment(refId, catalog, resolving, "condition group");
+            if (fragment == null) return;
+
+            try
+            {
+                if (fragment is JArray arr)
+                {
+                    foreach (var item in arr)
+                    {
+                        if (item is JObject obj)
+                        {
+                            AddCondition(result, obj, catalog, resolving);
+                        }
+                    }
+                    return;
+                }
+
+                if (fragment is JObject single)
+                {
+                    if (TryReadObjectList(single, out var items, "conditions", "items"))
+                    {
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            AddCondition(result, items[i], catalog, resolving);
+                        }
+                        return;
+                    }
+
+                    AddCondition(result, single, catalog, resolving);
+                }
+            }
+            finally
+            {
+                resolving.Remove(refId);
+            }
+        }
+
+        private static List<JObject> ResolveActionList(
+            List<JObject> inlineActions,
+            List<string> actionRefs,
+            List<string> action_refs,
+            Dictionary<string, JToken> catalog,
+            HashSet<string> resolving)
+        {
+            var result = new List<JObject>();
+            AddReferencedActions(result, actionRefs, catalog, resolving);
+            AddReferencedActions(result, action_refs, catalog, resolving);
+
+            if (inlineActions != null)
+            {
+                for (int i = 0; i < inlineActions.Count; i++)
+                {
+                    AddAction(result, inlineActions[i], catalog, resolving);
+                }
+            }
+
+            return result;
+        }
+
+        private static void AddReferencedActions(List<JObject> result, List<string> refs, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            if (refs == null) return;
+            for (int i = 0; i < refs.Count; i++)
+            {
+                AddActionRef(result, refs[i], catalog, resolving);
+            }
+        }
+
+        private static void AddAction(List<JObject> result, JObject action, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            if (action == null) return;
+
+            var resolved = ResolveAction(action, catalog, resolving);
+            if (resolved == null) return;
+
+            if (IsCompositeAction(resolved))
+            {
+                var inlineItems = ReadActionItems(resolved);
+                var actionRefs = ReadStringList(resolved, "actionRefs");
+                var actionRefsSnake = ReadStringList(resolved, "action_refs");
+                result.AddRange(ResolveActionList(inlineItems, actionRefs, actionRefsSnake, catalog, resolving));
+                return;
+            }
+
+            result.Add(resolved);
+        }
+
+        private static JObject ResolveAction(JObject action, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            if (action == null) return null;
+
+            var refId = GetFragmentReferenceId(action, "actionRef", "actionId", "actionGroup", "actionGroupId");
+            if (string.IsNullOrEmpty(refId))
+            {
+                return NormalizeActionNode(action, catalog, resolving);
+            }
+
+            var fragment = BeginResolveFragment(refId, catalog, resolving, "action group");
+            try
+            {
+                if (fragment is JObject obj)
+                {
+                    if (TryReadObjectList(obj, out var items, "actions", "items"))
+                    {
+                        if (items.Count != 1)
+                        {
+                            throw new InvalidOperationException($"Action reference must resolve to exactly one action in this context: {refId}");
+                        }
+
+                        return ResolveAction(items[0], catalog, resolving);
+                    }
+
+                    return (JObject)obj.DeepClone();
+                }
+
+                if (fragment is JArray arr && arr.Count == 1 && arr[0] is JObject single)
+                {
+                    return ResolveAction(single, catalog, resolving);
+                }
+            }
+            finally
+            {
+                resolving.Remove(refId);
+            }
+
+            throw new InvalidOperationException($"Action reference must resolve to one action: {refId}");
+        }
+
+        private static void AddActionRef(List<JObject> result, string refId, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            var fragment = BeginResolveFragment(refId, catalog, resolving, "action group");
+            if (fragment == null) return;
+
+            try
+            {
+                if (fragment is JArray arr)
+                {
+                    foreach (var item in arr)
+                    {
+                        if (item is JObject obj)
+                        {
+                            AddAction(result, obj, catalog, resolving);
+                        }
+                    }
+                    return;
+                }
+
+                if (fragment is JObject single)
+                {
+                    if (TryReadObjectList(single, out var items, "actions", "items"))
+                    {
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            AddAction(result, items[i], catalog, resolving);
+                        }
+                        return;
+                    }
+
+                    AddAction(result, single, catalog, resolving);
+                }
+            }
+            finally
+            {
+                resolving.Remove(refId);
+            }
+        }
+
+        private static JObject NormalizeActionNode(JObject action, Dictionary<string, JToken> catalog, HashSet<string> resolving)
+        {
+            var normalized = (JObject)action.DeepClone();
+            if (!IsCompositeAction(normalized))
+            {
+                return normalized;
+            }
+
+            var inlineItems = ReadActionItems(normalized);
+            var actionRefs = ReadStringList(normalized, "actionRefs");
+            var actionRefsSnake = ReadStringList(normalized, "action_refs");
+            var mergedItems = ResolveActionList(inlineItems, actionRefs, actionRefsSnake, catalog, resolving);
+
+            RemoveProperties(normalized, "actionRefs", "action_refs", "actions");
+            normalized["items"] = new JArray(mergedItems);
+            return normalized;
+        }
+
+        private static bool IsCompositeAction(JObject action)
+        {
+            var type = action?["type"]?.ToString();
+            return IsKind(type, "seq", "sequence");
+        }
+
+        private static List<JObject> ReadActionItems(JObject action)
+        {
+            var items = new List<JObject>();
+            if (TryReadObjectList(action, out var fromList, "items", "actions"))
+            {
+                items.AddRange(fromList);
+            }
+
+            return items;
+        }
+
+        private static List<string> ReadStringList(JObject obj, params string[] aliases)
+        {
+            var result = new List<string>();
+            if (obj == null || aliases == null) return result;
+
+            for (int i = 0; i < aliases.Length; i++)
+            {
+                if (!obj.TryGetValue(aliases[i], StringComparison.OrdinalIgnoreCase, out var token)) continue;
+
+                if (token is JArray arr)
+                {
+                    foreach (var item in arr)
+                    {
+                        var value = item?.ToString();
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            result.Add(value);
+                        }
+                    }
+                }
+                else
+                {
+                    var value = token?.ToString();
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        result.Add(value);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static void RemoveProperties(JObject obj, params string[] names)
+        {
+            if (obj == null || names == null) return;
+            for (int i = 0; i < names.Length; i++)
+            {
+                obj.Remove(names[i]);
+            }
+        }
+
+        private static JToken BeginResolveFragment(string refId, Dictionary<string, JToken> catalog, HashSet<string> resolving, string kind)
+        {
+            if (string.IsNullOrEmpty(refId)) return null;
+            if (catalog == null || !catalog.TryGetValue(refId, out var fragment) || fragment == null)
+            {
+                throw new InvalidOperationException($"{kind} reference not found: {refId}");
+            }
+
+            if (!resolving.Add(refId))
+            {
+                throw new InvalidOperationException($"Cyclic {kind} reference detected: {refId}");
+            }
+
+            return fragment.DeepClone();
+        }
+
+        private static string GetFragmentReferenceId(JObject obj, params string[] aliases)
+        {
+            if (obj == null || aliases == null) return null;
+            for (int i = 0; i < aliases.Length; i++)
+            {
+                if (obj.TryGetValue(aliases[i], StringComparison.OrdinalIgnoreCase, out var token))
+                {
+                    return token?.ToString();
+                }
+            }
+
+            return obj["ref"]?.ToString();
+        }
+
+        private static bool TryReadObjectList(JObject obj, out List<JObject> items, params string[] aliases)
+        {
+            items = null;
+            if (obj == null || aliases == null) return false;
+
+            for (int i = 0; i < aliases.Length; i++)
+            {
+                if (!obj.TryGetValue(aliases[i], StringComparison.OrdinalIgnoreCase, out var token)) continue;
+
+                items = new List<JObject>();
+                if (token is JArray arr)
+                {
+                    foreach (var item in arr)
+                    {
+                        if (item is JObject child)
+                        {
+                            items.Add(child);
+                        }
+                    }
+                }
+                else if (token is JObject child)
+                {
+                    items.Add(child);
+                }
+
+                return items.Count > 0;
+            }
+
+            return false;
+        }
+
+        private static JObject ResolveBehaviorReference(
+            JObject node,
+            Dictionary<string, JObject> behaviorCatalog,
+            HashSet<string> behaviorResolving,
+            ref string sourceKind,
+            ref string sourceId,
+            ref string sourcePath,
+            out string resolvedBehaviorId)
+        {
+            resolvedBehaviorId = null;
             var behaviorId = GetBehaviorReferenceId(node);
             if (string.IsNullOrEmpty(behaviorId))
                 return node;
@@ -758,10 +1238,24 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 throw new InvalidOperationException($"Behavior reference not found: {behaviorId}");
             }
 
+            if (behaviorResolving != null && !behaviorResolving.Add(behaviorId))
+            {
+                throw new InvalidOperationException($"Cyclic behavior reference detected: {behaviorId}");
+            }
+
+            resolvedBehaviorId = behaviorId;
             sourceKind = "behavior";
             sourceId = behaviorId;
             sourcePath = $"behavior:{behaviorId}";
             return (JObject)root.DeepClone();
+        }
+
+        private static void EndResolveBehaviorReference(string behaviorId, HashSet<string> behaviorResolving)
+        {
+            if (!string.IsNullOrEmpty(behaviorId) && behaviorResolving != null)
+            {
+                behaviorResolving.Remove(behaviorId);
+            }
         }
 
         private static string GetBehaviorReferenceId(JObject node)
@@ -773,8 +1267,9 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 ?? node["ref"]?.ToString();
         }
 
-        private void WriteAction(JsonTextWriter writer, JObject action, Dictionary<string, ActionSourceDefJson> actionSchemas)
+        private void WriteAction(JsonTextWriter writer, JObject action, Dictionary<string, ActionSourceDefJson> actionSchemas, Dictionary<string, JToken> actionCatalog)
         {
+            action = ResolveAction(action, actionCatalog, new HashSet<string>(StringComparer.OrdinalIgnoreCase)) ?? action;
             var type = action["type"]?.ToString();
             if (string.IsNullOrEmpty(type)) return;
 
@@ -866,6 +1361,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             return string.Equals(name, "kind", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(name, "action", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(name, "children", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(name, "behaviorRefs", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(name, "behavior_refs", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(name, "items", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(name, "child", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(name, "then", StringComparison.OrdinalIgnoreCase) ||
@@ -1151,6 +1648,10 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             public Dictionary<string, ActionSourceDefJson> actions;
             public Dictionary<string, ConditionSourceDefJson> conditions;
             public Dictionary<string, BehaviorSourceDefJson> behaviors;
+            public Dictionary<string, JToken> conditionGroups;
+            public Dictionary<string, JToken> condition_groups;
+            public Dictionary<string, JToken> actionGroups;
+            public Dictionary<string, JToken> action_groups;
             public List<TriggerSourceTriggerJson> triggers;
         }
 
@@ -1238,6 +1739,10 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             public string comment;
             public List<JObject> conditions;
             public List<JObject> actions;
+            public List<string> conditionRefs;
+            public List<string> condition_refs;
+            public List<string> actionRefs;
+            public List<string> action_refs;
             public JObject behavior;
             public List<JObject> executables;
             public JToken execution;

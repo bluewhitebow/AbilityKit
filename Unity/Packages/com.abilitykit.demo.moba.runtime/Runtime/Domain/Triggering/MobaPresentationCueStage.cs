@@ -8,6 +8,13 @@ namespace AbilityKit.Demo.Moba.Triggering
         BeforeAction = 3,
         Executed = 4,
         Interrupted = 5,
-        Skipped = 6
+        Skipped = 6,
+        Started = 20,
+        Ticked = 21,
+        Refreshed = 22,
+        StackChanged = 23,
+        Expired = 24,
+        Removed = 25,
+        Completed = 26
     }
 }

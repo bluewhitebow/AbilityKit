@@ -80,7 +80,60 @@ namespace AbilityKit.Demo.Shooter.View
                 endpoint.Host,
                 endpoint.Port,
                 runtime,
-                presentation,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
+                startGame,
+                sessionToken,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientNetworkLaunchResult> CreateReadyStartAndSubscribeAsync(
+            ShooterClientNetworkEndpoint endpoint,
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            return CreateReadyStartAndSubscribeAsync(
+                endpoint.Host,
+                endpoint.Port,
+                runtime,
+                presentationSession,
+                startGame,
+                sessionToken,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientNetworkLaunchResult> CreateReadyStartAndSubscribeAsync(
+            string host,
+            int port,
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationFacade presentation,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            return CreateReadyStartAndSubscribeAsync(
+                host,
+                port,
+                runtime,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
                 startGame,
                 sessionToken,
                 launchSpec,
@@ -94,7 +147,7 @@ namespace AbilityKit.Demo.Shooter.View
             string host,
             int port,
             IShooterBattleRuntimePort runtime,
-            ShooterPresentationFacade presentation,
+            ShooterPresentationSessionContext presentationSession,
             ShooterStartGamePayload startGame,
             string sessionToken,
             ShooterRoomLaunchSpec launchSpec,
@@ -109,7 +162,7 @@ namespace AbilityKit.Demo.Shooter.View
             var launcher = new ShooterClientGatewayLauncher(_gatewayConnection);
             var launched = await launcher.CreateReadyStartAndSubscribeAsync(
                 runtime,
-                presentation,
+                presentationSession,
                 startGame,
                 sessionToken,
                 launchSpec,
@@ -139,7 +192,64 @@ namespace AbilityKit.Demo.Shooter.View
                 endpoint.Host,
                 endpoint.Port,
                 runtime,
-                presentation,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
+                startGame,
+                sessionToken,
+                roomId,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientNetworkLaunchResult> JoinReadyStartAndSubscribeAsync(
+            ShooterClientNetworkEndpoint endpoint,
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            string roomId,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            return JoinReadyStartAndSubscribeAsync(
+                endpoint.Host,
+                endpoint.Port,
+                runtime,
+                presentationSession,
+                startGame,
+                sessionToken,
+                roomId,
+                launchSpec,
+                playerId,
+                tickRate,
+                timeout,
+                cancellationToken);
+        }
+
+        public Task<ShooterClientNetworkLaunchResult> JoinReadyStartAndSubscribeAsync(
+            string host,
+            int port,
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationFacade presentation,
+            ShooterStartGamePayload startGame,
+            string sessionToken,
+            string roomId,
+            ShooterRoomLaunchSpec launchSpec,
+            uint playerId,
+            int tickRate = ShooterGameplay.DefaultTickRate,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            return JoinReadyStartAndSubscribeAsync(
+                host,
+                port,
+                runtime,
+                ShooterPresentationSessionContext.CreateFromFacade(presentation),
                 startGame,
                 sessionToken,
                 roomId,
@@ -154,7 +264,7 @@ namespace AbilityKit.Demo.Shooter.View
             string host,
             int port,
             IShooterBattleRuntimePort runtime,
-            ShooterPresentationFacade presentation,
+            ShooterPresentationSessionContext presentationSession,
             ShooterStartGamePayload startGame,
             string sessionToken,
             string roomId,
@@ -170,7 +280,7 @@ namespace AbilityKit.Demo.Shooter.View
             var launcher = new ShooterClientGatewayLauncher(_gatewayConnection);
             var launched = await launcher.JoinReadyStartAndSubscribeAsync(
                 runtime,
-                presentation,
+                presentationSession,
                 startGame,
                 sessionToken,
                 roomId,

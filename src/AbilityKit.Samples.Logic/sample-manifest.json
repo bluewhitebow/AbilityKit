@@ -50,6 +50,13 @@
       "tags": [ "flow", "package-api", "continuous-drive", "web" ]
     },
     {
+      "id": "triggering/config-composition-template",
+      "type": "AbilityKit.Samples.Logic.Samples.Triggering.TriggerConfigCompositionAndTemplate",
+      "order": 400,
+      "title": "Trigger Config Composition And Template",
+      "tags": [ "triggering", "config", "template", "package-api", "web" ]
+    },
+    {
       "id": "combat/entity-keyed-index",
       "type": "AbilityKit.Samples.Logic.Samples.Combat.CombatEntityKeyedIndex",
       "order": 700,

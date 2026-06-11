@@ -20,6 +20,8 @@ internal sealed class ScriptedShooterRoomClient : IShooterRoomGatewayRoomClient
 
     public ShooterGatewayStateSyncSubscriptionRequest LastSubscribeRequest { get; private set; }
 
+    public ShooterGatewayFullStateSyncRequest LastFullStateSyncRequest { get; private set; }
+
     public ShooterGatewayRoomJoinKind JoinKind { get; set; } = ShooterGatewayRoomJoinKind.TeamLobby;
 
     public string JoinBattleId { get; set; } = "battle-prestart";
@@ -77,5 +79,12 @@ internal sealed class ScriptedShooterRoomClient : IShooterRoomGatewayRoomClient
         LastSubscribeRequest = request;
         Calls.Add("subscribe:" + request.RoomId + ":" + request.BattleId);
         return Task.FromResult(new ShooterGatewayStateSyncSubscriptionResult(true, "subscribed"));
+    }
+
+    public Task<ShooterGatewayFullStateSyncRequestResult> RequestFullStateSyncAsync(ShooterGatewayFullStateSyncRequest request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        LastFullStateSyncRequest = request;
+        Calls.Add("request-full-state:" + request.RoomId + ":" + request.BattleId + ":" + request.Reason);
+        return Task.FromResult(new ShooterGatewayFullStateSyncRequestResult(true, true, "accepted", 123456789L));
     }
 }

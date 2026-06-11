@@ -1,6 +1,7 @@
 using AbilityKit.Orleans.Contracts.Battle;
 using AbilityKit.Orleans.Gateway.Abstractions;
 using AbilityKit.Protocol.Room;
+using Microsoft.Extensions.Logging;
 using Orleans;
 
 namespace AbilityKit.Orleans.Gateway.Handlers;
@@ -13,12 +14,16 @@ public sealed class SubscribeStateSyncHandler : GatewayRequestHandlerBase
 {
     private readonly IClusterClient _clusterClient;
     private readonly IGatewaySessionRegistry _sessionRegistry;
+    private readonly ILogger<SubscribeStateSyncHandler> _logger;
+
     public SubscribeStateSyncHandler(
         IClusterClient clusterClient,
-        IGatewaySessionRegistry sessionRegistry)
+        IGatewaySessionRegistry sessionRegistry,
+        ILogger<SubscribeStateSyncHandler> logger)
     {
         _clusterClient = clusterClient;
         _sessionRegistry = sessionRegistry;
+        _logger = logger;
     }
 
     public override async ValueTask<GatewayResponse> HandleAsync(
@@ -43,17 +48,17 @@ public sealed class SubscribeStateSyncHandler : GatewayRequestHandlerBase
                 return GatewayResponse.Error(request.Seq, GatewayStatusCode.BadRequest);
             }
 
-            var roomKey = string.IsNullOrWhiteSpace(req.RoomId) ? req.BattleId : req.RoomId;
-            var observerKey = $"{accountId}:{roomKey}";
-            var observerGrain = _clusterClient.GetGrain<IStateSyncObserverGrain>(observerKey);
-
-            await observerGrain.SubscribeAsync(req.BattleId);
-
             context.AccountId = accountId;
             if (context.ConnectionId > 0)
             {
                 _sessionRegistry.BindAccount(accountId, context.ConnectionId);
             }
+
+            var roomKey = string.IsNullOrWhiteSpace(req.RoomId) ? req.BattleId : req.RoomId;
+            var observerKey = $"{accountId}:{roomKey}";
+            var observerGrain = _clusterClient.GetGrain<IStateSyncObserverGrain>(observerKey);
+
+            await observerGrain.SubscribeAsync(req.BattleId);
 
             var wire = new WireSubscribeStateSyncRes
             {
@@ -63,8 +68,9 @@ public sealed class SubscribeStateSyncHandler : GatewayRequestHandlerBase
             var responsePayload = WireRoomGatewayBinary.Serialize(in wire);
             return GatewayResponse.Ok(request.Seq, responsePayload.ToArray());
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Subscribe state sync failed. BattleId={BattleId}, RoomId={RoomId}, ConnectionId={ConnectionId}", req.BattleId, req.RoomId, context.ConnectionId);
             return GatewayResponse.Error(request.Seq, GatewayStatusCode.InternalError);
         }
     }

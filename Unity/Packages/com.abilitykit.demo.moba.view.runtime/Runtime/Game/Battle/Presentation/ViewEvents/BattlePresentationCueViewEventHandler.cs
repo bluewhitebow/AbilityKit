@@ -54,13 +54,13 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         {
             var requestKey = GetRequestKey(in data);
             if (string.IsNullOrEmpty(requestKey)) return;
-
-            if (ShouldStart(data.Stage))
+ 
+            if (ShouldStart(data.Stage) || ShouldKeepActive(data.Stage))
             {
                 Play(requestKey, in data);
                 return;
             }
-
+ 
             if (ShouldStop(data.Stage))
             {
                 Stop(requestKey, data.Stage);
@@ -94,14 +94,25 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         {
             return stage == PresentationCueStage.ConditionPassed
                 || stage == PresentationCueStage.BeforeAction
-                || stage == PresentationCueStage.Executed;
+                || stage == PresentationCueStage.Executed
+                || stage == PresentationCueStage.Started;
         }
 
+        private static bool ShouldKeepActive(PresentationCueStage stage)
+        {
+            return stage == PresentationCueStage.Ticked
+                || stage == PresentationCueStage.Refreshed
+                || stage == PresentationCueStage.StackChanged;
+        }
+ 
         private static bool ShouldStop(PresentationCueStage stage)
         {
             return stage == PresentationCueStage.ConditionFailed
                 || stage == PresentationCueStage.Interrupted
-                || stage == PresentationCueStage.Skipped;
+                || stage == PresentationCueStage.Skipped
+                || stage == PresentationCueStage.Expired
+                || stage == PresentationCueStage.Removed
+                || stage == PresentationCueStage.Completed;
         }
 
         private static int ResolveVfxId(in PresentationCueData data)
@@ -165,8 +176,9 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
 
         private static string GetRequestKey(in PresentationCueData data)
         {
+            if (!string.IsNullOrWhiteSpace(data.InstanceKey)) return data.InstanceKey;
             if (!string.IsNullOrWhiteSpace(data.RequestKey)) return data.RequestKey;
-
+ 
             if (data.TriggerId > 0)
             {
                 return $"cue:{data.TriggerId}:{data.ActionIndex}:{data.Order}:{data.SourceActorId}:{data.TargetActorId}";

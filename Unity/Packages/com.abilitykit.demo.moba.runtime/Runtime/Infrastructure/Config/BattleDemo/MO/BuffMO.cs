@@ -76,6 +76,7 @@ namespace AbilityKit.Demo.Moba.Config.BattleDemo.MO
         public IReadOnlyList<int> OnRemoveEffects { get; }
         public IReadOnlyList<int> OnIntervalEffects { get; }
         public int IntervalMs { get; }
+        public int PresentationTemplateId { get; }
         public BuffStackingPolicy StackingPolicy { get; }
         public BuffRefreshPolicy RefreshPolicy { get; }
         public int MaxStacks { get; }
@@ -95,6 +96,7 @@ namespace AbilityKit.Demo.Moba.Config.BattleDemo.MO
             OnRemoveEffects = dto.OnRemoveEffects ?? Array.Empty<int>();
             OnIntervalEffects = dto.OnIntervalEffects ?? Array.Empty<int>();
             IntervalMs = dto.IntervalMs;
+            PresentationTemplateId = dto.PresentationTemplateId;
             StackingPolicy = (BuffStackingPolicy)dto.StackingPolicy;
             RefreshPolicy = (BuffRefreshPolicy)dto.RefreshPolicy;
             MaxStacks = dto.MaxStacks;
