@@ -357,6 +357,14 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.abilitykit.game.view.runtime": {
+      "version": "file:com.abilitykit.game.view.runtime",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.abilitykit.core": "0.0.1"
+      }
+    },
     "com.abilitykit.gameframework": {
       "version": "file:com.abilitykit.gameframework",
       "depth": 0,

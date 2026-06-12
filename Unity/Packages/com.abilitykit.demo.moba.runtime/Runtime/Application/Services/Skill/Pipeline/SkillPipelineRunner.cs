@@ -507,22 +507,29 @@ namespace AbilityKit.Demo.Moba.Services
             }
         }
 
+        // 统一的 WorldServices 安全解析入口：空容器返回 null，解析异常被隔离并落日志，避免在运行时各处重复 try/catch。
+        private static T SafeResolve<T>(in Entry entry, string failContext) where T : class
+        {
+            var services = entry.Request.WorldServices;
+            if (services == null) return null;
+
+            try
+            {
+                return services.Resolve<T>();
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[SkillPipelineRunner] resolve {typeof(T).Name} failed ({failContext})");
+                return null;
+            }
+        }
+
         private static void TryEndSkillRuntime(in Entry entry, MobaSkillRuntimeEndReason reason)
         {
             var handle = entry.TriggerContext != null ? entry.TriggerContext.RuntimeHandle : default;
             if (!handle.IsValid) return;
 
-            MobaSkillCastRuntimeService runtimes = null;
-            try
-            {
-                runtimes = entry.Request.WorldServices != null ? entry.Request.WorldServices.Resolve<MobaSkillCastRuntimeService>() : null;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, $"[SkillPipelineRunner] resolve MobaSkillCastRuntimeService failed (actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, handle={handle.RuntimeId}:{handle.Generation}, reason={reason})");
-                runtimes = null;
-            }
-
+            var runtimes = SafeResolve<MobaSkillCastRuntimeService>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, handle={handle.RuntimeId}:{handle.Generation}, reason={reason}");
             if (runtimes == null) return;
             runtimes.MarkPipelineEnded(in handle, reason);
         }
@@ -532,17 +539,7 @@ namespace AbilityKit.Demo.Moba.Services
             var handle = entry.TriggerContext != null ? entry.TriggerContext.RuntimeHandle : default;
             if (!handle.IsValid) return;
 
-            MobaSkillCastRuntimeService runtimes = null;
-            try
-            {
-                runtimes = entry.Request.WorldServices != null ? entry.Request.WorldServices.Resolve<MobaSkillCastRuntimeService>() : null;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, $"[SkillPipelineRunner] resolve MobaSkillCastRuntimeService failed (actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, handle={handle.RuntimeId}:{handle.Generation}, reason={reason})");
-                runtimes = null;
-            }
-
+            var runtimes = SafeResolve<MobaSkillCastRuntimeService>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, handle={handle.RuntimeId}:{handle.Generation}, reason={reason}");
             if (runtimes == null) return;
             runtimes.Cancel(in handle, reason);
         }
@@ -568,17 +565,7 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (rootId == 0) return;
 
-            MobaTraceRegistry trace = null;
-            try
-            {
-                trace = entry.Request.WorldServices != null ? entry.Request.WorldServices.Resolve<MobaTraceRegistry>() : null;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, "[SkillPipelineRunner] resolve MobaTraceRegistry failed");
-                trace = null;
-            }
-
+            var trace = SafeResolve<MobaTraceRegistry>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, rootId={rootId}");
             if (trace == null) return;
 
             try
@@ -643,16 +630,8 @@ namespace AbilityKit.Demo.Moba.Services
 
         private static int ResolveCurrentFrame(in Entry entry, int defaultFrame)
         {
-            try
-            {
-                var time = entry.Request.WorldServices != null ? entry.Request.WorldServices.Resolve<IFrameTime>() : null;
-                return time != null ? time.Frame.Value : defaultFrame;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, $"[SkillPipelineRunner] resolve current frame failed (actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, defaultFrame={defaultFrame})");
-                return defaultFrame;
-            }
+            var time = SafeResolve<IFrameTime>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}, defaultFrame={defaultFrame}");
+            return time != null ? time.Frame.Value : defaultFrame;
         }
 
         public void CancelAll()
@@ -777,16 +756,6 @@ namespace AbilityKit.Demo.Moba.Services
                     entry.Context.SetFrame(ResolveCurrentFrame(in entry, entry.StartFrame));
                     entry.Context.AdvanceTime(deltaTime);
                     p.Tick(deltaTime);
-
-                    // var instanceId = entry.TriggerContext != null ? entry.TriggerContext.SourceContextId : 0L;
-                    // var stageStr = entry.Stage == EntryStage.PreCast ? "PreCast" : "Cast";
-                    // _logger.LogSkillTick(
-                    //     entry.Context.CasterActorId,
-                    //     entry.Context.SkillId,
-                    //     instanceId,
-                    //     deltaTime,
-                    //     entry.Context.ElapsedTime,
-                    //     $"{stageStr}_{p.State}");
                 }
 
                 if (p.State != EAbilityPipelineState.Executing)
@@ -913,37 +882,12 @@ namespace AbilityKit.Demo.Moba.Services
 
         private static IMobaBattleExceptionPolicy ResolveExceptions(in Entry entry)
         {
-            try
-            {
-                return entry.Request.WorldServices != null
-                    ? entry.Request.WorldServices.Resolve<IMobaBattleExceptionPolicy>()
-                    : null;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, $"[SkillPipelineRunner] resolve IMobaBattleExceptionPolicy failed (actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId})");
-                return null;
-            }
+            return SafeResolve<IMobaBattleExceptionPolicy>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}");
         }
 
         private static IMobaBattleDiagnosticsService ResolveDiagnostics(in Entry entry)
         {
-            try
-            {
-                return entry.Request.WorldServices != null
-                    ? entry.Request.WorldServices.Resolve<IMobaBattleDiagnosticsService>()
-                    : null;
-            }
-            catch (Exception ex)
-            {
-                Log.Exception(ex, $"[SkillPipelineRunner] resolve IMobaBattleDiagnosticsService failed (actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId})");
-                return null;
-            }
-        }
-
-        private static void ReportCleanupException(IMobaBattleDiagnosticsService diagnostics, Exception ex, int actorId, string reason)
-        {
-            ReportCleanupException(null, diagnostics, ex, actorId, 0, 0L, reason);
+            return SafeResolve<IMobaBattleDiagnosticsService>(in entry, $"actor={entry.Request.CasterActorId}, skill={entry.Request.SkillId}");
         }
 
         private static void ReportCleanupException(IMobaBattleExceptionPolicy exceptions, IMobaBattleDiagnosticsService diagnostics, Exception ex, int actorId, int skillId, long runtimeId, string reason)

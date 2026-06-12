@@ -41,7 +41,7 @@ namespace AbilityKit.Game.Flow
             if (!ctx.Entry.DebugEnabled) return;
 
             var flowDomain = ctx.Entry.Get<GameFlowDomain>();
-            if (flowDomain == null || flowDomain.CurrentPhase != GameFlowDomain.RootState.Battle) return;
+            if (flowDomain == null || flowDomain.CurrentPhase != MobaRootState.Battle) return;
 
             GUILayout.BeginArea(new Rect(10, 10, 170, 110), GUI.skin.window);
             if (GUILayout.Button("Exit Battle", GUILayout.Height(34)))

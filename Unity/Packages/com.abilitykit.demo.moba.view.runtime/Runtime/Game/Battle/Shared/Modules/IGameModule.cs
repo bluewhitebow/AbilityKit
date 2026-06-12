@@ -1,30 +1,25 @@
 using System.Collections.Generic;
+using GameViewModules = AbilityKit.Game.View.Modules;
 
 namespace AbilityKit.Game.Flow.Modules
 {
-    public interface IGameModule<TContext>
+    public interface IGameModule<TContext> : GameViewModules.IGameModule<TContext>
     {
-        void OnAttach(in TContext ctx);
-        void OnDetach(in TContext ctx);
     }
 
-    public interface IGameModuleTick<TContext>
+    public interface IGameModuleTick<TContext> : GameViewModules.IGameModuleTick<TContext>
     {
-        void Tick(in TContext ctx, float deltaTime);
     }
 
-    public interface IGameModuleRebind<TContext>
+    public interface IGameModuleRebind<TContext> : GameViewModules.IGameModuleRebind<TContext>
     {
-        void RebindAll(in TContext ctx);
     }
 
-    public interface IGameModuleId
+    public interface IGameModuleId : GameViewModules.IGameModuleId
     {
-        string Id { get; }
     }
 
-    public interface IGameModuleDependencies
+    public interface IGameModuleDependencies : GameViewModules.IGameModuleDependencies
     {
-        IEnumerable<string> Dependencies { get; }
     }
 }

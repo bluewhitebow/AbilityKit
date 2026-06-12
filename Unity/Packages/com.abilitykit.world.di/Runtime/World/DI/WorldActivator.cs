@@ -113,6 +113,20 @@ namespace AbilityKit.Ability.World.DI
             return instance;
         }
 
+        /// <summary>
+        /// Resolve and assign all <c>[WorldInject]</c> fields/properties on an already-created instance.
+        /// Intended for tests: build an instance manually (e.g. via parameterless ctor), then push mocks
+        /// in through the same injection path the container uses at runtime.
+        /// </summary>
+        internal static void InjectMembersInto(object instance, IWorldResolver resolver)
+        {
+            if (instance == null) throw new ArgumentNullException(nameof(instance));
+            if (resolver == null) throw new ArgumentNullException(nameof(resolver));
+
+            var plan = s_planCache.GetOrAdd(instance.GetType(), BuildPlan);
+            InjectMembers(instance, plan.InjectMembers, resolver);
+        }
+
         private static void InjectMembers(object instance, InjectMemberPlan[] members, IWorldResolver resolver)
         {
             if (instance == null) return;

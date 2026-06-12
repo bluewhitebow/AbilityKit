@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
+using AbilityKit.Network.Runtime;
 using AbilityKit.Protocol.Shooter;
 
 namespace AbilityKit.Demo.Shooter.View
@@ -12,8 +13,7 @@ namespace AbilityKit.Demo.Shooter.View
     {
         private readonly ShooterPresentationSessionContext _presentationSession;
         private readonly ShooterPresentationFacade _presentation;
-        private readonly ShooterClientFrameSyncCoordinator _frameSync;
-        private readonly ShooterClientInputCoordinator _input;
+        private readonly IShooterClientSyncController _syncController;
 
         public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationFacade presentation, int tickRate)
             : this(runtime, presentation, tickRate, (ShooterGatewaySnapshotDecoder?)null)
@@ -41,58 +41,107 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         public ShooterClientSession(IShooterBattleRuntimePort runtime, ShooterPresentationSessionContext presentationSession, int tickRate, ShooterGatewaySnapshotDecoder? decoder, IShooterRoomGatewayClient? gateway)
+            : this(runtime, presentationSession, tickRate, decoder, gateway, ShooterClientSyncControllerFactory.DefaultSyncModel)
+        {
+        }
+
+        public ShooterClientSession(
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            int tickRate,
+            ShooterGatewaySnapshotDecoder? decoder,
+            IShooterRoomGatewayClient? gateway,
+            NetworkSyncModel syncModel)
+            : this(runtime, presentationSession, tickRate, decoder, gateway, syncModel, interpolationConfig: null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a session, optionally supplying an <see cref="InterpolationConfig"/>
+        /// for the <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> model. The config is
+        /// ignored by models that do not interpolate; when omitted the interpolation model falls back
+        /// to <see cref="InterpolationConfig.Default"/>.
+        /// </summary>
+        public ShooterClientSession(
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationSessionContext presentationSession,
+            int tickRate,
+            ShooterGatewaySnapshotDecoder? decoder,
+            IShooterRoomGatewayClient? gateway,
+            NetworkSyncModel syncModel,
+            InterpolationConfig? interpolationConfig)
         {
             _presentationSession = presentationSession ?? throw new ArgumentNullException(nameof(presentationSession));
             _presentation = _presentationSession.Presentation;
-            _frameSync = new ShooterClientFrameSyncCoordinator(runtime, _presentation, tickRate, decoder);
-            _input = new ShooterClientInputCoordinator(_frameSync, gateway);
+            _syncController = ShooterClientSyncControllerFactory.Create(syncModel, runtime, _presentation, tickRate, decoder, gateway, interpolationConfig);
         }
 
-        public bool IsStarted => _frameSync.IsStarted;
+        public NetworkSyncModel SyncModel => _syncController.SyncModel;
 
-        public int CurrentFrame => _frameSync.CurrentFrame;
+        public IShooterClientSyncController SyncController => _syncController;
+
+        public bool IsStarted => _syncController.IsStarted;
+
+        public int CurrentFrame => _syncController.CurrentFrame;
 
         public ShooterPresentationSessionContext PresentationSession => _presentationSession;
 
         public ShooterPresentationFacade Presentation => _presentation;
 
-        public ShooterClientFrameSyncController FrameSync => _frameSync.Controller;
+        public ShooterClientFrameSyncController FrameSync => _syncController.FrameSync;
 
-        public ShooterClientFrameSyncCoordinator FrameSyncCoordinator => _frameSync;
+        public ShooterClientFrameSyncCoordinator FrameSyncCoordinator => _syncController.FrameSyncCoordinator;
 
-        public ShooterClientInputCoordinator InputCoordinator => _input;
+        public ShooterClientInputCoordinator InputCoordinator => _syncController.InputCoordinator;
 
-        public ShooterClientReconciliationResult LastReconciliationResult => _frameSync.LastReconciliationResult;
+        public ShooterClientReconciliationResult LastReconciliationResult => _syncController.LastReconciliationResult;
 
-        public bool NeedsFullSnapshotResync => _frameSync.NeedsFullSnapshotResync;
+        public bool NeedsFullSnapshotResync => _syncController.NeedsFullSnapshotResync;
 
-        public ShooterClientRecoveryState RecoveryState => _frameSync.RecoveryState;
+        public ShooterClientRecoveryState RecoveryState => _syncController.RecoveryState;
 
-        public ShooterClientResyncReason LastResyncReason => _frameSync.LastResyncReason;
+        public ShooterClientResyncReason LastResyncReason => _syncController.LastResyncReason;
 
-        public int LastResyncClientFrame => _frameSync.LastResyncClientFrame;
+        public int LastResyncClientFrame => _syncController.LastResyncClientFrame;
 
-        public int LastResyncAuthoritativeFrame => _frameSync.LastResyncAuthoritativeFrame;
+        public int LastResyncAuthoritativeFrame => _syncController.LastResyncAuthoritativeFrame;
 
-        public uint LastResyncClientStateHash => _frameSync.LastResyncClientStateHash;
+        public uint LastResyncClientStateHash => _syncController.LastResyncClientStateHash;
 
-        public uint LastResyncAuthoritativeStateHash => _frameSync.LastResyncAuthoritativeStateHash;
+        public uint LastResyncAuthoritativeStateHash => _syncController.LastResyncAuthoritativeStateHash;
 
-        public bool HasGateway => _input.HasGateway;
+        public bool HasGateway => _syncController.HasGateway;
+
+        /// <summary>
+        /// Reads interpolation playback health when the active sync model interpolates remote state
+        /// (i.e. <see cref="NetworkSyncModel.AuthoritativeInterpolation"/>). Returns <c>false</c> for
+        /// models that do not interpolate, leaving <paramref name="diagnostics"/> at its default.
+        /// </summary>
+        public bool TryGetInterpolationDiagnostics(out InterpolationDiagnostics diagnostics)
+        {
+            if (_syncController is IInterpolationDiagnosticsProvider provider)
+            {
+                diagnostics = provider.GetInterpolationDiagnostics();
+                return true;
+            }
+
+            diagnostics = default;
+            return false;
+        }
 
         public bool StartGame(in ShooterStartGamePayload startGame)
         {
-            return _frameSync.StartGame(in startGame);
+            return _syncController.StartGame(in startGame);
         }
 
         public ShooterClientInputSubmitResult SubmitLocalInput(int playerId, float moveX, float moveY, float aimX, float aimY, bool fire)
         {
-            return _input.SubmitLocalInput(playerId, moveX, moveY, aimX, aimY, fire);
+            return _syncController.SubmitLocalInput(playerId, moveX, moveY, aimX, aimY, fire);
         }
 
         public ShooterClientInputSubmitResult SubmitLocalInput(in ShooterPlayerCommand command)
         {
-            return _input.SubmitLocalInput(in command);
+            return _syncController.SubmitLocalInput(in command);
         }
 
         public Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(
@@ -101,22 +150,22 @@ namespace AbilityKit.Demo.Shooter.View
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
-            return _input.SubmitLocalInputToGatewayAsync(context, command, timeout, cancellationToken);
+            return _syncController.SubmitLocalInputToGatewayAsync(context, command, timeout, cancellationToken);
         }
 
         public ShooterClientFrameTickResult Tick(float deltaTime)
         {
-            return _frameSync.Tick(deltaTime);
+            return _syncController.Tick(deltaTime);
         }
 
         public ShooterClientFrameTickResult CatchUpToFrame(int targetFrame)
         {
-            return _frameSync.CatchUpToFrame(targetFrame);
+            return _syncController.CatchUpToFrame(targetFrame);
         }
 
         public bool TryEnterCatchUp(int authoritativeFrame)
         {
-            return _frameSync.TryEnterCatchUp(authoritativeFrame);
+            return _syncController.TryEnterCatchUp(authoritativeFrame);
         }
 
         public Task<ShooterGatewayFullStateSyncRequestResult> RequestFullSnapshotResyncAsync(
@@ -131,7 +180,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         public ShooterSnapshotApplyResult ApplyGatewayPush(uint opCode, ArraySegment<byte> payload)
         {
-            return _frameSync.ApplyGatewayPush(opCode, payload);
+            return _syncController.ApplyGatewayPush(opCode, payload);
         }
     }
 

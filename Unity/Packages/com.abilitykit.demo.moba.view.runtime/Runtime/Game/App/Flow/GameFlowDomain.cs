@@ -5,6 +5,7 @@ using AbilityKit.World.ECS;
 using AbilityKit.Core.Common.Config;
 using AbilityKit.Core.Common.Log;
 using AbilityKit.Game;
+using AbilityKit.Game.View.Flow;
 using UnityHFSM;
 using UnityEngine;
 
@@ -14,56 +15,31 @@ namespace AbilityKit.Game.Flow
     {
         private readonly GameEntry _entry;
         private readonly GamePhaseContext _ctx;
-
+        private readonly MobaFlowConfiguration _flowConfig;
+        private readonly MobaFlowConditionResolver _conditionResolver;
+        private readonly MobaFlowActionExecutor _actionExecutor;
+ 
         public LayeredJsonSettingsStore Settings { get; } = new LayeredJsonSettingsStore();
 
-        public enum RootState
-        {
-            Boot = 0,
-            Lobby = 1,
-            Battle = 2
-        }
-
-        private enum RootEvent
-        {
-            BootCompleted = 0,
-            EnterBattle = 1,
-            ReturnLobby = 2
-        }
-
-        private enum BattleState
-        {
-            Prepare = 0,
-            Connect = 1,
-            CreateOrJoinWorld = 2,
-            LoadAssets = 3,
-            InMatch = 4,
-            End = 5
-        }
-
-        private enum BattleEvent
-        {
-            PrepareDone = 0,
-            Connected = 1,
-            JoinedWorld = 2,
-            LoadingDone = 3,
-            Ended = 4
-        }
-
         private readonly FlowContext _flowContext;
-        private readonly FlowEventQueue<RootEvent> _rootEvents;
-        private readonly StateMachine<string, RootState, RootEvent> _root;
-        private readonly HfsmFlowRunner<string, RootState, RootEvent> _runner;
+        private readonly FlowEventQueue<MobaRootEvent> _rootEvents;
+        private readonly StateMachine<string, MobaRootState, MobaRootEvent> _root;
+        private readonly HfsmFlowRunner<string, MobaRootState, MobaRootEvent> _runner;
 
-        private readonly List<IGamePhaseFeature> _features = new List<IGamePhaseFeature>(16);
-        private RootState _activeRoot;
-        private BattleState _activeBattle;
+        private readonly PhaseFeatureHost<GamePhaseContext, IGamePhaseFeature> _features;
+        private readonly PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature> _bootFeaturePlan;
+        private readonly PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature> _battleFeaturePlan;
+        private readonly PhaseStateFeatureRegistry<MobaRootState, GamePhaseContext, IGamePhaseFeature> _rootStateBindings;
+        private readonly PhaseStateFeatureRegistry<MobaBattleState, GamePhaseContext, IGamePhaseFeature> _battleStateBindings;
+        private MobaRootState _activeRoot;
+        private MobaBattleState _activeBattle;
         private bool _battleRequested;
         private IBattleBootstrapper _pendingBootstrapper;
+        private Func<BattleStartPlan, AbilityKit.Network.Abstractions.IConnection> _pendingGatewayConnectionFactory;
 
         private BattleSessionFeature _battleSessionFeature;
 
-        private StateMachine<RootState, BattleState, BattleEvent> _battleFsm;
+        private StateMachine<MobaRootState, MobaBattleState, MobaBattleEvent> _battleFsm;
         private bool _battleSessionStarted;
         private bool _battleFirstFrameReceived;
 
@@ -88,19 +64,33 @@ namespace AbilityKit.Game.Flow
             }
 
             _ctx = new GamePhaseContext(_entry, (IEntity)root);
+            _flowConfig = MobaFlowConfiguration.CreateDefault();
+            _conditionResolver = new MobaFlowConditionResolver();
+            _actionExecutor = new MobaFlowActionExecutor();
+            _features = new PhaseFeatureHost<GamePhaseContext, IGamePhaseFeature>(
+                fail: message => Log.Error($"[GameFlowDomain] PhaseFeatureHost: {message}"),
+                initialCapacity: 16,
+                attachFeature: AttachFeatureCore,
+                detachFeature: DetachFeatureCore,
+                tickFeature: TickFeatureCore);
+            _features.AttachAll(in _ctx);
+            _bootFeaturePlan = BuildBootFeaturePlan();
+            _battleFeaturePlan = BuildBattleFeaturePlan();
+            _rootStateBindings = BuildMobaRootStateBindings();
+            _battleStateBindings = BuildMobaBattleStateBindings();
 
             _flowContext = new FlowContext();
-            _rootEvents = new FlowEventQueue<RootEvent>();
-            _root = BuildRootStateMachine();
-            _runner = new HfsmFlowRunner<string, RootState, RootEvent>(_flowContext, _root, _rootEvents);
+            _rootEvents = new FlowEventQueue<MobaRootEvent>();
+            _root = BuildMobaRootStateMachine();
+            _runner = new HfsmFlowRunner<string, MobaRootState, MobaRootEvent>(_flowContext, _root, _rootEvents);
         }
 
-        public RootState CurrentPhase => _activeRoot;
+        public MobaRootState CurrentPhase => _activeRoot;
 
         public void Start()
         {
             _runner.Start();
-            _rootEvents.Enqueue(RootEvent.BootCompleted);
+            _rootEvents.Enqueue(MobaRootEvent.BootCompleted);
 
             if (_entry != null)
             {
@@ -111,7 +101,7 @@ namespace AbilityKit.Game.Flow
         public void StartWithPersistentSettingsSync()
         {
             _runner.Start();
-            _rootEvents.Enqueue(RootEvent.BootCompleted);
+            _rootEvents.Enqueue(MobaRootEvent.BootCompleted);
             UnityJsonSettingsBootstrap.LoadPersistentIntoSync(Settings, RuntimeJsonSettingsCodec.DeserializeFlat);
         }
 
@@ -131,33 +121,17 @@ namespace AbilityKit.Game.Flow
                 Log.Exception(ex, "[GameFlowDomain] HFSM Step failed");
             }
 
-            for (int i = 0; i < _features.Count; i++)
-            {
-                try
-                {
-                    _features[i].Tick(_ctx, deltaTime);
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex, $"[GameFlowDomain] Feature.Tick failed: feature={_features[i]?.GetType().FullName}");
-                }
-            }
+            _features.Tick(in _ctx, deltaTime);
         }
 
         public void OnGUI()
         {
 #if UNITY_EDITOR
-            for (int i = 0; i < _features.Count; i++)
-            {
-                if (_features[i] is IOnGUIFeature gui)
-                {
-                    gui.OnGUI(_ctx);
-                }
-            }
+            _features.OnGUI(in _ctx);
 
             if (!_entry.DebugEnabled) return;
 
-            if (_activeRoot == RootState.Battle && _activeBattle == BattleState.InMatch)
+            if (_activeRoot == MobaRootState.Battle && _activeBattle == MobaBattleState.InMatch)
             {
                 return;
             }
@@ -172,16 +146,16 @@ namespace AbilityKit.Game.Flow
 
             if (GUILayout.Button("Battle End", GUILayout.Height(28)))
             {
-                var state = _root.GetState(RootState.Battle);
-                if (state is StateMachine<RootState, BattleState, BattleEvent> battle)
+                var state = _root.GetState(MobaRootState.Battle);
+                if (state is StateMachine<MobaRootState, MobaBattleState, MobaBattleEvent> battle)
                 {
-                    battle.Trigger(BattleEvent.Ended);
+                    battle.Trigger(MobaBattleEvent.Ended);
                 }
             }
 
             if (GUILayout.Button("Return Lobby", GUILayout.Height(28)))
             {
-                _rootEvents.Enqueue(RootEvent.ReturnLobby);
+                _rootEvents.Enqueue(MobaRootEvent.ReturnLobby);
             }
 
             GUILayout.EndArea();
@@ -204,35 +178,72 @@ namespace AbilityKit.Game.Flow
         public void Attach(IGamePhaseFeature feature)
         {
             if (feature == null) throw new ArgumentNullException(nameof(feature));
-            _features.Add(feature);
-
-            if (_ctx.Root.IsValid)
-            {
-                _ctx.Root.WithRef((object)feature);
-            }
-
-            feature.OnAttach(_ctx);
+            _features.Add(feature, in _ctx);
         }
 
         public void Detach(IGamePhaseFeature feature)
         {
-            DetachFeature(feature, removeFromList: true);
+            _features.Remove(feature, in _ctx);
         }
 
-        private void DetachFeature(IGamePhaseFeature feature, bool removeFromList)
+        private void AttachFeatureCore(IGamePhaseFeature feature, in GamePhaseContext ctx)
         {
-            if (feature == null) return;
-
-            feature.OnDetach(_ctx);
-
-            if (_ctx.Root.IsValid)
+            if (ctx.Root.IsValid)
             {
-                _ctx.Root.RemoveComponent(feature.GetType());
+                ctx.Root.WithRef((object)feature);
             }
 
-            if (removeFromList)
+            feature.OnAttach(ctx);
+        }
+
+        private void DetachFeatureCore(IGamePhaseFeature feature, in GamePhaseContext ctx)
+        {
+            feature.OnDetach(ctx);
+
+            if (ctx.Root.IsValid)
             {
-                _features.Remove(feature);
+                ctx.Root.RemoveComponent(feature.GetType());
+            }
+        }
+
+        private void TickFeatureCore(IGamePhaseFeature feature, in GamePhaseContext ctx, float deltaTime)
+        {
+            try
+            {
+                feature.Tick(ctx, deltaTime);
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[GameFlowDomain] Feature.Tick failed: feature={feature?.GetType().FullName}");
+            }
+        }
+
+        public int AttachBootFeatures()
+        {
+            return _bootFeaturePlan.InstallAll(in _ctx, Attach);
+        }
+
+        public int AttachBattleFeatures(IReadOnlyList<string> featureIds = null)
+        {
+            return AttachBattleFeatures(featureIds, gatewayConnectionFactory: null);
+        }
+
+        public int AttachBattleFeatures(
+            IReadOnlyList<string> featureIds,
+            Func<BattleStartPlan, AbilityKit.Network.Abstractions.IConnection> gatewayConnectionFactory)
+        {
+            _pendingGatewayConnectionFactory = gatewayConnectionFactory;
+            try
+            {
+                return _battleFeaturePlan.InstallByIdsOrAll(
+                    featureIds,
+                    in _ctx,
+                    Attach,
+                    message => Log.Error($"[GameFlowDomain] {message}"));
+            }
+            finally
+            {
+                _pendingGatewayConnectionFactory = null;
             }
         }
 
@@ -240,150 +251,195 @@ namespace AbilityKit.Game.Flow
         {
             _battleRequested = true;
             _pendingBootstrapper = bootstrapper;
-            _rootEvents.Enqueue(RootEvent.EnterBattle);
+            _rootEvents.Enqueue(MobaRootEvent.EnterBattle);
         }
 
         public void ReturnToBoot()
         {
             _battleRequested = false;
             _pendingBootstrapper = null;
-            _rootEvents.Enqueue(RootEvent.ReturnLobby);
+            _pendingGatewayConnectionFactory = null;
+            _rootEvents.Enqueue(MobaRootEvent.ReturnLobby);
         }
 
-        private StateMachine<string, RootState, RootEvent> BuildRootStateMachine()
+        private StateMachine<string, MobaRootState, MobaRootEvent> BuildMobaRootStateMachine()
         {
-            var fsm = new StateMachine<string, RootState, RootEvent>();
+            var fsm = new StateMachine<string, MobaRootState, MobaRootEvent>();
 
-            fsm.AddState(RootState.Boot, onEnter: _ =>
-            {
-                _activeRoot = RootState.Boot;
-                ClearFeatures();
-                Attach(new BootMenuOnGUIFeature());
-            });
+            fsm.AddState(MobaRootState.Boot,
+                onEnter: _ =>
+                {
+                    _activeRoot = MobaRootState.Boot;
+                    _rootStateBindings.Enter(MobaRootState.Boot, in _ctx);
+                },
+                onExit: _ => _rootStateBindings.Exit(MobaRootState.Boot, in _ctx));
+ 
+            fsm.AddState(MobaRootState.Lobby,
+                onEnter: _ =>
+                {
+                    _activeRoot = MobaRootState.Lobby;
+                    _rootStateBindings.Enter(MobaRootState.Lobby, in _ctx);
+                },
+                onExit: _ => _rootStateBindings.Exit(MobaRootState.Lobby, in _ctx));
 
-            fsm.AddState(RootState.Lobby, onEnter: _ =>
-            {
-                _activeRoot = RootState.Lobby;
-                ClearFeatures();
-                Attach(new BootMenuOnGUIFeature());
-            });
+            var battle = BuildMobaBattleStateMachine();
+            fsm.AddState(MobaRootState.Battle, battle);
 
-            var battle = BuildBattleStateMachine();
-            fsm.AddState(RootState.Battle, battle);
-
-            fsm.AddTriggerTransition(RootEvent.BootCompleted, RootState.Boot, RootState.Lobby);
-
-            fsm.AddTriggerTransition(RootEvent.EnterBattle, RootState.Lobby, RootState.Battle, condition: _ => _battleRequested);
-            fsm.AddTriggerTransition(RootEvent.EnterBattle, RootState.Boot, RootState.Battle, condition: _ => _battleRequested);
-
-            fsm.AddTriggerTransition(RootEvent.ReturnLobby, RootState.Battle, RootState.Lobby);
-            fsm.AddTriggerTransition(RootEvent.ReturnLobby, RootState.Boot, RootState.Lobby);
-
-            fsm.SetStartState(RootState.Boot);
+            AddRootTransitions(fsm, _flowConfig.RootMachine);
+            fsm.SetStartState(_flowConfig.RootMachine.StartState);
             return fsm;
         }
 
-        private StateMachine<RootState, BattleState, BattleEvent> BuildBattleStateMachine()
+        private StateMachine<MobaRootState, MobaBattleState, MobaBattleEvent> BuildMobaBattleStateMachine()
         {
-            var fsm = new StateMachine<RootState, BattleState, BattleEvent>();
+            var fsm = new StateMachine<MobaRootState, MobaBattleState, MobaBattleEvent>();
             _battleFsm = fsm;
 
             fsm.StateChanged += s => { _activeBattle = s.name; };
 
-            fsm.AddState(BattleState.Prepare, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                Log.Info("[GameFlowDomain] BattleState.Prepare entered");
-                ClearFeatures();
-
-                _battleSessionStarted = false;
-                _battleFirstFrameReceived = false;
-
-                Attach(new BattleContextFeature());
-                Attach(new BattleEntityFeature());
-
-                _battleSessionFeature = new BattleSessionFeature(_pendingBootstrapper);
-                _battleSessionFeature.SessionStarted += OnBattleSessionStarted;
-                _battleSessionFeature.FirstFrameReceived += OnBattleFirstFrameReceived;
-                _battleSessionFeature.SessionFailed += OnBattleSessionFailed;
-                Attach(_battleSessionFeature);
-            });
-
-            fsm.AddState(BattleState.Connect, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                Log.Info("[GameFlowDomain] BattleState.Connect entered");
-
-                Attach(new BattleDebugOnGUIFeature());
-
-                if (_battleSessionStarted)
+            fsm.AddState(MobaBattleState.Prepare,
+                onEnter: _ =>
                 {
-                    fsm.Trigger(BattleEvent.Connected);
-                }
-                else if (_battleFirstFrameReceived)
+                    _activeRoot = MobaRootState.Battle;
+                    Log.Info("[GameFlowDomain] MobaBattleState.Prepare entered");
+                    _battleStateBindings.Enter(MobaBattleState.Prepare, in _ctx);
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.Prepare, in _ctx));
+ 
+            fsm.AddState(MobaBattleState.Connect,
+                onEnter: _ =>
                 {
-                    fsm.Trigger(BattleEvent.Connected);
-                }
-            });
-
-            fsm.AddState(BattleState.CreateOrJoinWorld, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                Log.Info("[GameFlowDomain] BattleState.CreateOrJoinWorld entered");
-
-                Attach(new BattleDebugOnGUIFeature());
-
-                if (_battleFirstFrameReceived)
+                    _activeRoot = MobaRootState.Battle;
+                    Log.Info("[GameFlowDomain] MobaBattleState.Connect entered");
+                    _battleStateBindings.Enter(MobaBattleState.Connect, in _ctx);
+ 
+                    if (_battleSessionStarted)
+                    {
+                        fsm.Trigger(MobaBattleEvent.Connected);
+                    }
+                    else if (_battleFirstFrameReceived)
+                    {
+                        fsm.Trigger(MobaBattleEvent.Connected);
+                    }
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.Connect, in _ctx));
+ 
+            fsm.AddState(MobaBattleState.CreateOrJoinWorld,
+                onEnter: _ =>
                 {
-                    fsm.Trigger(BattleEvent.JoinedWorld);
-                }
-            });
-
-            fsm.AddState(BattleState.LoadAssets, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                Log.Info("[GameFlowDomain] BattleState.LoadAssets entered");
-
-                Attach(new BattleDebugOnGUIFeature());
-
-                if (_battleFirstFrameReceived)
+                    _activeRoot = MobaRootState.Battle;
+                    Log.Info("[GameFlowDomain] MobaBattleState.CreateOrJoinWorld entered");
+                    _battleStateBindings.Enter(MobaBattleState.CreateOrJoinWorld, in _ctx);
+ 
+                    if (_battleFirstFrameReceived)
+                    {
+                        fsm.Trigger(MobaBattleEvent.JoinedWorld);
+                    }
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.CreateOrJoinWorld, in _ctx));
+ 
+            fsm.AddState(MobaBattleState.LoadAssets,
+                onEnter: _ =>
                 {
-                    fsm.Trigger(BattleEvent.LoadingDone);
-                }
-            });
+                    _activeRoot = MobaRootState.Battle;
+                    Log.Info("[GameFlowDomain] MobaBattleState.LoadAssets entered");
+                    _battleStateBindings.Enter(MobaBattleState.LoadAssets, in _ctx);
+ 
+                    if (_battleFirstFrameReceived)
+                    {
+                        fsm.Trigger(MobaBattleEvent.LoadingDone);
+                    }
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.LoadAssets, in _ctx));
+ 
+            fsm.AddState(MobaBattleState.InMatch,
+                onEnter: _ =>
+                {
+                    _activeRoot = MobaRootState.Battle;
+                    Log.Info("[GameFlowDomain] MobaBattleState.InMatch entered");
+                    _battleStateBindings.Enter(MobaBattleState.InMatch, in _ctx);
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.InMatch, in _ctx));
+ 
+            fsm.AddState(MobaBattleState.End,
+                onEnter: _ =>
+                {
+                    _activeRoot = MobaRootState.Battle;
+                    _battleStateBindings.Enter(MobaBattleState.End, in _ctx);
+                },
+                onExit: _ => _battleStateBindings.Exit(MobaBattleState.End, in _ctx));
 
-            fsm.AddState(BattleState.InMatch, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                Log.Info("[GameFlowDomain] BattleState.InMatch entered");
-
-                Attach(new BattleSyncFeature());
-                Attach(new BattleInputFeature());
-                Attach(new BattleViewFeature());
-                Attach(new BattleHudFeature());
-                Attach(new BattleDebugOnGUIFeature());
-            });
-
-            fsm.AddState(BattleState.End, onEnter: _ =>
-            {
-                _activeRoot = RootState.Battle;
-                ClearFeatures();
-                Attach(new BattleDebugOnGUIFeature());
-                _rootEvents.Enqueue(RootEvent.ReturnLobby);
-
-                _battleSessionFeature = null;
-                _battleSessionStarted = false;
-                _battleFirstFrameReceived = false;
-            });
-
-            fsm.AddTriggerTransition(BattleEvent.PrepareDone, BattleState.Prepare, BattleState.Connect);
-            fsm.AddTriggerTransition(BattleEvent.Connected, BattleState.Connect, BattleState.CreateOrJoinWorld);
-            fsm.AddTriggerTransition(BattleEvent.JoinedWorld, BattleState.CreateOrJoinWorld, BattleState.LoadAssets);
-            fsm.AddTriggerTransition(BattleEvent.LoadingDone, BattleState.LoadAssets, BattleState.InMatch);
-            fsm.AddTriggerTransition(BattleEvent.Ended, BattleState.InMatch, BattleState.End);
-
-            fsm.SetStartState(BattleState.Prepare);
+            AddBattleTransitions(fsm, _flowConfig.BattleMachine);
+            fsm.SetStartState(_flowConfig.BattleMachine.StartState);
             return fsm;
+        }
+
+        private void AddRootTransitions(
+            StateMachine<string, MobaRootState, MobaRootEvent> fsm,
+            PhaseStateMachineSpec<MobaRootState, MobaRootEvent> spec)
+        {
+            for (var i = 0; i < spec.Transitions.Count; i++)
+            {
+                var transition = spec.Transitions[i];
+                if (string.IsNullOrEmpty(transition.ConditionId))
+                {
+                    fsm.AddTriggerTransition(transition.Trigger, transition.From, transition.To);
+                    continue;
+                }
+
+                fsm.AddTriggerTransition(
+                    transition.Trigger,
+                    transition.From,
+                    transition.To,
+                    condition: _ => EvaluateRootTransitionCondition(transition.ConditionId));
+            }
+        }
+
+        private bool EvaluateRootTransitionCondition(string conditionId)
+        {
+            var ctx = BuildFlowConditionContext();
+            return _conditionResolver.Evaluate(conditionId, in ctx);
+        }
+ 
+        private MobaFlowConditionContext BuildFlowConditionContext()
+        {
+            return new MobaFlowConditionContext(
+                battleRequested: _battleRequested,
+                authenticated: IsAuthenticatedForFlow(),
+                roomReady: IsRoomReadyForFlow(),
+                connectivityReady: IsConnectivityReadyForFlow(),
+                assetsReady: IsAssetsReadyForFlow());
+        }
+ 
+        private bool IsAuthenticatedForFlow()
+        {
+            return true;
+        }
+ 
+        private bool IsRoomReadyForFlow()
+        {
+            return true;
+        }
+ 
+        private bool IsConnectivityReadyForFlow()
+        {
+            return true;
+        }
+ 
+        private bool IsAssetsReadyForFlow()
+        {
+            return true;
+        }
+
+        private static void AddBattleTransitions(
+            StateMachine<MobaRootState, MobaBattleState, MobaBattleEvent> fsm,
+            PhaseStateMachineSpec<MobaBattleState, MobaBattleEvent> spec)
+        {
+            for (var i = 0; i < spec.Transitions.Count; i++)
+            {
+                var transition = spec.Transitions[i];
+                fsm.AddTriggerTransition(transition.Trigger, transition.From, transition.To);
+            }
         }
 
         private void OnBattleSessionStarted()
@@ -392,13 +448,13 @@ namespace AbilityKit.Game.Flow
             Log.Info($"[GameFlowDomain] SessionStarted, activeBattle={_activeBattle}");
             if (_battleFsm == null) return;
 
-            if (_activeBattle == BattleState.Prepare)
+            if (_activeBattle == MobaBattleState.Prepare)
             {
-                _battleFsm.Trigger(BattleEvent.PrepareDone);
+                _battleFsm.Trigger(MobaBattleEvent.PrepareDone);
             }
-            else if (_activeBattle == BattleState.Connect)
+            else if (_activeBattle == MobaBattleState.Connect)
             {
-                _battleFsm.Trigger(BattleEvent.Connected);
+                _battleFsm.Trigger(MobaBattleEvent.Connected);
             }
         }
 
@@ -408,21 +464,21 @@ namespace AbilityKit.Game.Flow
             Log.Info($"[GameFlowDomain] FirstFrameReceived, activeBattle={_activeBattle}");
             if (_battleFsm == null) return;
 
-            if (_activeBattle == BattleState.Prepare)
+            if (_activeBattle == MobaBattleState.Prepare)
             {
-                _battleFsm.Trigger(BattleEvent.PrepareDone);
+                _battleFsm.Trigger(MobaBattleEvent.PrepareDone);
             }
-            else if (_activeBattle == BattleState.Connect)
+            else if (_activeBattle == MobaBattleState.Connect)
             {
-                _battleFsm.Trigger(BattleEvent.Connected);
+                _battleFsm.Trigger(MobaBattleEvent.Connected);
             }
-            else if (_activeBattle == BattleState.CreateOrJoinWorld)
+            else if (_activeBattle == MobaBattleState.CreateOrJoinWorld)
             {
-                _battleFsm.Trigger(BattleEvent.JoinedWorld);
+                _battleFsm.Trigger(MobaBattleEvent.JoinedWorld);
             }
-            else if (_activeBattle == BattleState.LoadAssets)
+            else if (_activeBattle == MobaBattleState.LoadAssets)
             {
-                _battleFsm.Trigger(BattleEvent.LoadingDone);
+                _battleFsm.Trigger(MobaBattleEvent.LoadingDone);
             }
         }
 
@@ -431,19 +487,153 @@ namespace AbilityKit.Game.Flow
             Log.Exception(ex, "[GameFlowDomain] Session failed");
             if (_battleFsm == null) return;
 
-            if (_activeBattle != BattleState.End)
+            if (_activeBattle != MobaBattleState.End)
             {
-                _battleFsm.Trigger(BattleEvent.Ended);
+                _battleFsm.Trigger(MobaBattleEvent.Ended);
             }
         }
 
+        private PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature> BuildBootFeaturePlan()
+        {
+            return new PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature>(1)
+                .Add("boot_menu", (in GamePhaseContext ctx) => new BootMenuOnGUIFeature());
+        }
+
+        private PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature> BuildBattleFeaturePlan()
+        {
+            return new PhaseFeaturePlan<GamePhaseContext, IGamePhaseFeature>(8)
+                .Add("context", (in GamePhaseContext ctx) => new BattleContextFeature())
+                .Add("session", (in GamePhaseContext ctx) => CreateBattleSessionFeature())
+                .Add("entity", (in GamePhaseContext ctx) => new BattleEntityFeature())
+                .Add("sync", (in GamePhaseContext ctx) => new BattleSyncFeature())
+                .Add("input", (in GamePhaseContext ctx) => new BattleInputFeature())
+                .Add("view", (in GamePhaseContext ctx) => new BattleViewFeature())
+                .Add("hud", (in GamePhaseContext ctx) => new BattleHudFeature())
+                .Add("debug_ongui", (in GamePhaseContext ctx) => new BattleDebugOnGUIFeature());
+        }
+
+        private PhaseStateFeatureRegistry<MobaRootState, GamePhaseContext, IGamePhaseFeature> BuildMobaRootStateBindings()
+        {
+            return new PhaseStateFeatureRegistry<MobaRootState, GamePhaseContext, IGamePhaseFeature>(
+                    message => Log.Error($"[GameFlowDomain] {message}"),
+                    initialCapacity: 2)
+                .Add(MobaRootState.Boot, BuildBootStateBinding(_flowConfig.BootFeatures))
+                .Add(MobaRootState.Lobby, BuildBootStateBinding(_flowConfig.LobbyFeatures));
+        }
+
+        private PhaseStateFeatureRegistry<MobaBattleState, GamePhaseContext, IGamePhaseFeature> BuildMobaBattleStateBindings()
+        {
+            return new PhaseStateFeatureRegistry<MobaBattleState, GamePhaseContext, IGamePhaseFeature>(
+                    message => Log.Error($"[GameFlowDomain] {message}"),
+                    initialCapacity: 6)
+                .Add(MobaBattleState.Prepare, BuildBattlePrepareBinding())
+                .Add(MobaBattleState.Connect, BuildBattleDebugBinding(_flowConfig.BattleConnectFeatures))
+                .Add(MobaBattleState.CreateOrJoinWorld, BuildBattleDebugBinding(_flowConfig.BattleCreateOrJoinWorldFeatures))
+                .Add(MobaBattleState.LoadAssets, BuildBattleDebugBinding(_flowConfig.BattleLoadAssetsFeatures))
+                .Add(MobaBattleState.InMatch, BuildBattleInMatchBinding())
+                .Add(MobaBattleState.End, BuildBattleEndBinding());
+        }
+
+        private PhaseStateFeatureBinding<GamePhaseContext, IGamePhaseFeature> BuildBootStateBinding(PhaseStateFeatureSpec spec)
+        {
+            return PhaseStateFeatureBindingFactory.Create<GamePhaseContext, IGamePhaseFeature>(
+                spec,
+                Attach,
+                _bootFeaturePlan,
+                clear: (in GamePhaseContext ctx) => ClearFeatures(),
+                exitAction: ExecuteFlowAction,
+                fail: message => Log.Error($"[GameFlowDomain] {message}"));
+        }
+
+        private PhaseStateFeatureBinding<GamePhaseContext, IGamePhaseFeature> BuildBattlePrepareBinding()
+        {
+            return PhaseStateFeatureBindingFactory.Create<GamePhaseContext, IGamePhaseFeature>(
+                _flowConfig.BattlePrepareFeatures,
+                Attach,
+                _battleFeaturePlan,
+                clear: (in GamePhaseContext ctx) => ClearFeatures(),
+                enterBeforeAction: ExecuteFlowAction,
+                exitAction: ExecuteFlowAction,
+                fail: message => Log.Error($"[GameFlowDomain] {message}"));
+        }
+
+        private PhaseStateFeatureBinding<GamePhaseContext, IGamePhaseFeature> BuildBattleDebugBinding(PhaseStateFeatureSpec spec)
+        {
+            return PhaseStateFeatureBindingFactory.Create<GamePhaseContext, IGamePhaseFeature>(
+                spec,
+                Attach,
+                _battleFeaturePlan,
+                exitAction: ExecuteFlowAction,
+                fail: message => Log.Error($"[GameFlowDomain] {message}"));
+        }
+
+        private PhaseStateFeatureBinding<GamePhaseContext, IGamePhaseFeature> BuildBattleInMatchBinding()
+        {
+            return PhaseStateFeatureBindingFactory.Create<GamePhaseContext, IGamePhaseFeature>(
+                _flowConfig.BattleInMatchFeatures,
+                Attach,
+                _battleFeaturePlan,
+                exitAction: ExecuteFlowAction,
+                fail: message => Log.Error($"[GameFlowDomain] {message}"));
+        }
+
+        private PhaseStateFeatureBinding<GamePhaseContext, IGamePhaseFeature> BuildBattleEndBinding()
+        {
+            return PhaseStateFeatureBindingFactory.Create<GamePhaseContext, IGamePhaseFeature>(
+                _flowConfig.BattleEndFeatures,
+                Attach,
+                _battleFeaturePlan,
+                clear: (in GamePhaseContext ctx) => ClearFeatures(),
+                enterAfterAction: ExecuteFlowAction,
+                exitAction: ExecuteFlowAction,
+                fail: message => Log.Error($"[GameFlowDomain] {message}"));
+        }
+
+        private BattleSessionFeature CreateBattleSessionFeature()
+        {
+            _battleSessionFeature = new BattleSessionFeature(_pendingBootstrapper, _pendingGatewayConnectionFactory);
+            _battleSessionFeature.SessionStarted += OnBattleSessionStarted;
+            _battleSessionFeature.FirstFrameReceived += OnBattleFirstFrameReceived;
+            _battleSessionFeature.SessionFailed += OnBattleSessionFailed;
+            return _battleSessionFeature;
+        }
+
+        internal void ResetBattleSessionRuntimeState()
+        {
+            _battleSessionStarted = false;
+            _battleFirstFrameReceived = false;
+        }
+
+        internal void ReturnLobbyAfterBattleEnd()
+        {
+            _rootEvents.Enqueue(MobaRootEvent.ReturnLobby);
+            _battleSessionFeature = null;
+            ResetBattleSessionRuntimeState();
+        }
+
+        private void ExecuteFlowAction(in GamePhaseContext ctx, string actionId)
+        {
+            ExecuteFlowAction(actionId);
+        }
+
+        private void ExecuteFlowAction(in GamePhaseContext ctx, string actionId, int installedCount)
+        {
+            ExecuteFlowAction(actionId, installedCount);
+        }
+
+        private void ExecuteFlowAction(string actionId, int installedCount = 0)
+        {
+            var ctx = new MobaFlowActionContext(this, installedCount);
+            if (!_actionExecutor.Execute(actionId, in ctx))
+            {
+                Log.Error($"[GameFlowDomain] Unknown flow action: {actionId}");
+            }
+        }
+ 
         private void ClearFeatures()
         {
-            for (int i = _features.Count - 1; i >= 0; i--)
-            {
-                DetachFeature(_features[i], removeFromList: false);
-            }
-            _features.Clear();
+            _features.Clear(in _ctx);
+            _features.AttachAll(in _ctx);
 
             if (_battleSessionFeature != null)
             {

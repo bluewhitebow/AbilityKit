@@ -26,7 +26,7 @@ namespace AbilityKit.Game.Flow
             if (!ctx.Entry.DebugEnabled) return;
 
             var flow = ctx.Entry.Get<GameFlowDomain>();
-            if (flow != null && flow.CurrentPhase == RootState.Battle) return;
+            if (flow != null && flow.CurrentPhase == MobaRootState.Battle) return;
 
             GUILayout.BeginArea(new Rect(10, 10, 320, 120), GUI.skin.window);
             GUILayout.Label("Game Flow");
