@@ -122,8 +122,12 @@ namespace AbilityKit.Demo.Moba.Services.Templates
             var eid = TriggeringIdUtil.GetEventEid(eventId);
             EventBus.Publish(new EventKey<T>(eid), in payload);
 
-            object boxed = payload;
-            EventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (EventBus.HasSubscribers(objectKey))
+            {
+                object boxed = payload;
+                EventBus.Publish(objectKey, in boxed);
+            }
         }
     }
 

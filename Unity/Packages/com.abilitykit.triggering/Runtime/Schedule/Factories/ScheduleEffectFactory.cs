@@ -109,9 +109,10 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     // ========================================================================
 
     /// <summary>
-    /// 调度效果工厂接口
-    /// 用于创建各种业务调度效果
+    /// 业务示例调度效果工厂接口。
+    /// 该接口仅作为旧版/样例兼容层保留；正式规则调度入口请使用 RuleScheduler 命名空间下的 IRuleSchedulerDriver。
     /// </summary>
+    [Obsolete("Business-specific schedule factories are legacy/sample adapters. Use RuleScheduler.IRuleSchedulerDriver for formal rule scheduling.")]
     public interface IScheduleEffectFactory
     {
         /// <summary>
@@ -135,8 +136,10 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     // ========================================================================
 
     /// <summary>
-    /// Buff 周期配置
+    /// Buff 周期配置。
+    /// 仅作为旧版业务示例配置保留，不属于正式规则调度语义层。
     /// </summary>
+    [Obsolete("Business-specific schedule configs are legacy/sample adapters. Use RuleScheduler.RuleSchedulePlan for formal rule scheduling.")]
     public class BuffPeriodicConfig
     {
         public int TriggerId { get; set; }
@@ -149,8 +152,10 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     }
 
     /// <summary>
-    /// 子弹飞行配置
+    /// 子弹飞行配置。
+    /// 仅作为旧版业务示例配置保留，不属于正式规则调度语义层。
     /// </summary>
+    [Obsolete("Business-specific schedule configs are legacy/sample adapters. Use RuleScheduler.RuleSchedulePlan for formal rule scheduling.")]
     public class BulletFlightConfig
     {
         public int TriggerId { get; set; }
@@ -165,8 +170,10 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     }
 
     /// <summary>
-    /// AOE 区域配置
+    /// AOE 区域配置。
+    /// 仅作为旧版业务示例配置保留，不属于正式规则调度语义层。
     /// </summary>
+    [Obsolete("Business-specific schedule configs are legacy/sample adapters. Use RuleScheduler.RuleSchedulePlan for formal rule scheduling.")]
     public class AOEConfig
     {
         public int TriggerId { get; set; }
@@ -189,6 +196,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     /// 默认调度效果工厂
     /// 使用 SchedulableBehaviorScheduleAdapter 适配器
     /// </summary>
+    [Obsolete("Business-specific schedule factories are legacy/sample adapters. Use RuleScheduler.IRuleSchedulerDriver for formal rule scheduling.")]
     public sealed class DefaultScheduleEffectFactory : IScheduleEffectFactory
     {
         private readonly BehaviorFactory _behaviorFactory;
@@ -428,6 +436,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     /// <summary>
     /// Buff 效果回调
     /// </summary>
+    [Obsolete("Business-specific schedule callbacks are legacy/sample adapters. Use RuleScheduler.IRuleScheduleEffect for formal rule scheduling.")]
     public sealed class BuffEffectCallbacks : IScheduleEffectCallbacks
     {
         private readonly int _buffId;
@@ -452,6 +461,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     /// <summary>
     /// 子弹效果回调
     /// </summary>
+    [Obsolete("Business-specific schedule callbacks are legacy/sample adapters. Use RuleScheduler.IRuleScheduleEffect for formal rule scheduling.")]
     public sealed class BulletEffectCallbacks : IScheduleEffectCallbacks
     {
         private readonly int _bulletId;
@@ -475,6 +485,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     /// <summary>
     /// AOE 效果回调
     /// </summary>
+    [Obsolete("Business-specific schedule callbacks are legacy/sample adapters. Use RuleScheduler.IRuleScheduleEffect for formal rule scheduling.")]
     public sealed class AOEEffectCallbacks : IScheduleEffectCallbacks
     {
         private readonly int _aoeId;
@@ -502,6 +513,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule.Factories
     /// <summary>
     /// 调度使用示例
     /// </summary>
+    [Obsolete("Business-specific schedule examples are legacy/sample adapters. Use RuleScheduler for formal rule scheduling examples.")]
     public static class ScheduleUsageExamples
     {
         public static void ExampleUsage(

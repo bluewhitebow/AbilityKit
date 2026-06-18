@@ -68,7 +68,6 @@ namespace ET.Logic
             int targetFrame = frame + 1;
             if (frame % self.MoveIntervalFrames == 0)
             {
-                Log.Debug($"[ETBattleAutoTest] Frame={frame}: Generating move command for PlayerId={self.TestPlayerId} to Frame={targetFrame}");
                 SendMoveCommand(self, targetFrame);
             }
         }
@@ -93,8 +92,6 @@ namespace ET.Logic
                 // 发送方向向量（dx, dz）
                 inputComponent.AddMoveCommand(frame, self.TestPlayerId, dx, dz);
                 self.MoveCommandCount++;
-
-                Log.Debug($"[ETBattleAutoTest] Move command: Frame={frame}, PlayerId={self.TestPlayerId}, Dir=({dx:F2}, {dz:F2})");
             }
             else
             {

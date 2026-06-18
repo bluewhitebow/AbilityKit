@@ -162,6 +162,70 @@ namespace AbilityKit.Triggering.Runtime.Plan
         /// </summary>
         public static bool TryResolveNumericRef<TArgs, TCtx>(in NumericValueRef valueRef, in TArgs args, in ExecCtx<TCtx> ctx, out double value)
         {
+            if (!TryResolveNumericSource(in valueRef, in args, in ctx, out value))
+            {
+                if (!valueRef.HasFallback || valueRef.Required)
+                {
+                    value = 0.0;
+                    return false;
+                }
+
+                value = valueRef.FallbackValue;
+            }
+
+            value = ApplyNumericValuePolicy(in valueRef, value);
+            return true;
+        }
+
+        /// <summary>
+        /// 解析单个 NumericValueRef 为 double 值
+        /// 通用于所有 Schema 实现中的值解析
+        /// </summary>
+        public static double ResolveNumericRef<TArgs, TCtx>(in NumericValueRef valueRef, in TArgs args, in ExecCtx<TCtx> ctx)
+        {
+            if (TryResolveNumericRef(in valueRef, in args, in ctx, out var value))
+                return value;
+
+            throw new InvalidOperationException("Failed to resolve numeric value reference: " + DescribeNumericValueRef(in valueRef));
+        }
+
+        /// <summary>
+        /// 尝试解析单个 NumericValueRef 为 double 值。
+        /// 兼容旧 object 上下文；正式路径应优先使用泛型重载。
+        /// </summary>
+        [Obsolete("Use the generic ExecCtx<TCtx> TryResolveNumericRef overload on the formal runtime path.")]
+        public static bool TryResolveNumericRef(in NumericValueRef valueRef, object ctx, out double value)
+        {
+            if (!TryResolveNumericSource(in valueRef, ctx, out value))
+            {
+                if (!valueRef.HasFallback || valueRef.Required)
+                {
+                    value = 0.0;
+                    return false;
+                }
+
+                value = valueRef.FallbackValue;
+            }
+
+            value = ApplyNumericValuePolicy(in valueRef, value);
+            return true;
+        }
+
+        /// <summary>
+        /// 解析单个 NumericValueRef 为 double 值。
+        /// 兼容旧 object 上下文；正式路径应优先使用泛型重载。
+        /// </summary>
+        [Obsolete("Use the generic ExecCtx<TCtx> ResolveNumericRef overload on the formal runtime path.")]
+        public static double ResolveNumericRef(in NumericValueRef valueRef, object ctx)
+        {
+            if (TryResolveNumericRef(in valueRef, ctx, out var value))
+                return value;
+
+            throw new InvalidOperationException("Failed to resolve numeric value reference from object context: " + DescribeNumericValueRef(in valueRef));
+        }
+
+        private static bool TryResolveNumericSource<TArgs, TCtx>(in NumericValueRef valueRef, in TArgs args, in ExecCtx<TCtx> ctx, out double value)
+        {
             value = 0.0;
 
             if (valueRef.Kind == ENumericValueRefKind.Const)
@@ -185,24 +249,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
             return false;
         }
 
-        /// <summary>
-        /// 解析单个 NumericValueRef 为 double 值
-        /// 通用于所有 Schema 实现中的值解析
-        /// </summary>
-        public static double ResolveNumericRef<TArgs, TCtx>(in NumericValueRef valueRef, in TArgs args, in ExecCtx<TCtx> ctx)
-        {
-            if (TryResolveNumericRef(in valueRef, in args, in ctx, out var value))
-                return value;
-
-            throw new InvalidOperationException("Failed to resolve numeric value reference: " + DescribeNumericValueRef(in valueRef));
-        }
-
-        /// <summary>
-        /// 尝试解析单个 NumericValueRef 为 double 值。
-        /// 兼容旧 object 上下文；正式路径应优先使用泛型重载。
-        /// </summary>
-        [Obsolete("Use the generic ExecCtx<TCtx> TryResolveNumericRef overload on the formal runtime path.")]
-        public static bool TryResolveNumericRef(in NumericValueRef valueRef, object ctx, out double value)
+        private static bool TryResolveNumericSource(in NumericValueRef valueRef, object ctx, out double value)
         {
             value = 0.0;
 
@@ -242,17 +289,29 @@ namespace AbilityKit.Triggering.Runtime.Plan
             return false;
         }
 
-        /// <summary>
-        /// 解析单个 NumericValueRef 为 double 值。
-        /// 兼容旧 object 上下文；正式路径应优先使用泛型重载。
-        /// </summary>
-        [Obsolete("Use the generic ExecCtx<TCtx> ResolveNumericRef overload on the formal runtime path.")]
-        public static double ResolveNumericRef(in NumericValueRef valueRef, object ctx)
+        private static double ApplyNumericValuePolicy(in NumericValueRef valueRef, double value)
         {
-            if (TryResolveNumericRef(in valueRef, ctx, out var value))
-                return value;
+            if (valueRef.HasScale)
+            {
+                value *= valueRef.Scale;
+            }
 
-            throw new InvalidOperationException("Failed to resolve numeric value reference from object context: " + DescribeNumericValueRef(in valueRef));
+            if (valueRef.Offset != 0d)
+            {
+                value += valueRef.Offset;
+            }
+
+            if (valueRef.HasMin && value < valueRef.MinValue)
+            {
+                value = valueRef.MinValue;
+            }
+
+            if (valueRef.HasMax && value > valueRef.MaxValue)
+            {
+                value = valueRef.MaxValue;
+            }
+
+            return value;
         }
 
         private static bool TryResolveBlackboard<TCtx>(in NumericValueRef valueRef, in ExecCtx<TCtx> ctx, out double value)
@@ -337,7 +396,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         private static string DescribeNumericValueRef(in NumericValueRef valueRef)
         {
-            return valueRef.Kind switch
+            var source = valueRef.Kind switch
             {
                 ENumericValueRefKind.Const => $"Const({valueRef.ConstValue})",
                 ENumericValueRefKind.Blackboard => $"Blackboard(boardId={valueRef.BoardId}, keyId={valueRef.KeyId})",
@@ -346,6 +405,16 @@ namespace AbilityKit.Triggering.Runtime.Plan
                 ENumericValueRefKind.Expr => "Expr(" + valueRef.ExprText + ")",
                 _ => "Unsupported(" + valueRef.Kind + ")"
             };
+
+            if (!string.IsNullOrEmpty(valueRef.Label)) source += $", label='{valueRef.Label}'";
+            if (!string.IsNullOrEmpty(valueRef.Scope)) source += $", scope='{valueRef.Scope}'";
+            if (valueRef.Required) source += ", required=true";
+            if (valueRef.HasFallback) source += $", fallback={valueRef.FallbackValue}";
+            if (valueRef.HasScale) source += $", scale={valueRef.Scale}";
+            if (valueRef.Offset != 0d) source += $", offset={valueRef.Offset}";
+            if (valueRef.HasMin) source += $", min={valueRef.MinValue}";
+            if (valueRef.HasMax) source += $", max={valueRef.MaxValue}";
+            return source;
         }
 
         private static bool TryResolveNumericVar(object ctx, string domainId, string key, out double value)

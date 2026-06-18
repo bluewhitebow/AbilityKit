@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AbilityKit.Orleans.Grains.Gameplay;
+using AbilityKit.Orleans.Grains.Gameplays.Moba.Rooms;
+using AbilityKit.Orleans.Grains.Gameplays.Shooter.Rooms;
 
 namespace AbilityKit.Orleans.Grains.Rooms.Gameplay;
 
@@ -16,18 +19,29 @@ internal sealed class RoomGameplayRegistry
                 new MobaRoomGameplayAdapter(),
                 new ShooterRoomGameplayAdapter()
             },
-            defaultRoomType: MobaRoomGameplayAdapter.DefaultRoomType)
+            ServerGameplayCatalog.Default)
     {
     }
 
-    public RoomGameplayRegistry(IEnumerable<IRoomGameplayAdapter> adapters, string defaultRoomType)
+    public RoomGameplayRegistry(IEnumerable<IRoomGameplayAdapter> adapters, ServerGameplayCatalog catalog)
     {
         if (adapters is null)
         {
             throw new ArgumentNullException(nameof(adapters));
         }
 
+        if (catalog is null)
+        {
+            throw new ArgumentNullException(nameof(catalog));
+        }
+
         _adapters = adapters.ToDictionary(a => a.RoomType, StringComparer.OrdinalIgnoreCase);
+        foreach (var roomType in _adapters.Keys)
+        {
+            catalog.EnsureRegistered(roomType);
+        }
+
+        var defaultRoomType = catalog.DefaultDescriptor.RoomType;
         if (!_adapters.TryGetValue(defaultRoomType, out _defaultAdapter!))
         {
             throw new InvalidOperationException($"Default room gameplay adapter is not registered. RoomType={defaultRoomType}");

@@ -87,7 +87,7 @@ namespace AbilityKit.Demo.Moba.Triggering
                 TemplateId = _templateId,
                 VfxId = _vfxId,
                 SfxId = _sfxId,
-                RequestKey = !string.IsNullOrWhiteSpace(requestKey) ? requestKey : BuildRequestKey(context.TriggerId, context.Order),
+                RequestKey = requestKey,
                 Targets = targets,
                 Positions = FlattenPositions(positions),
                 SourceActorId = sourceActorId,
@@ -126,11 +126,6 @@ namespace AbilityKit.Demo.Moba.Triggering
         private bool IsEmptyCue()
         {
             return string.IsNullOrWhiteSpace(_cueKind) && string.IsNullOrWhiteSpace(_cueVfxId) && string.IsNullOrWhiteSpace(_cueSfxId);
-        }
-
-        private static string BuildRequestKey(int triggerId, long order)
-        {
-            return triggerId > 0 ? $"cue:{triggerId}:{order}" : $"cue:{order}";
         }
 
         private static int ParseId(string value)

@@ -1,0 +1,148 @@
+using AbilityKit.Demo.Shooter.Runtime;
+using AbilityKit.Demo.Shooter.View;
+using AbilityKit.Network.Runtime.Sync;
+using AbilityKit.Protocol.Room;
+using AbilityKit.Protocol.Shooter;
+using Xunit;
+
+namespace AbilityKit.Demo.Shooter.Runtime.Tests;
+
+public sealed class ShooterPureStateSnapshotSyncControllerTests
+{
+    [Fact]
+    public void PureStateSnapshotSyncControllerAppliesGatewayFullBaselineToViewModel()
+    {
+        var source = CreateStartedSourceRuntime();
+        source.SubmitInput(0, new[] { new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, true) });
+        Assert.True(source.Tick(1f / 30f));
+        var pureState = source.ExportPureStateSnapshot(777ul, isFullBaseline: true);
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterPureStateSnapshotSyncController(presentation);
+        var gatewayPayload = CreateGatewayPayload(in pureState, ShooterOpCodes.Snapshot.PureState, isFullSnapshot: true);
+
+        var result = controller.TryApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, gatewayPayload);
+
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.AppliedFullBaseline, result);
+        Assert.Equal(pureState.Frame, controller.LastAppliedFrame);
+        Assert.Equal(pureState.StateHash, controller.LastAppliedStateHash);
+        Assert.Equal(ShooterPureStateSnapshotKinds.FullBaseline, controller.LastAppliedSnapshotKind);
+        Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.SnapshotReceived && e.Frame == pureState.Frame);
+        Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotApplied && e.Frame == pureState.Frame);
+        Assert.Equal(pureState.Frame, presentation.ViewModel.Frame);
+        Assert.Equal(ShooterViewSnapshotKind.Full, presentation.ViewModel.Current.SnapshotKind);
+        Assert.Equal(ShooterViewBatchSource.AuthoritativeCorrection, presentation.ViewModel.Current.Source);
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Player && change.EntityId == 1);
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Player && change.EntityId == 2);
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Bullet);
+    }
+
+    [Fact]
+    public void PureStateSnapshotSyncControllerAppliesGatewayDeltaAndIgnoresStaleFrames()
+    {
+        var source = CreateStartedSourceRuntime();
+        source.SubmitInput(0, new[] { new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, true) });
+        Assert.True(source.Tick(1f / 30f));
+        var baseline = source.ExportPureStateSnapshot(777ul, isFullBaseline: true);
+        source.SubmitInput(source.CurrentFrame, new[] { new ShooterPlayerCommand(2, -1f, 0f, -1f, 0f, false) });
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(777ul, isFullBaseline: false, baselineFrame: baseline.Frame, baselineHash: baseline.StateHash);
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterPureStateSnapshotSyncController(presentation);
+
+        var baselineApplied = controller.TryApplyGatewayPush(
+            RoomGatewayOpCodes.SnapshotPushed,
+            CreateGatewayPayload(in baseline, ShooterOpCodes.Snapshot.PureState, isFullSnapshot: true));
+        var applied = controller.TryApplyGatewayPush(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+        var stale = controller.TryApplyGatewayPush(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreateGatewayPayload(in baseline, ShooterOpCodes.Snapshot.PureState, isFullSnapshot: true));
+
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.AppliedFullBaseline, baselineApplied);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.AppliedDelta, applied);
+        Assert.False(controller.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot, stale);
+        Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.SnapshotStale && e.Frame == baseline.Frame);
+        Assert.Equal(baseline.Frame, controller.LastIgnoredFrame);
+        Assert.Equal(delta.Frame, presentation.ViewModel.Frame);
+        Assert.Equal(ShooterViewSnapshotKind.Delta, presentation.ViewModel.Current.SnapshotKind);
+    }
+
+    [Fact]
+    public void PureStateSnapshotSyncControllerRequestsFullBaselineWhenDeltaArrivesWithoutBaseline()
+    {
+        var source = CreateStartedSourceRuntime();
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(778ul, isFullBaseline: false, baselineFrame: 99, baselineHash: 123u);
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterPureStateSnapshotSyncController(presentation);
+
+        var result = controller.TryApplyGatewayPush(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, result);
+        Assert.True(controller.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.MissingBaseline, controller.LastResyncReason);
+        Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotRequested && e.Frame == delta.Frame);
+        Assert.Equal(0, presentation.ViewModel.Frame);
+    }
+
+    [Fact]
+    public void PureStateSnapshotSyncControllerRequestsFullBaselineWhenDeltaBaselineMismatches()
+    {
+        var source = CreateStartedSourceRuntime();
+        Assert.True(source.Tick(1f / 30f));
+        var baseline = source.ExportPureStateSnapshot(779ul, isFullBaseline: true);
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(779ul, isFullBaseline: false, baselineFrame: baseline.Frame + 10, baselineHash: baseline.StateHash + 1u);
+        var presentation = new ShooterPresentationFacade();
+        var controller = new ShooterPureStateSnapshotSyncController(presentation);
+
+        Assert.Equal(
+            ShooterPureStateSnapshotApplyResult.AppliedFullBaseline,
+            controller.TryApplyGatewayPush(RoomGatewayOpCodes.SnapshotPushed, CreateGatewayPayload(in baseline, ShooterOpCodes.Snapshot.PureState, isFullSnapshot: true)));
+        var result = controller.TryApplyGatewayPush(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, result);
+        Assert.True(controller.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.BaselineMismatch, controller.LastResyncReason);
+        Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotRequested && e.Frame == delta.Frame);
+        Assert.Equal(baseline.Frame, presentation.ViewModel.Frame);
+    }
+
+    private static ShooterBattleRuntimePort CreateStartedSourceRuntime()
+    {
+        var source = new ShooterBattleRuntimePort();
+        var start = new ShooterStartGamePayload(
+            "pure-state-source",
+            30,
+            901,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 4f, 0f)
+            });
+        Assert.True(source.StartGame(in start));
+        return source;
+    }
+
+    private static ArraySegment<byte> CreateGatewayPayload(in ShooterPureStateSnapshotPayload pureState, int payloadOpCode, bool isFullSnapshot)
+    {
+        var wire = new WireStateSyncSnapshotPush
+        {
+            WorldId = pureState.WorldId,
+            Frame = pureState.Frame,
+            Timestamp = 456.5,
+            IsFullSnapshot = isFullSnapshot,
+            Actors = null,
+            PayloadOpCode = payloadOpCode,
+            Payload = ShooterPureStateSyncCodec.Serialize(in pureState),
+            ServerTicks = pureState.ServerTick
+        };
+        return WireRoomGatewayBinary.Serialize(in wire);
+    }
+}

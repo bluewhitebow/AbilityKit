@@ -23,22 +23,29 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
-            var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.CancelSkill, targets))
+            var targets = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                if (effectInput.HasCasterActor) targets.Add(effectInput.CasterActorId);
-            }
+                if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.CancelSkill, targets))
+                {
+                    if (effectInput.HasCasterActor) targets.Add(effectInput.CasterActorId);
+                }
 
-            var cancelled = 0;
-            for (var i = 0; i < targets.Count; i++)
+                var cancelled = 0;
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var actorId = targets[i];
+                    if (actorId <= 0) continue;
+                    if (Cancel(skills, actorId, args)) cancelled++;
+                    if (cancelled > 0 && !args.RemoveAll) break;
+                }
+
+                LogApplied(ctx, $"targets={targets.Count} cancelled={cancelled} mode={args.Mode} skillId={args.SkillId} slot={args.SkillSlot}");
+            }
+            finally
             {
-                var actorId = targets[i];
-                if (actorId <= 0) continue;
-                if (Cancel(skills, actorId, args)) cancelled++;
-                if (cancelled > 0 && !args.RemoveAll) break;
+                PooledMobaPlanActionLists.Release(targets);
             }
-
-            LogApplied(ctx, $"targets={targets.Count} cancelled={cancelled} mode={args.Mode} skillId={args.SkillId} slot={args.SkillSlot}");
         }
 
         private static bool Cancel(SkillExecutor skills, int actorId, CancelSkillArgs args)

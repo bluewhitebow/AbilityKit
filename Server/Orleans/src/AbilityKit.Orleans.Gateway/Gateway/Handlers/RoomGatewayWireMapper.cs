@@ -98,6 +98,40 @@ internal static class RoomGatewayWireMapper
         };
     }
 
+    public static RoomGameplayCommandRequest ToGameplayCommand(string accountId, WireRoomPickHeroReq req)
+    {
+        return RoomGameplayCommandRequest.CreateMobaLoadout(
+            accountId,
+            req.HeroId,
+            req.TeamId,
+            req.SpawnPointId,
+            req.Level,
+            req.AttributeTemplateId,
+            req.BasicAttackSkillId,
+            req.SkillIds);
+    }
+
+    public static RoomGameplayCommandRequest ToGameplayCommand(
+        string accountId,
+        int heroId,
+        int teamId,
+        int spawnPointId,
+        int level,
+        int attributeTemplateId,
+        int basicAttackSkillId,
+        IReadOnlyList<int>? skillIds)
+    {
+        return RoomGameplayCommandRequest.CreateMobaLoadout(
+            accountId,
+            heroId,
+            teamId,
+            spawnPointId,
+            level,
+            attributeTemplateId,
+            basicAttackSkillId,
+            skillIds);
+    }
+
     public static WireRoomSnapshot ToWireSnapshot(RoomSnapshot snapshot)
     {
         return new WireRoomSnapshot

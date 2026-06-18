@@ -36,8 +36,10 @@ namespace AbilityKit.Triggering.Runtime.Scheduler
     /// 调度器接口
     /// 定义调度器的核心功能
     ///
-    /// 【框架层】提供通用调度抽象，项目可实现 IScheduler 接口扩展自定义调度器
+    /// 【兼容层】保留给旧调度实现；新触发器动作调度优先使用 Runtime.ActionScheduler，
+    /// 规则调度优先使用 Runtime.RuleScheduler。
     /// </summary>
+    [Obsolete("Runtime/Scheduler is a legacy compatibility layer. Use Runtime.ActionScheduler for TriggerPlan action scheduling or Runtime.RuleScheduler for formal rule scheduling.")]
     public interface IScheduler
     {
         #region 属性

@@ -5,6 +5,7 @@ using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Host.Extensions.Moba.Runtime;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Demo.Moba.Services.LogicWorld;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -41,12 +42,16 @@ namespace AbilityKit.Demo.Moba.Services
             }
 
             PlayerInputCommand first = inputs[0];
-            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleIOPort), $"Submit: Frame={frame.Value}, Count={inputs.Count}, FirstPlayer={first.Player.Value}, FirstOp={first.OpCode}");
+            MobaRuntimeLog.Trace(
+                MobaRuntimeLogModule.Input,
+                MobaRuntimeLogPurpose.RuntimeTrace,
+                nameof(MobaBattleIOPort),
+                () => $"Submit: Frame={frame.Value}, Count={inputs.Count}, FirstPlayer={first.Player.Value}, FirstOp={first.OpCode}");
 
             LogicWorldInputSubmitResult result = _input.TrySubmit(frame, inputs);
             if (!result.Succeeded)
             {
-                return MobaInputSubmitResult.Fail(MobaInputSubmitFailureCode.RejectedByInputCoordinator, result.Message);
+                return MobaInputSubmitResult.Fail(MapFailureCode(result.FailureCode), result.Message);
             }
 
             if (result.HandledCount <= 0)
@@ -61,7 +66,7 @@ namespace AbilityKit.Demo.Moba.Services
                 return MobaInputSubmitResult.Fail(MobaInputSubmitFailureCode.PartialCommandHandled, $"input batch partially handled: {detail}");
             }
 
-            return MobaInputSubmitResult.Accepted(result.HandledCount, result.Message);
+            return MobaInputSubmitResult.Accepted(result.HandledCount);
         }
 
         public bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot)
@@ -92,15 +97,40 @@ namespace AbilityKit.Demo.Moba.Services
             return 1;
         }
 
+        private static MobaInputSubmitFailureCode MapFailureCode(LogicWorldInputSubmitFailureCode failureCode)
+        {
+            switch (failureCode)
+            {
+                case LogicWorldInputSubmitFailureCode.NullOrEmptyCommands:
+                    return MobaInputSubmitFailureCode.NullOrEmptyCommands;
+                case LogicWorldInputSubmitFailureCode.FrameRejected:
+                case LogicWorldInputSubmitFailureCode.CommandFrameMismatch:
+                    return MobaInputSubmitFailureCode.InvalidFrame;
+                case LogicWorldInputSubmitFailureCode.ContextMissing:
+                case LogicWorldInputSubmitFailureCode.CommandRejected:
+                case LogicWorldInputSubmitFailureCode.HandlerException:
+                default:
+                    return MobaInputSubmitFailureCode.RejectedByInputCoordinator;
+            }
+        }
+
         public void Dispose()
         {
         }
     }
 
     [WorldService(typeof(IMobaLogicWorldStateReadModel))]
+    [WorldService(typeof(IMobaBattleDiagnosticsStateReadModel))]
     [WorldService(typeof(MobaBattleStateQueryService))]
-    public sealed class MobaBattleStateQueryService : IService, IMobaLogicWorldStateReadModel
+    public sealed class MobaBattleStateQueryService : IService, IMobaLogicWorldStateReadModel, IMobaBattleDiagnosticsStateReadModel
     {
+        private static readonly ObjectPool<List<LogicWorldEntityState>> s_entityStateListPool = Pools.GetPool(
+            createFunc: () => new List<LogicWorldEntityState>(8),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
+
         private readonly MobaActorRegistry _actors;
 
         public MobaBattleStateQueryService(MobaActorRegistry actors)
@@ -110,18 +140,80 @@ namespace AbilityKit.Demo.Moba.Services
 
         public LogicWorldEntityState[] GetAllEntityStates()
         {
-            var states = new List<LogicWorldEntityState>(8);
+            var states = s_entityStateListPool.Get();
+            try
+            {
+                FillAllEntityStates(states);
+                return states.Count == 0 ? Array.Empty<LogicWorldEntityState>() : states.ToArray();
+            }
+            finally
+            {
+                s_entityStateListPool.Release(states);
+            }
+        }
 
+        public int FillAllEntityStates(IList<LogicWorldEntityState> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            var count = 0;
             foreach (var kv in _actors.Entries)
             {
                 var actorId = kv.Key;
                 var entity = kv.Value;
                 if (entity == null) continue;
 
-                states.Add(CreateState(actorId, entity));
+                buffer.Add(CreateState(actorId, entity));
+                count++;
             }
 
-            return states.ToArray();
+            return count;
+        }
+
+        public MobaDiagnosticEntityState[] GetDiagnosticEntityStates()
+        {
+            var states = s_entityStateListPool.Get();
+            try
+            {
+                FillAllEntityStates(states);
+                if (states.Count == 0)
+                {
+                    return Array.Empty<MobaDiagnosticEntityState>();
+                }
+
+                var diagnostics = new MobaDiagnosticEntityState[states.Count];
+                for (int i = 0; i < states.Count; i++)
+                {
+                    diagnostics[i] = MobaDiagnosticEntityState.FromLogicState(states[i]);
+                }
+
+                return diagnostics;
+            }
+            finally
+            {
+                s_entityStateListPool.Release(states);
+            }
+        }
+
+        public int FillDiagnosticEntityStates(IList<MobaDiagnosticEntityState> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            var states = s_entityStateListPool.Get();
+            try
+            {
+                FillAllEntityStates(states);
+                for (int i = 0; i < states.Count; i++)
+                {
+                    buffer.Add(MobaDiagnosticEntityState.FromLogicState(states[i]));
+                }
+
+                return states.Count;
+            }
+            finally
+            {
+                s_entityStateListPool.Release(states);
+            }
         }
 
         private static LogicWorldEntityState CreateState(int actorId, ActorEntity entity)

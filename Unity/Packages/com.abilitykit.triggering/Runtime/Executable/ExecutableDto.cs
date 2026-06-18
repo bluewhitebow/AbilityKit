@@ -145,6 +145,18 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public string DomainId;
         public string Key;
         public string ExprText;
+        public bool Required;
+        public bool HasFallback;
+        public double FallbackValue;
+        public bool HasMin;
+        public double MinValue;
+        public bool HasMax;
+        public double MaxValue;
+        public bool HasScale;
+        public double Scale;
+        public double Offset;
+        public string Label;
+        public string Scope;
         public bool HasValue => !string.IsNullOrEmpty(Kind);
     }
 

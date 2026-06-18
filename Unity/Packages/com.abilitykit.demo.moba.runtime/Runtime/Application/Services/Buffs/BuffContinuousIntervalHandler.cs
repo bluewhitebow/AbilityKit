@@ -24,7 +24,7 @@ namespace AbilityKit.Demo.Moba.Services
             return continuous is BuffContinuousRuntime;
         }
 
-        public void OnInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodicConfig)
+        public void OnInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodicConfig, in MobaCombatExecutionContext executionContext)
         {
             var buffContinuous = continuous as BuffContinuousRuntime;
             if (buffContinuous == null || periodicConfig == null) return;
@@ -33,9 +33,12 @@ namespace AbilityKit.Demo.Moba.Services
             var runtime = buffContinuous.Runtime;
             if (runtime == null) return;
 
-            _events?.PublishInterval(buff, runtime.SourceId, buffContinuous.TargetActorId, runtime);
-            _presentationCues?.Ticked(buff, runtime.SourceId, buffContinuous.TargetActorId, runtime);
-            _stageEffects?.Execute(periodicConfig.IntervalEffectIds, buff.Id, runtime.SourceId, buffContinuous.TargetActorId, runtime.SourceContextId, MobaBuffTriggering.Stages.Interval, runtime);
+            var sourceActorId = executionContext.SourceActorId > 0 ? executionContext.SourceActorId : runtime.SourceId;
+            var targetActorId = executionContext.TargetActorId > 0 ? executionContext.TargetActorId : buffContinuous.TargetActorId;
+            var sourceContextId = executionContext.ParentContextId != 0 ? executionContext.ParentContextId : runtime.SourceContextId;
+            _events?.PublishInterval(buff, sourceActorId, targetActorId, runtime);
+            _presentationCues?.Ticked(buff, sourceActorId, targetActorId, runtime);
+            _stageEffects?.Execute(periodicConfig.IntervalEffectIds, buff.Id, sourceActorId, targetActorId, sourceContextId, MobaBuffTriggering.Stages.Interval, runtime);
         }
     }
 }

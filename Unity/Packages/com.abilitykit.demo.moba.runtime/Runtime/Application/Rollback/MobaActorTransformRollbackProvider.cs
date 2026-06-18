@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.FrameSync.Rollback;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Core.Serialization;
 using AbilityKit.Core.Mathematics;
 using AbilityKit.Demo.Moba.Services;
@@ -11,6 +12,13 @@ namespace AbilityKit.Demo.Moba.Rollback
     public sealed class MobaActorTransformRollbackProvider : IRollbackStateProvider
     {
         public const int DefaultKey = 10001;
+
+        private static readonly ObjectPool<List<Entry>> s_entryListPool = Pools.GetPool(
+            createFunc: () => new List<Entry>(16),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
 
         private readonly MobaActorRegistry _registry;
 
@@ -23,18 +31,26 @@ namespace AbilityKit.Demo.Moba.Rollback
 
         public byte[] Export(FrameIndex frame)
         {
-            var entries = new List<Entry>(16);
-            foreach (var kv in _registry.Entries)
+            var entries = s_entryListPool.Get();
+            try
             {
-                var actorId = kv.Key;
-                var e = kv.Value;
-                if (e == null) continue;
-                if (!e.hasTransform) continue;
-                entries.Add(new Entry(actorId, e.transform.Value));
-            }
+                foreach (var kv in _registry.Entries)
+                {
+                    var actorId = kv.Key;
+                    var e = kv.Value;
+                    if (e == null) continue;
+                    if (!e.hasTransform) continue;
+                    entries.Add(new Entry(actorId, e.transform.Value));
+                }
 
-            entries.Sort((a, b) => a.ActorId.CompareTo(b.ActorId));
-            return BinaryObjectCodec.Encode(new Payload(1, entries.ToArray()));
+                entries.Sort((a, b) => a.ActorId.CompareTo(b.ActorId));
+                var payloadEntries = entries.Count == 0 ? Array.Empty<Entry>() : entries.ToArray();
+                return BinaryObjectCodec.Encode(new Payload(1, payloadEntries));
+            }
+            finally
+            {
+                s_entryListPool.Release(entries);
+            }
         }
 
         public void Import(FrameIndex frame, byte[] payload)

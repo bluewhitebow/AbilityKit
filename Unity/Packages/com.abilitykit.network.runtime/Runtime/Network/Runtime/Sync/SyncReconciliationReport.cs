@@ -3,17 +3,16 @@
 namespace AbilityKit.Network.Runtime.Sync
 {
     /// <summary>
-    /// Gameplay-agnostic reconciliation/catch-up diagnostics produced by a client sync strategy.
-    /// Replaces the scattered Last* fields demos previously exposed (e.g. Shooter's LastResyncReason /
-    /// LastResyncClientFrame / LastResyncAuthoritativeStateHash ...), giving the demo framework a single
-    /// uniform way to surface "why and how the client diverged and recovered" across every sync model.
+    /// 客户端同步策略产出的玩法无关校正/追赶诊断。
+    /// 它替代示例过去暴露的零散 Last* 字段（例如 Shooter 的 LastResyncReason /
+    /// LastResyncClientFrame / LastResyncAuthoritativeStateHash ...），为演示框架提供单一统一方式，
+    /// 跨所有同步模型展示“客户端为何分歧，以及如何恢复”。
     ///
-    /// Models that never reconcile (e.g. pure authoritative interpolation of remote actors) simply
-    /// report <see cref="None"/>.
+    /// 从不进行校正的模型（例如远端 actor 的纯权威插值）只需报告 <see cref="None"/>。
     /// </summary>
     public readonly struct SyncReconciliationReport
     {
-        /// <summary>An empty report indicating no reconciliation has occurred.</summary>
+        /// <summary>表示未发生校正的空报告。</summary>
         public static readonly SyncReconciliationReport None = new SyncReconciliationReport(
             SyncReconciliationReason.None,
             SyncRecoveryState.Normal,
@@ -44,31 +43,31 @@ namespace AbilityKit.Network.Runtime.Sync
             ReplayTicks = replayTicks;
         }
 
-        /// <summary>Why the last reconciliation was triggered (or <see cref="SyncReconciliationReason.None"/>).</summary>
+        /// <summary>最近一次校正被触发的原因（或 <see cref="SyncReconciliationReason.None"/>）。</summary>
         public SyncReconciliationReason Reason { get; }
 
-        /// <summary>The recovery phase the strategy is currently in.</summary>
+        /// <summary>策略当前所处的恢复阶段。</summary>
         public SyncRecoveryState RecoveryState { get; }
 
-        /// <summary>Whether the strategy is awaiting a full authoritative snapshot to recover.</summary>
+        /// <summary>策略是否正在等待完整权威快照以恢复。</summary>
         public bool NeedsFullSnapshot { get; }
 
-        /// <summary>Local simulation frame at the moment divergence was detected.</summary>
+        /// <summary>检测到分歧时的本地模拟帧。</summary>
         public int ClientFrame { get; }
 
-        /// <summary>Authoritative server frame involved in the divergence.</summary>
+        /// <summary>分歧涉及的权威服务器帧。</summary>
         public int AuthoritativeFrame { get; }
 
-        /// <summary>Locally predicted state hash at the divergence point.</summary>
+        /// <summary>分歧点处的本地预测状态哈希。</summary>
         public uint ClientStateHash { get; }
 
-        /// <summary>Authoritative state hash at the divergence point.</summary>
+        /// <summary>分歧点处的权威状态哈希。</summary>
         public uint AuthoritativeStateHash { get; }
 
-        /// <summary>Number of ticks replayed during the last rollback/reconciliation (0 when none).</summary>
+        /// <summary>最近一次回滚/校正期间重放的 tick 数（没有时为 0）。</summary>
         public int ReplayTicks { get; }
 
-        /// <summary>True when the last reconciliation actually corrected local state.</summary>
+        /// <summary>最近一次校正确实修复了本地状态时为 true。</summary>
         public bool DidReconcile => Reason != SyncReconciliationReason.None;
     }
 }

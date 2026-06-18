@@ -67,7 +67,7 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
         public float LastExecuteMs { get; internal set; }
 
         /// <summary>是否可以中断</summary>
-        public bool CanBeInterrupted => Plan.CanBeInterrupted;
+        public bool CanBeInterrupted => Plan.Schedule.CanBeInterrupted;
 
         /// <summary>中断原因</summary>
         public string InterruptReason { get; internal set; }
@@ -148,7 +148,8 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
             }
 
             // 阶段3: 根据调度模式执行
-            if (Plan.ScheduleMode == Config.EActionScheduleMode.Timeline)
+            var schedule = Plan.Schedule;
+            if (schedule.Mode == Config.EActionScheduleMode.Timeline)
             {
                 State = EActionInstanceState.Failed;
                 return ExecutionResult.Failed("ActionScheduler 尚未定义 Timeline 子 Action 序列，不能按单一 ActionCallPlan 执行 Timeline。请改用 Plan/Executables 主线承载时间线行为。");
@@ -171,7 +172,8 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
 
         private bool CanEnterExecutionWindow()
         {
-            switch (Plan.ScheduleMode)
+            var schedule = Plan.Schedule;
+            switch (schedule.Mode)
             {
                 case Config.EActionScheduleMode.Immediate:
                     return true;
@@ -182,21 +184,21 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
                         _delayStartMs = ElapsedMs;
                         _hasDelayStart = true;
                     }
-                    return ElapsedMs - _delayStartMs >= Math.Max(0f, Plan.ScheduleParam);
+                    return ElapsedMs - _delayStartMs >= Math.Max(0f, schedule.Param);
 
                 case Config.EActionScheduleMode.Periodic:
                 case Config.EActionScheduleMode.Continuous:
-                    if (Plan.ScheduleParam <= 0f)
+                    if (schedule.Param <= 0f)
                     {
                         return true;
                     }
 
                     if (ExecutionCount <= 0)
                     {
-                        return ElapsedMs >= Plan.ScheduleParam;
+                        return ElapsedMs >= schedule.Param;
                     }
 
-                    return ElapsedMs - LastExecuteMs >= Plan.ScheduleParam;
+                    return ElapsedMs - LastExecuteMs >= schedule.Param;
 
                 case Config.EActionScheduleMode.Timeline:
                     return true;
@@ -216,7 +218,7 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
 
             // 通过执行器执行
             var executed = Executor.TryExecute(ctx, out var result);
-            if (result.IsFailed && Plan.ExecutionPolicy == Config.EActionExecutionPolicy.WithRollback)
+            if (result.IsFailed && Plan.Execution.Policy == Config.EActionExecutionPolicy.WithRollback)
             {
                 return new ActionExecutionStep(false, ExecutionResult.Failed($"Action[{Plan.Id.Value}] 执行失败且请求回滚，但 ActionCallPlan 未携带回滚委托或补偿计划。原始错误：{result.FailureReason}"));
             }
@@ -244,7 +246,7 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
 
         private bool CanExecuteByPolicy(ActionExecutionContext ctx)
         {
-            return Plan.ExecutionPolicy switch
+            return Plan.Execution.Policy switch
             {
                 Config.EActionExecutionPolicy.Conditional => ConditionDelegate?.Invoke(BoundArgs, ctx.DispatcherContext) ?? true,
                 Config.EActionExecutionPolicy.Queued => !IsQueued(),
@@ -261,7 +263,8 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
 
         private bool ShouldTerminate()
         {
-            switch (Plan.ScheduleMode)
+            var schedule = Plan.Schedule;
+            switch (schedule.Mode)
             {
                 case Config.EActionScheduleMode.Immediate:
                     return true;
@@ -270,7 +273,7 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
                     return ExecutionCount >= 1;
 
                 case Config.EActionScheduleMode.Periodic:
-                    if (Plan.MaxExecutions > 0 && ExecutionCount >= Plan.MaxExecutions)
+                    if (schedule.MaxExecutions > 0 && ExecutionCount >= schedule.MaxExecutions)
                         return true;
                     break;
 

@@ -6,11 +6,10 @@ using System.Collections.Generic;
 namespace AbilityKit.Network.Runtime.Sync
 {
     /// <summary>
-    /// The lifecycle phase a <see cref="FastReconnectSession"/> is currently in. A session starts
-    /// <see cref="Connected"/>, enters <see cref="Disconnected"/> on an outage, then on reconnect picks
-    /// one of two recovery paths based on how far behind the client fell: <see cref="Resuming"/> (small
-    /// gap, incremental catch-up from buffered deltas) or <see cref="AwaitingFullSnapshot"/> (large gap,
-    /// a fresh authoritative snapshot is required). Either path ends in <see cref="Recovered"/>.
+    /// <see cref="FastReconnectSession"/> 当前所处的生命周期阶段。会话从 <see cref="Connected"/> 开始，
+    /// 连接中断后进入 <see cref="Disconnected"/>，重连时根据客户端落后程度选择两条恢复路径之一：
+    /// <see cref="Resuming"/>（小 gap，从缓冲增量追帧）或 <see cref="AwaitingFullSnapshot"/>（大 gap，需要新的权威快照）。
+    /// 任一路径最终都会进入 <see cref="Recovered"/>。
     /// </summary>
     public enum FastReconnectPhase
     {
@@ -22,11 +21,9 @@ namespace AbilityKit.Network.Runtime.Sync
     }
 
     /// <summary>
-    /// Result of a single <see cref="FastReconnectSession"/> transition: the phase the session is now in,
-    /// the gameplay-agnostic reconciliation diagnostics for the transition, and any health events emitted.
-    /// Carriers forward <see cref="Reconciliation"/> and <see cref="HealthEvents"/> straight into a
-    /// <see cref="DemoHarness"/> step telemetry so the harness can aggregate the reconnect picture using
-    /// the same plumbing as every other sync model.
+    /// 单次 <see cref="FastReconnectSession"/> 阶段迁移的结果：会话当前阶段、该迁移的玩法无关校正诊断，
+    /// 以及迁移过程中发出的健康事件。Carrier 会把 <see cref="Reconciliation"/> 与 <see cref="HealthEvents"/>
+    /// 直接转发到 <see cref="DemoHarness"/> 单步遥测中，让 harness 使用与其他同步模型相同的管线聚合重连视图。
     /// </summary>
     public readonly struct FastReconnectStepReport
     {
@@ -52,17 +49,14 @@ namespace AbilityKit.Network.Runtime.Sync
     }
 
     /// <summary>
-    /// Gameplay-agnostic implementation of the <see cref="NetworkSyncModel.FastReconnect"/> capability
-    /// (audit migration step 7). The session is the reusable runtime behind the
-    /// <see cref="NetworkSyncProfiles.FastReconnect"/> profile (Recovery =
-    /// <see cref="RecoveryPolicy.ReconnectResume"/> | <see cref="RecoveryPolicy.RequestFullSnapshot"/>):
-    /// it tracks the last acknowledged authoritative frame, and on reconnect decides between an
-    /// incremental resume and a full-snapshot rebuild based on the size of the frame gap relative to a
-    /// configurable resume window. Each transition surfaces unified <see cref="SyncHealthEvent"/>s
-    /// (<see cref="SyncHealthEventKind.SnapshotGap"/>, <see cref="SyncHealthEventKind.FullSnapshotRequested"/>,
-    /// <see cref="SyncHealthEventKind.FullSnapshotApplied"/>, <see cref="SyncHealthEventKind.InterpolationRecovered"/>)
-    /// plus a <see cref="SyncReconciliationReport"/>, so demos drive reconnect entirely through the
-    /// framework instead of re-implementing bespoke recovery state.
+    /// <see cref="NetworkSyncModel.FastReconnect"/> 能力的玩法无关实现（审计迁移步骤 7）。
+    /// 该会话是 <see cref="NetworkSyncProfiles.FastReconnect"/> 档案背后的可复用运行时
+    /// （Recovery = <see cref="RecoveryPolicy.ReconnectResume"/> | <see cref="RecoveryPolicy.RequestFullSnapshot"/>）：
+    /// 它跟踪最后确认的权威帧，并在重连时根据帧 gap 相对可配置恢复窗口的大小，在增量恢复与完整快照重建之间决策。
+    /// 每次迁移都会暴露统一的 <see cref="SyncHealthEvent"/>（<see cref="SyncHealthEventKind.SnapshotGap"/>、
+    /// <see cref="SyncHealthEventKind.FullSnapshotRequested"/>、<see cref="SyncHealthEventKind.FullSnapshotApplied"/>、
+    /// <see cref="SyncHealthEventKind.InterpolationRecovered"/>）以及 <see cref="SyncReconciliationReport"/>，
+    /// 让示例完全通过框架驱动重连，而不是重新实现各自的恢复状态。
     /// </summary>
     public sealed class FastReconnectSession
     {
@@ -74,9 +68,7 @@ namespace AbilityKit.Network.Runtime.Sync
         private int _pendingGapFrames;
 
         /// <param name="resumeWindowFrames">
-        /// Maximum authoritative-frame gap that can be recovered by an incremental resume. A reconnect
-        /// whose gap is at or below this window resumes from buffered deltas; a larger gap forces a full
-        /// snapshot rebuild.
+        /// 可通过增量恢复处理的最大权威帧 gap。重连 gap 小于等于该窗口时从缓冲增量恢复；更大的 gap 会强制完整快照重建。
         /// </param>
         public FastReconnectSession(int resumeWindowFrames = 32)
         {
@@ -89,21 +81,21 @@ namespace AbilityKit.Network.Runtime.Sync
 
         public int ResumeWindowFrames => _resumeWindowFrames;
 
-        /// <summary>The latest authoritative frame the client has fully acknowledged.</summary>
+        /// <summary>客户端已完整确认的最新权威帧。</summary>
         public int LastAckedServerFrame => _lastAckedServerFrame;
 
-        /// <summary>The authoritative frame observed at the most recent reconnect (0 while connected).</summary>
+        /// <summary>最近一次重连时观察到的权威帧（连接中为 0）。</summary>
         public int CurrentServerFrame => _currentServerFrame;
 
         /// <summary>
-        /// The frame gap that the in-flight recovery is closing. Valid while <see cref="Phase"/> is
-        /// <see cref="FastReconnectPhase.Resuming"/> or <see cref="FastReconnectPhase.AwaitingFullSnapshot"/>.
+        /// 当前进行中的恢复正在闭合的帧 gap。仅当 <see cref="Phase"/> 为 <see cref="FastReconnectPhase.Resuming"/>
+        /// 或 <see cref="FastReconnectPhase.AwaitingFullSnapshot"/> 时有效。
         /// </summary>
         public int PendingGapFrames => _pendingGapFrames;
 
         /// <summary>
-        /// Records a routine authoritative heartbeat while connected, acknowledging <paramref name="serverFrame"/>.
-        /// Emits an informational <see cref="SyncHealthEventKind.SnapshotReceived"/> event.
+        /// 在连接状态下记录一次常规权威心跳，并确认 <paramref name="serverFrame"/>。
+        /// 发出信息级 <see cref="SyncHealthEventKind.SnapshotReceived"/> 事件。
         /// </summary>
         public FastReconnectStepReport ObserveServerFrame(int serverFrame)
         {
@@ -129,8 +121,8 @@ namespace AbilityKit.Network.Runtime.Sync
         }
 
         /// <summary>
-        /// Marks the connection as lost. Local playback starves until <see cref="Reconnect"/> is called.
-        /// Emits a <see cref="SyncHealthEventKind.InterpolationStarved"/> warning at the last acked frame.
+        /// 标记连接已丢失。本地播放会保持饥饿状态，直到调用 <see cref="Reconnect"/>。
+        /// 在最后确认帧发出 <see cref="SyncHealthEventKind.InterpolationStarved"/> 警告。
         /// </summary>
         public FastReconnectStepReport Disconnect()
         {
@@ -158,11 +150,10 @@ namespace AbilityKit.Network.Runtime.Sync
         }
 
         /// <summary>
-        /// Re-establishes the connection at <paramref name="currentServerFrame"/> and chooses a recovery
-        /// path. Always emits a <see cref="SyncHealthEventKind.SnapshotGap"/> warning carrying the gap; a
-        /// gap within the resume window enters <see cref="FastReconnectPhase.Resuming"/>, otherwise it
-        /// requests a full snapshot (<see cref="SyncHealthEventKind.FullSnapshotRequested"/>) and enters
-        /// <see cref="FastReconnectPhase.AwaitingFullSnapshot"/>. Call <see cref="CompleteRecovery"/> to finish.
+        /// 在 <paramref name="currentServerFrame"/> 处重新建立连接并选择恢复路径。
+        /// 始终发出携带 gap 的 <see cref="SyncHealthEventKind.SnapshotGap"/> 警告；恢复窗口内的 gap 进入
+        /// <see cref="FastReconnectPhase.Resuming"/>，否则请求完整快照（<see cref="SyncHealthEventKind.FullSnapshotRequested"/>）
+        /// 并进入 <see cref="FastReconnectPhase.AwaitingFullSnapshot"/>。调用 <see cref="CompleteRecovery"/> 完成恢复。
         /// </summary>
         public FastReconnectStepReport Reconnect(int currentServerFrame)
         {
@@ -216,11 +207,10 @@ namespace AbilityKit.Network.Runtime.Sync
         }
 
         /// <summary>
-        /// Finishes the in-flight recovery: a resume catches the client up to the authoritative frame,
-        /// a full-snapshot path applies the snapshot first
-        /// (<see cref="SyncHealthEventKind.FullSnapshotApplied"/>). Both paths end with
-        /// <see cref="SyncHealthEventKind.InterpolationRecovered"/> and leave the session
-        /// <see cref="FastReconnectPhase.Recovered"/> with the gap closed.
+        /// 完成进行中的恢复：增量恢复会将客户端追到权威帧，完整快照路径会先应用快照
+        /// （<see cref="SyncHealthEventKind.FullSnapshotApplied"/>）。两条路径都会以
+        /// <see cref="SyncHealthEventKind.InterpolationRecovered"/> 结束，并让会话进入已闭合 gap 的
+        /// <see cref="FastReconnectPhase.Recovered"/>。
         /// </summary>
         public FastReconnectStepReport CompleteRecovery()
         {

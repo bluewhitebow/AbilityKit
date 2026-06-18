@@ -65,8 +65,12 @@ namespace AbilityKit.Demo.Moba.Services
             if (_eventBus == null) return;
             var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(eventId);
             _eventBus.Publish(new EventKey<UnitDieEventPayload>(eid), in payload);
-            object boxed = payload;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (_eventBus.HasSubscribers(objectKey))
+            {
+                object boxed = payload;
+                _eventBus.Publish(objectKey, in boxed);
+            }
         }
 
         public void OnDeinit(IWorldResolver services)

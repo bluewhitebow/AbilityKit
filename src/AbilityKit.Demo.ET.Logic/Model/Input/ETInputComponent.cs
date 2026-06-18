@@ -11,6 +11,7 @@ namespace ET.Logic
     {
         // 输入缓冲 (帧号 -> 命令列表)
         private readonly Dictionary<int, List<object>> _inputBuffer = new Dictionary<int, List<object>>();
+        private readonly List<int> _framesToRemove = new List<int>(8);
 
         public int PendingFrameCount => _inputBuffer.Count;
 
@@ -81,9 +82,14 @@ namespace ET.Logic
             return _inputBuffer.TryGetValue(frame, out var commands) ? commands : null;
         }
 
-        public List<object>? GetInputsUpToFrame(int frame)
+        public int CopyInputsUpToFrame(int frame, List<object> destination)
         {
-            List<object> result = null;
+            if (destination == null)
+            {
+                throw new ArgumentNullException(nameof(destination));
+            }
+
+            destination.Clear();
             foreach (var kv in _inputBuffer)
             {
                 if (kv.Key > frame || kv.Value == null || kv.Value.Count == 0)
@@ -91,11 +97,10 @@ namespace ET.Logic
                     continue;
                 }
 
-                result ??= new List<object>();
-                result.AddRange(kv.Value);
+                destination.AddRange(kv.Value);
             }
 
-            return result;
+            return destination.Count;
         }
 
         public string FormatPendingFrames()
@@ -115,16 +120,17 @@ namespace ET.Logic
         /// </summary>
         public void ClearProcessedInputs(int upToFrame)
         {
-            var framesToRemove = new List<int>();
+            _framesToRemove.Clear();
             foreach (var frame in _inputBuffer.Keys)
             {
                 if (frame <= upToFrame)
-                    framesToRemove.Add(frame);
+                    _framesToRemove.Add(frame);
             }
-            foreach (var frame in framesToRemove)
+            for (int i = 0; i < _framesToRemove.Count; i++)
             {
-                _inputBuffer.Remove(frame);
+                _inputBuffer.Remove(_framesToRemove[i]);
             }
+            _framesToRemove.Clear();
         }
     }
 }

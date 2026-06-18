@@ -3,7 +3,7 @@ using System;
 namespace AbilityKit.Network.Runtime.Sync
 {
 /// <summary>
-/// Captures the shared time coordinates used by prediction, interpolation, rewind, and demo playback.
+/// 捕获预测、插值、回溯和演示播放共用的时间坐标。
 /// </summary>
 public readonly struct SyncTimeAnchor : IEquatable<SyncTimeAnchor>
 {

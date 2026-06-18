@@ -38,15 +38,7 @@ public sealed class RoomPickHeroHandler : GatewayRequestHandlerBase
                 return GatewayResponse.Error(request.Seq, GatewayStatusCode.BadRequest);
 
             var room = _clusterClient.GetGrain<IRoomGrain>(roomId);
-            await room.PickHeroAsync(new RoomPickHeroRequest(
-                accountId,
-                req.HeroId,
-                req.TeamId,
-                req.SpawnPointId,
-                req.Level,
-                req.AttributeTemplateId,
-                req.BasicAttackSkillId,
-                req.SkillIds));
+            await room.SubmitGameplayCommandAsync(RoomGatewayWireMapper.ToGameplayCommand(accountId, req));
 
             var snapshot = await room.GetSnapshotAsync();
             var wire = RoomGatewayWireMapper.ToSnapshotRes(snapshot);
@@ -56,9 +48,9 @@ public sealed class RoomPickHeroHandler : GatewayRequestHandlerBase
             context.AccountId = accountId;
             return GatewayResponse.Ok(request.Seq, responsePayload.ToArray());
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            return GatewayResponse.Error(request.Seq, GatewayStatusCode.InternalError);
+            return RoomGatewayErrorMapper.ToResponse(request.Seq, exception);
         }
     }
 }

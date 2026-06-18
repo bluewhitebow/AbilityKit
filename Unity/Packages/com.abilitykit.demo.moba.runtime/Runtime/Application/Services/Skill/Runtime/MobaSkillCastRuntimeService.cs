@@ -5,22 +5,32 @@ using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Trace;
 using AbilityKit.Core.Logging;
+using AbilityKit.Core.Pooling;
 
 namespace AbilityKit.Demo.Moba.Services
 {
     [WorldService(typeof(MobaSkillCastRuntimeService))]
     public sealed class MobaSkillCastRuntimeService : IService
     {
+        private static readonly ObjectPool<List<long>> s_longListPool = Pools.GetPool(
+            createFunc: () => new List<long>(8),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64);
+
         private readonly Dictionary<long, MobaSkillCastRuntime> _runtimes = new Dictionary<long, MobaSkillCastRuntime>();
         private readonly Dictionary<long, long> _runtimeByTraceContextId = new Dictionary<long, long>();
         private readonly Dictionary<long, MobaSkillRuntimeRetainHandle> _retains = new Dictionary<long, MobaSkillRuntimeRetainHandle>();
         private readonly List<long> _endingBuffer = new List<long>(8);
+        private readonly List<MobaSkillRuntimeChildRef> _diagnosticChildrenBuffer = new List<MobaSkillRuntimeChildRef>(8);
         private long _nextRuntimeId = 1L;
         private long _nextRetainId = 1L;
         private int _nextGeneration = 1;
 
         [WorldInject(required: false)]
         private MobaTraceRegistry _trace = null;
+
+        public MobaSkillRuntimeLifecycleHookService LifecycleHooks { get; } = new MobaSkillRuntimeLifecycleHookService();
 
         public int Count => _runtimes.Count;
 
@@ -37,6 +47,7 @@ namespace AbilityKit.Demo.Moba.Services
                 _runtimeByTraceContextId[runtime.RootTraceContextId] = runtimeId;
             }
 
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.Created, runtime, default, default, MobaSkillRuntimeEndReason.None, forced: false);
             return runtime;
         }
 
@@ -123,10 +134,75 @@ namespace AbilityKit.Demo.Moba.Services
             return TryGetBlackboard(in handle, out var blackboard) && blackboard.AddContextId(in key, contextId);
         }
 
+        public bool TryGetDiagnostics(in MobaSkillCastRuntimeHandle handle, out MobaSkillRuntimeDiagnostics diagnostics)
+        {
+            diagnostics = default;
+            if (!TryGet(in handle, out var runtime)) return false;
+            diagnostics = runtime.CreateDiagnosticsSnapshot();
+            return true;
+        }
+
+        public bool TryGetDiagnostics(long runtimeId, out MobaSkillRuntimeDiagnostics diagnostics)
+        {
+            diagnostics = default;
+            if (!TryGet(runtimeId, out var runtime)) return false;
+            diagnostics = runtime.CreateDiagnosticsSnapshot();
+            return true;
+        }
+
+        public int CopyPendingChildren(in MobaSkillCastRuntimeHandle handle, List<MobaSkillRuntimeChildRef> results, MobaSkillRuntimeChildKind kind = MobaSkillRuntimeChildKind.Unknown)
+        {
+            if (!TryGet(in handle, out var runtime)) return 0;
+            return runtime.CopyChildrenTo(results, kind);
+        }
+
+        public int CountPendingChildren(in MobaSkillCastRuntimeHandle handle, MobaSkillRuntimeChildKind kind = MobaSkillRuntimeChildKind.Unknown)
+        {
+            return TryGet(in handle, out var runtime) ? runtime.CountChildren(kind) : 0;
+        }
+
+        public MobaSkillRuntimeScanResult ScanDiagnostics(IMobaBattleDiagnosticsService diagnostics = null, int maxWarningCount = 8)
+        {
+            var active = 0;
+            var waiting = 0;
+            var pendingChildren = 0;
+            var warningCount = 0;
+
+            foreach (var kv in _runtimes)
+            {
+                var runtime = kv.Value;
+                if (runtime == null || runtime.IsEnded) continue;
+
+                active++;
+                pendingChildren += runtime.PendingChildren;
+                if (!runtime.PipelineEnded || runtime.PendingChildren <= 0) continue;
+
+                waiting++;
+                if (diagnostics != null && warningCount < maxWarningCount)
+                {
+                    warningCount++;
+                    _diagnosticChildrenBuffer.Clear();
+                    runtime.CopyChildrenTo(_diagnosticChildrenBuffer);
+                    diagnostics.Warning(
+                        "moba.skill.runtime.waitingChildren." + runtime.RuntimeId,
+                        () => FormatWaitingChildrenWarning(runtime, _diagnosticChildrenBuffer),
+                        maxCount: 1);
+                }
+            }
+
+            _diagnosticChildrenBuffer.Clear();
+            diagnostics?.Gauge(MobaBattleDiagnosticMetric.SkillRuntimeActive, active);
+            diagnostics?.Gauge(MobaBattleDiagnosticMetric.SkillRuntimeWaitingChildren, waiting);
+            diagnostics?.Gauge(MobaBattleDiagnosticMetric.SkillRuntimePendingChildren, pendingChildren);
+            return new MobaSkillRuntimeScanResult(active, waiting, pendingChildren);
+        }
+
         public bool RetainChild(long runtimeId, in MobaSkillRuntimeChildRef child)
         {
             if (!TryGet(runtimeId, out var runtime)) return false;
-            return runtime.RetainChild(in child);
+            if (!runtime.RetainChild(in child)) return false;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.ChildRetained, runtime, in child, default, MobaSkillRuntimeEndReason.None, forced: false);
+            return true;
         }
 
         public bool RetainChild(in MobaSkillCastRuntimeHandle runtimeHandle, in MobaSkillRuntimeChildRef child, out MobaSkillRuntimeRetainHandle retainHandle)
@@ -139,6 +215,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (_nextRetainId == 0L) _nextRetainId = 1L;
             retainHandle = new MobaSkillRuntimeRetainHandle(retainId, runtime.Handle, in child);
             _retains.Add(retainId, retainHandle);
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.ChildRetained, runtime, in child, in retainHandle, MobaSkillRuntimeEndReason.None, forced: false);
             return true;
         }
 
@@ -148,6 +225,7 @@ namespace AbilityKit.Demo.Moba.Services
             var released = runtime.ReleaseChild(in child);
             if (released)
             {
+                NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.ChildReleased, runtime, in child, default, MobaSkillRuntimeEndReason.None, forced: false);
                 TryFinalize(runtime);
             }
 
@@ -169,6 +247,7 @@ namespace AbilityKit.Demo.Moba.Services
             var released = runtime.ReleaseChild(in child);
             if (released)
             {
+                NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.ChildReleased, runtime, in child, in retainHandle, MobaSkillRuntimeEndReason.None, forced: false);
                 TryFinalize(runtime);
             }
 
@@ -181,6 +260,7 @@ namespace AbilityKit.Demo.Moba.Services
             runtime.PipelineEnded = true;
             runtime.Stage = ToStage(reason);
             runtime.EndReason = reason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.PipelineCompleted : reason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.PipelineEnded, runtime, default, default, runtime.EndReason, forced: false);
             TryFinalize(runtime);
             return true;
         }
@@ -191,6 +271,7 @@ namespace AbilityKit.Demo.Moba.Services
             runtime.PipelineEnded = true;
             runtime.Stage = ToStage(reason);
             runtime.EndReason = reason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.PipelineCompleted : reason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.PipelineEnded, runtime, default, default, runtime.EndReason, forced: false);
             TryFinalize(runtime);
             return true;
         }
@@ -201,6 +282,7 @@ namespace AbilityKit.Demo.Moba.Services
             runtime.PipelineEnded = true;
             runtime.Stage = SkillCastStage.Cancelled;
             runtime.EndReason = reason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.Cancelled : reason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.PipelineEnded, runtime, default, default, runtime.EndReason, forced: false);
             TryFinalize(runtime);
             return true;
         }
@@ -211,6 +293,7 @@ namespace AbilityKit.Demo.Moba.Services
             runtime.PipelineEnded = true;
             runtime.Stage = SkillCastStage.Cancelled;
             runtime.EndReason = reason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.Cancelled : reason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.PipelineEnded, runtime, default, default, runtime.EndReason, forced: false);
             TryFinalize(runtime);
             return true;
         }
@@ -221,6 +304,7 @@ namespace AbilityKit.Demo.Moba.Services
             runtime.PipelineEnded = true;
             runtime.Stage = SkillCastStage.Cancelled;
             runtime.EndReason = reason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.RollbackCleanup : reason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.ForceTerminated, runtime, default, default, runtime.EndReason, forced: true);
             TryFinalize(runtime, force: true);
             return true;
         }
@@ -231,6 +315,7 @@ namespace AbilityKit.Demo.Moba.Services
             _runtimeByTraceContextId.Clear();
             _retains.Clear();
             _endingBuffer.Clear();
+            _diagnosticChildrenBuffer.Clear();
             _nextRuntimeId = 1L;
             _nextRetainId = 1L;
             _nextGeneration = 1;
@@ -239,15 +324,23 @@ namespace AbilityKit.Demo.Moba.Services
         public void Dispose()
         {
             Clear();
+            LifecycleHooks.Clear();
         }
 
         private void TryFinalize(MobaSkillCastRuntime runtime, bool force = false)
         {
             if (runtime == null || runtime.IsEnded || runtime.IsEnding) return;
-            if (!force && (!runtime.PipelineEnded || runtime.PendingChildren > 0)) return;
+            if (!force && !runtime.PipelineEnded) return;
+            if (!force && runtime.PendingChildren > 0)
+            {
+                var waitingReason = runtime.EndReason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.PipelineCompleted : runtime.EndReason;
+                NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.WaitingChildren, runtime, default, default, waitingReason, forced: false);
+                return;
+            }
 
             runtime.IsEnding = true;
             var reason = runtime.EndReason == MobaSkillRuntimeEndReason.None ? MobaSkillRuntimeEndReason.PipelineCompleted : runtime.EndReason;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.Finalizing, runtime, default, default, reason, force);
             runtime.NotifyEnding(reason);
 
             if (runtime.RootTraceContextId != 0L)
@@ -268,7 +361,31 @@ namespace AbilityKit.Demo.Moba.Services
             _endingBuffer.Add(runtime.RuntimeId);
             runtime.IsEnded = true;
             runtime.IsEnding = false;
+            NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind.Finalized, runtime, default, default, reason, force);
             FlushEnded();
+        }
+
+        private void NotifyLifecycle(MobaSkillRuntimeLifecycleEventKind kind, MobaSkillCastRuntime runtime, in MobaSkillRuntimeChildRef child, in MobaSkillRuntimeRetainHandle retainHandle, MobaSkillRuntimeEndReason reason, bool forced)
+        {
+            if (runtime == null || LifecycleHooks.Count == 0) return;
+            var lifecycleEvent = new MobaSkillRuntimeLifecycleEvent(kind, runtime, in child, in retainHandle, reason, forced);
+            LifecycleHooks.Notify(in lifecycleEvent);
+        }
+
+        private static string FormatWaitingChildrenWarning(MobaSkillCastRuntime runtime, List<MobaSkillRuntimeChildRef> children)
+        {
+            if (runtime == null) return "[MobaSkillRuntime] runtime waiting children but runtime is null.";
+            var text = $"[MobaSkillRuntime] pipeline ended but waiting children. runtime={runtime.Handle}, skillId={runtime.SkillId}, caster={runtime.CasterActorId}, target={runtime.TargetActorId}, pending={runtime.PendingChildren}, reason={runtime.EndReason}";
+            if (children == null || children.Count == 0) return text;
+
+            text += ", children=";
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (i > 0) text += ";";
+                text += children[i].ToString();
+            }
+
+            return text;
         }
 
         private void FlushEnded()
@@ -285,18 +402,25 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (!handle.IsValid || _retains.Count == 0) return;
 
-            var removeIds = new List<long>();
-            foreach (var kv in _retains)
+            var removeIds = s_longListPool.Get();
+            try
             {
-                if (kv.Value.Runtime.Equals(handle))
+                foreach (var kv in _retains)
                 {
-                    removeIds.Add(kv.Key);
+                    if (kv.Value.Runtime.Equals(handle))
+                    {
+                        removeIds.Add(kv.Key);
+                    }
+                }
+
+                for (int i = 0; i < removeIds.Count; i++)
+                {
+                    _retains.Remove(removeIds[i]);
                 }
             }
-
-            for (int i = 0; i < removeIds.Count; i++)
+            finally
             {
-                _retains.Remove(removeIds[i]);
+                s_longListPool.Release(removeIds);
             }
         }
 

@@ -23,6 +23,8 @@ namespace AbilityKit.Triggering.Runtime.Schedule
         private readonly List<ScheduleItemData> _items = new();
         private readonly List<IScheduleEffect> _effects = new();
         private readonly List<IScheduleEffectCallbacks> _callbacks = new();
+        private readonly Dictionary<int, int> _indexByHandleId = new();
+        private int _nextHandleId = 1;
 
         // ===== 调度策略 =====
 
@@ -54,14 +56,14 @@ namespace AbilityKit.Triggering.Runtime.Schedule
                 throw new ArgumentNullException(nameof(effect));
 
             int index = _items.Count;
-            int handleId = index + 1; // Start from 1
+            int handleId = _nextHandleId++;
 
             // 创建调度项
             var item = new ScheduleItemData
             {
                 Handle = new ScheduleHandle(handleId, index),
                 BusinessId = request.BusinessId,
-                TriggerId = request.BusinessId,
+                TriggerId = request.TriggerId,
                 State = EScheduleItemState.Registered,
                 Mode = request.Mode,
                 IntervalMs = request.IntervalMs,
@@ -78,6 +80,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule
             _items.Add(item);
             _effects.Add(effect);
             _callbacks.Add(effect as IScheduleEffectCallbacks);
+            _indexByHandleId[handleId] = index;
 
             ActiveCount++;
 
@@ -118,9 +121,9 @@ namespace AbilityKit.Triggering.Runtime.Schedule
 
         public bool TryGetItem(ScheduleHandle handle, out ScheduleItemData item)
         {
-            if (handle.IsValid && handle.Index >= 0 && handle.Index < _items.Count)
+            if (TryGetIndex(handle, out var index))
             {
-                item = _items[handle.Index];
+                item = _items[index];
                 return true;
             }
             item = default;
@@ -161,10 +164,10 @@ namespace AbilityKit.Triggering.Runtime.Schedule
 
         public bool Modify(ScheduleHandle handle, in ScheduleModifyRequest request)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
@@ -176,45 +179,45 @@ namespace AbilityKit.Triggering.Runtime.Schedule
                 item.DelayMs = request.DelayMs;
                 item.ElapsedMs = 0;
             }
-            _items[handle.Index] = item;
+            _items[index] = item;
 
             return true;
         }
 
         public bool SetSpeed(ScheduleHandle handle, float speed)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
             item.Speed = speed;
-            _items[handle.Index] = item;
+            _items[index] = item;
             return true;
         }
 
         public bool SetInterval(ScheduleHandle handle, float intervalMs)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
             item.IntervalMs = intervalMs;
-            _items[handle.Index] = item;
+            _items[index] = item;
             return true;
         }
 
         public bool AddExecutions(ScheduleHandle handle, int count)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
@@ -222,7 +225,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule
                 return true; // 无限执行次数，无需修改
 
             item.MaxExecutions += count;
-            _items[handle.Index] = item;
+            _items[index] = item;
             return true;
         }
 
@@ -232,49 +235,49 @@ namespace AbilityKit.Triggering.Runtime.Schedule
 
         public bool Pause(ScheduleHandle handle)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
             item.State = EScheduleItemState.Paused;
-            _items[handle.Index] = item;
+            _items[index] = item;
             return true;
         }
 
         public bool Resume(ScheduleHandle handle)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated || item.State != EScheduleItemState.Paused)
                 return false;
 
             item.State = item.ElapsedMs >= item.DelayMs
                 ? EScheduleItemState.Running
                 : EScheduleItemState.WaitingDelay;
-            _items[handle.Index] = item;
+            _items[index] = item;
             return true;
         }
 
         public bool Interrupt(ScheduleHandle handle, string reason = null)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated || !item.CanBeInterrupted)
                 return false;
 
             item.State = EScheduleItemState.Interrupted;
             item.InterruptReason = reason;
-            _items[handle.Index] = item;
+            _items[index] = item;
 
             // 调用回调
-            var callback = _callbacks[handle.Index];
+            var callback = _callbacks[index];
             var context = CreateContext(item);
             callback?.OnInterrupted(context, reason ?? "Unknown");
 
@@ -284,15 +287,15 @@ namespace AbilityKit.Triggering.Runtime.Schedule
 
         public bool Cancel(ScheduleHandle handle)
         {
-            if (!handle.IsValid || handle.Index < 0 || handle.Index >= _items.Count)
+            if (!TryGetIndex(handle, out var index))
                 return false;
 
-            var item = _items[handle.Index];
+            var item = _items[index];
             if (item.IsTerminated)
                 return false;
 
             item.State = EScheduleItemState.Terminated;
-            _items[handle.Index] = item;
+            _items[index] = item;
 
             ActiveCount--;
             return true;
@@ -405,6 +408,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule
             _items.Clear();
             _effects.Clear();
             _callbacks.Clear();
+            _indexByHandleId.Clear();
             ActiveCount = 0;
         }
 
@@ -421,6 +425,7 @@ namespace AbilityKit.Triggering.Runtime.Schedule
             for (int i = indices.Count - 1; i >= 0; i--)
             {
                 int index = indices[i];
+                _indexByHandleId.Remove(_items[index].Handle.HandleId);
                 _items.RemoveAt(index);
                 _effects.RemoveAt(index);
                 _callbacks.RemoveAt(index);
@@ -433,12 +438,25 @@ namespace AbilityKit.Triggering.Runtime.Schedule
         private void RebuildHandleIndices()
         {
             // 由于删除后索引会变化，需要更新句柄
+            _indexByHandleId.Clear();
             for (int i = 0; i < _items.Count; i++)
             {
                 var item = _items[i];
                 item.Handle = new ScheduleHandle(item.Handle.HandleId, i);
                 _items[i] = item;
+                _indexByHandleId[item.Handle.HandleId] = i;
             }
+        }
+
+        private bool TryGetIndex(ScheduleHandle handle, out int index)
+        {
+            if (handle.IsValid && _indexByHandleId.TryGetValue(handle.HandleId, out index))
+            {
+                return index >= 0 && index < _items.Count && _items[index].Handle.HandleId == handle.HandleId;
+            }
+
+            index = -1;
+            return false;
         }
 
         private static ScheduleContext CreateContext(ScheduleItemData item)

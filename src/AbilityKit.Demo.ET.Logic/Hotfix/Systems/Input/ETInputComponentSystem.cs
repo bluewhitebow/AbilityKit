@@ -31,7 +31,6 @@ namespace ET.Logic
         public static void SubmitMoveInput(this ETInputComponent self, int frame, string playerId, float dx, float dz)
         {
             self.AddMoveCommand(frame, playerId, dx, dz);
-            Log.Debug($"[ETInput] Move input: PlayerId={playerId} Dir=({dx}, {dz}) at frame {frame}");
         }
 
         /// <summary>
@@ -40,7 +39,6 @@ namespace ET.Logic
         public static void SubmitSkillInput(this ETInputComponent self, int frame, string playerId, int skillSlot, float targetX, float targetY)
         {
             self.AddSkillCommand(frame, playerId, skillSlot, targetX, targetY);
-            Log.Debug($"[ETInput] Skill input: PlayerId={playerId} Skill {skillSlot} -> ({targetX}, {targetY}) at frame {frame}");
         }
 
         /// <summary>
@@ -49,7 +47,6 @@ namespace ET.Logic
         public static void SubmitStopInput(this ETInputComponent self, int frame, string playerId)
         {
             self.AddStopCommand(frame, playerId);
-            Log.Debug($"[ETInput] Stop input: PlayerId={playerId} at frame {frame}");
         }
 
         #endregion

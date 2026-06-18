@@ -145,110 +145,103 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool HandleInput(int actorId, in SkillInputEvent evt)
         {
-            return TryHandleInput(actorId, in evt, out _);
+            return TryHandleInputResult(actorId, in evt).Success;
         }
 
         public bool TryHandleInput(int actorId, in SkillInputEvent evt, out string failReason)
         {
-            if (!ValidateSkillInput(actorId, in evt, out failReason))
-            {
-                return false;
-            }
-
-            return DispatchSkillInputPhase(actorId, in evt, out failReason);
+            var result = TryHandleInputResult(actorId, in evt);
+            failReason = result.Success ? result.Message : result.Failure.Message ?? result.Message;
+            return result.Success;
         }
 
-        private static bool ValidateSkillInput(int actorId, in SkillInputEvent evt, out string failReason)
+        public MobaSkillInputHandleResult TryHandleInputResult(int actorId, in SkillInputEvent evt)
         {
-            failReason = null;
+            var validation = ValidateSkillInput(actorId, in evt);
+            if (!validation.Success)
+            {
+                return validation;
+            }
+
+            return DispatchSkillInputPhase(actorId, in evt);
+        }
+
+        private static MobaSkillInputHandleResult ValidateSkillInput(int actorId, in SkillInputEvent evt)
+        {
             if (actorId <= 0)
             {
-                failReason = "Invalid actor id.";
-                return false;
+                return MobaSkillInputHandleResult.Failed("skill.input.invalidActor", "Invalid actor id.");
             }
 
             if (evt.Slot <= 0)
             {
-                failReason = "Invalid skill slot.";
-                return false;
+                return MobaSkillInputHandleResult.Failed("skill.input.invalidSlot", "Invalid skill slot.");
             }
 
-            return true;
+            return MobaSkillInputHandleResult.Accepted();
         }
 
-        private bool DispatchSkillInputPhase(int actorId, in SkillInputEvent evt, out string failReason)
+        private MobaSkillInputHandleResult DispatchSkillInputPhase(int actorId, in SkillInputEvent evt)
         {
             switch (evt.Phase)
             {
                 case SkillInputPhase.Press:
-                    return HandlePressInput(actorId, in evt, out failReason);
+                    return HandlePressInput(actorId, in evt);
                 case SkillInputPhase.Hold:
-                    return HandleHoldInput(actorId, in evt, out failReason);
+                    return HandleHoldInput(actorId, in evt);
                 case SkillInputPhase.Release:
-                    return HandleReleaseInput(actorId, in evt, out failReason);
+                    return HandleReleaseInput(actorId, in evt);
                 case SkillInputPhase.Cancel:
-                    return HandleCancelInput(actorId, evt.Slot, out failReason);
+                    return HandleCancelInput(actorId, evt.Slot);
                 default:
-                    failReason = $"Unsupported skill input phase: {evt.Phase}.";
-                    return false;
+                    return MobaSkillInputHandleResult.Failed("skill.input.unsupportedPhase", "Unsupported skill input phase.");
             }
         }
 
-        private bool HandlePressInput(int actorId, in SkillInputEvent evt, out string failReason)
+        private MobaSkillInputHandleResult HandlePressInput(int actorId, in SkillInputEvent evt)
         {
             if (TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
-                failReason = $"UpdatedRunningInput(Slot={evt.Slot},Target={evt.TargetActorId})";
-                return true;
+                return MobaSkillInputHandleResult.Accepted("skill.input.running.updated");
             }
 
-            return TryStartCastFromInput(actorId, in evt, out failReason);
+            return TryStartCastFromInput(actorId, in evt);
         }
 
-        private bool HandleHoldInput(int actorId, in SkillInputEvent evt, out string failReason)
+        private MobaSkillInputHandleResult HandleHoldInput(int actorId, in SkillInputEvent evt)
         {
             if (TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
-                failReason = $"UpdatedRunningInput(Slot={evt.Slot},Target={evt.TargetActorId})";
-                return true;
+                return MobaSkillInputHandleResult.Accepted("skill.input.running.updated");
             }
 
-            failReason = "No running skill for hold input.";
-            return false;
+            return MobaSkillInputHandleResult.Failed("skill.input.noRunningForHold", "No running skill for hold input.");
         }
 
-        private bool HandleReleaseInput(int actorId, in SkillInputEvent evt, out string failReason)
+        private MobaSkillInputHandleResult HandleReleaseInput(int actorId, in SkillInputEvent evt)
         {
             if (TryReleaseRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
-                failReason = $"ReleasedRunningInput(Slot={evt.Slot},Target={evt.TargetActorId})";
-                return true;
+                return MobaSkillInputHandleResult.Accepted("skill.input.running.released");
             }
 
-            return TryStartCastFromInput(actorId, in evt, out failReason);
+            return TryStartCastFromInput(actorId, in evt);
         }
 
-        private bool HandleCancelInput(int actorId, int slot, out string failReason)
+        private MobaSkillInputHandleResult HandleCancelInput(int actorId, int slot)
         {
             if (CancelBySlot(actorId, slot))
             {
-                failReason = $"CancelledRunningInput(Slot={slot})";
-                return true;
+                return MobaSkillInputHandleResult.Accepted("skill.input.running.cancelled");
             }
 
-            failReason = "No running skill for cancel input.";
-            return false;
+            return MobaSkillInputHandleResult.Failed("skill.input.noRunningForCancel", "No running skill for cancel input.");
         }
 
-        private bool TryStartCastFromInput(int actorId, in SkillInputEvent evt, out string failReason)
+        private MobaSkillInputHandleResult TryStartCastFromInput(int actorId, in SkillInputEvent evt)
         {
-            var cast = CastBySlot(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId, out failReason);
-            if (cast && string.IsNullOrEmpty(failReason))
-            {
-                failReason = $"CastBySlotStarted(Slot={evt.Slot},Target={evt.TargetActorId})";
-            }
-
-            return cast;
+            var result = TryCastBySlot(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId);
+            return MobaSkillInputHandleResult.FromCast(in result, "skill.input.cast.started");
         }
 
         public bool CastBySlot(int actorId, int slot, in Vec3 aimPos, in Vec3 aimDir, out string failReason)
@@ -325,9 +318,8 @@ namespace AbilityKit.Demo.Moba.Services
             var prepared = _preparation.Prepare(in input);
             if (!prepared.Success)
             {
-                return MobaSkillCastResult.Failed(
-                    prepared.FailReason,
-                    new MobaSkillCastFailure("Preparation", null, "skill.cast.prepareFailed", prepared.FailReason));
+                var failure = prepared.Failure;
+                return MobaSkillCastResult.Failed(prepared.FailReason, in failure);
             }
 
             return StartPreparedCast(actorId, skillId, in prepared);
@@ -443,9 +435,17 @@ namespace AbilityKit.Demo.Moba.Services
             var dt = _clock.DeltaTime;
             if (dt <= 0f)
             {
-                var message = $"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}";
-                if (_diagnostics != null) _diagnostics.Warning("skill.executor.invalidDeltaTime", message);
-                else Log.Warning(message);
+                if (_diagnostics != null)
+                {
+                    _diagnostics.Warning(
+                        "skill.executor.invalidDeltaTime",
+                        () => $"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}");
+                }
+                else
+                {
+                    Log.Warning($"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}");
+                }
+
                 return;
             }
 

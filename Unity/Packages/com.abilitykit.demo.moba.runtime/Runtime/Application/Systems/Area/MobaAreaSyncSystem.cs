@@ -119,8 +119,12 @@ namespace AbilityKit.Demo.Moba.Systems.Area
             };
 
             _eventBus.Publish(new EventKey<AreaEventArgs>(eid), in payload);
-            object boxed = payload;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (_eventBus.HasSubscribers(objectKey))
+            {
+                object boxed = payload;
+                _eventBus.Publish(objectKey, in boxed);
+            }
         }
 
         private MobaAreaRuntimeInfo RequireAreaInfo(AreaId areaId)

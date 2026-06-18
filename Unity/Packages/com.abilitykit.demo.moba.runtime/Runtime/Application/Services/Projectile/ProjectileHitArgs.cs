@@ -3,7 +3,7 @@ using AbilityKit.Core.Mathematics;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
-    public sealed class ProjectileHitArgs : IMobaActorContextProvider, IMobaTriggerInvocationContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider
+    public sealed class ProjectileHitArgs : IMobaActorContextProvider, IMobaTriggerInvocationContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
         public int TriggerId { get; set; }
         public EffectContextKind Kind => EffectContextKind.Projectile;
@@ -120,6 +120,18 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             }
 
             source = default;
+            return false;
+        }
+
+        public bool TryGetPersistentContextSource(out MobaPersistentContextSourceSnapshot snapshot)
+        {
+            if (TryGetContextSource(out var source))
+            {
+                snapshot = MobaPersistentContextSourceSnapshotFactory.FromContextSource(in source);
+                return snapshot.HasExecutionSource;
+            }
+
+            snapshot = default;
             return false;
         }
 

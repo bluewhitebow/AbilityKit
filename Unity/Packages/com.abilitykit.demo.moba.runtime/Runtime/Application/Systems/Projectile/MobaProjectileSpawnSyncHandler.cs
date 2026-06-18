@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AbilityKit.Demo.Moba;
-using AbilityKit.Demo.Moba.Util.Generator;
+using AbilityKit.Demo.Moba.Services.EntityConstruction;
 using AbilityKit.Ability.Host;
 using AbilityKit.Core.Logging;
 using AbilityKit.Combat.MotionSystem.Core;

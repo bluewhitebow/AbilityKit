@@ -1,16 +1,21 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using AbilityKit.Network.Runtime.Sync;
 using AbilityKit.Protocol.Shooter;
 
 namespace AbilityKit.Demo.Shooter.View
 {
     public sealed class ShooterClientInputCoordinator
     {
+        private static readonly SyncHealthEvent[] EmptyHealthEvents = Array.Empty<SyncHealthEvent>();
+
         private readonly ShooterClientFrameSyncCoordinator _frameSync;
         private readonly IShooterRoomGatewayClient? _gateway;
+        private SyncHealthEvent[] _lastHealthEvents = EmptyHealthEvents;
 
         public ShooterClientInputCoordinator(ShooterClientFrameSyncCoordinator frameSync)
             : this(frameSync, null)
@@ -24,6 +29,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         public bool HasGateway => _gateway != null;
+
+        public IReadOnlyList<SyncHealthEvent> LastHealthEvents => _lastHealthEvents;
 
         public ShooterClientInputSubmitResult SubmitLocalInput(int playerId, float moveX, float moveY, float aimX, float aimY, bool fire)
         {
@@ -62,12 +69,35 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             var remote = await _gateway.SubmitBattleInputAsync(context, local.Packet, timeout, cancellationToken).ConfigureAwait(false);
+            CaptureRemoteInputHealthEvents(context, local, remote);
             if (remote.ShouldResync)
             {
                 _frameSync.MarkGatewayInputResyncRequested(context.Frame, remote.CurrentFrame);
             }
 
             return new ShooterClientGatewayInputSubmitResult(in local, in remote);
+        }
+
+        private void CaptureRemoteInputHealthEvents(
+            in ShooterGatewayBattleInputContext context,
+            in ShooterClientInputSubmitResult local,
+            in ShooterGatewayBattleInputResult remote)
+        {
+            var accepted = remote.Success && !remote.ShouldResync;
+            var inputEvent = accepted
+                ? SyncHealthEvent.Info(SyncHealthEventKind.InputAccepted, remote.AcceptedFrame, remote.CurrentFrame)
+                : SyncHealthEvent.Warning(SyncHealthEventKind.InputRejected, context.Frame, remote.CurrentFrame);
+
+            if (!local.Packet.Command.Fire)
+            {
+                _lastHealthEvents = new[] { inputEvent };
+                return;
+            }
+
+            var lagCompensationEvent = accepted
+                ? SyncHealthEvent.Info(SyncHealthEventKind.LagCompensatedValidationAccepted, remote.AcceptedFrame, remote.ServerTicks)
+                : SyncHealthEvent.Warning(SyncHealthEventKind.LagCompensatedValidationRejected, context.Frame, remote.ServerTicks);
+            _lastHealthEvents = new[] { inputEvent, lagCompensationEvent };
         }
     }
 }

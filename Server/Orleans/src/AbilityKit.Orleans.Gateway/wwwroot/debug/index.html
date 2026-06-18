@@ -1,95 +1,242 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AbilityKit Orleans Gateway Debug</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AbilityKit Orleans Web Console</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0b1020; color: #e6e8ef; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-    h1 { margin: 0 0 16px; font-size: 20px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .card { background: #121a33; border: 1px solid #243055; border-radius: 10px; padding: 12px; }
-    .card h2 { margin: 0 0 10px; font-size: 14px; color: #cfd6ff; }
-    label { display: block; font-size: 12px; margin: 8px 0 4px; color: #aab3d6; }
-    input, textarea { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 8px; border: 1px solid #2b3a66; background: #0c1328; color: #e6e8ef; }
-    textarea { min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    button { margin-top: 10px; padding: 8px 12px; border-radius: 8px; border: 1px solid #3952a3; background: #1c2d70; color: #e6e8ef; cursor: pointer; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .mono { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; background: #0c1328; border: 1px solid #2b3a66; border-radius: 8px; padding: 8px; }
-    .hint { font-size: 12px; color: #94a0c9; margin-top: 6px; }
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #374151;
+      --accent: #60a5fa;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .container { max-width: 1360px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    h2 { margin: 0 0 14px; font-size: 18px; }
+    .sub { color: var(--muted); margin-bottom: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card { grid-column: span 4; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+    .wide { grid-column: span 8; }
     .full { grid-column: 1 / -1; }
+    label { display: block; margin: 10px 0 5px; color: var(--muted); font-size: 13px; }
+    input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--text); padding: 10px 11px; outline: none; }
+    textarea { min-height: 84px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    button { border: 0; border-radius: 10px; padding: 10px 13px; background: var(--accent); color: #06101f; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #475569; color: var(--text); }
+    button.success { background: var(--ok); color: #052014; }
+    button.warn { background: var(--warn); color: #201500; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 12px; }
+    .pill.ok { color: var(--ok); }
+    .pill.warn { color: var(--warn); }
+    .room { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; background: rgba(255,255,255,.02); }
+    .room-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .muted { color: var(--muted); }
+    pre { margin: 0; min-height: 280px; max-height: 560px; overflow: auto; background: #020617; border: 1px solid var(--line); border-radius: 12px; padding: 14px; color: #c4b5fd; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    @media (max-width: 980px) { .card, .wide { grid-column: 1 / -1; } .row { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div id="app" class="container">
-    <h1>AbilityKit Orleans Gateway Debug UI</h1>
+    <h1>AbilityKit Orleans Web Console</h1>
+    <div class="sub">正式流程闭环：登录/续期/登出 → 重连恢复 → 选择玩法 → 创建/加入/离开房间 → 准备/配置 → 启动战斗。</div>
 
     <div class="grid">
-      <div class="card">
-        <h2>Guest Login</h2>
-        <button @click="guestLogin" :disabled="busy">POST /api/guest/login</button>
-        <div class="hint">SessionToken will be stored locally in this page.</div>
+      <section class="card">
+        <h2>1. 账号会话</h2>
+        <span class="pill" :class="sessionToken ? 'ok' : 'warn'">{{ sessionToken ? '已登录' : '未登录' }}</span>
+        <label>AccountId</label>
+        <input v-model="account.accountId" placeholder="正式账号或测试账号 ID" />
+        <div class="row">
+          <div><label>ExpireSeconds</label><input type="number" v-model.number="account.expireSeconds" /></div>
+          <div><label>KickExisting</label><select v-model="account.kickExisting"><option :value="true">true</option><option :value="false">false</option></select></div>
+        </div>
+        <label>Session Token</label>
+        <input v-model="sessionToken" placeholder="登录后自动填充" />
+        <div class="actions">
+          <button @click="guestLogin" :disabled="busy">游客登录</button>
+          <button @click="accountLogin" :disabled="busy || !account.accountId">账号登录</button>
+          <button class="secondary" @click="validateSession" :disabled="busy || !sessionToken">校验</button>
+          <button class="secondary" @click="renewSession" :disabled="busy || !sessionToken">续期</button>
+          <button class="warn" @click="logout" :disabled="busy || !sessionToken">登出</button>
+          <button class="secondary" @click="clearSession">清除</button>
+        </div>
+      </section>
 
-        <label>SessionToken</label>
-        <input v-model="sessionToken" placeholder="(auto from login)" />
-      </div>
+      <section class="card">
+        <h2>2. 选择玩法</h2>
+        <label>玩法</label>
+        <select v-model="selectedRoomType" @change="applyGameplayDefaults">
+          <option v-for="g in gameplays" :key="g.roomType" :value="g.roomType">{{ g.displayName }} ({{ g.roomType }})</option>
+        </select>
+        <div class="actions">
+          <button class="secondary" @click="loadGameplays" :disabled="busy">刷新玩法</button>
+        </div>
+        <p class="muted" v-if="selectedGameplay">
+          默认人数 {{ selectedGameplay.defaultMaxPlayers }}，WorldType {{ selectedGameplay.defaultWorldType || '-' }}，Loadout {{ selectedGameplay.requiresPlayerLoadout ? '需要' : '不需要' }}。
+        </p>
+      </section>
 
-      <div class="card">
-        <h2>Join Room</h2>
+      <section class="card">
+        <h2>3. 分区</h2>
+        <div class="row">
+          <div><label>Region</label><input v-model="region" /></div>
+          <div><label>ServerId</label><input v-model="serverId" /></div>
+        </div>
+        <div class="actions">
+          <button class="secondary" @click="listRooms" :disabled="busy || !sessionToken">刷新房间列表</button>
+        </div>
+      </section>
+
+      <section class="card wide">
+        <h2>4. 创建房间</h2>
+        <div class="row">
+          <div><label>标题</label><input v-model="create.title" /></div>
+          <div><label>最大人数</label><input type="number" v-model.number="create.maxPlayers" /></div>
+        </div>
+        <div class="row">
+          <div><label>RoomType</label><input v-model="create.roomType" /></div>
+          <div><label>公开房间</label><select v-model="create.isPublic"><option :value="true">true</option><option :value="false">false</option></select></div>
+        </div>
+        <label>Tags JSON</label>
+        <textarea v-model="create.tagsJson"></textarea>
+        <div class="actions">
+          <button @click="createRoom" :disabled="busy || !sessionToken">创建并绑定</button>
+          <button class="secondary" @click="applyGameplayDefaults">套用玩法默认值</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>5. 当前房间</h2>
         <label>RoomId</label>
-        <input v-model="join.roomId" placeholder="room id" />
-        <button @click="joinRoom" :disabled="busy || !sessionToken || !join.roomId">POST /api/rooms/join</button>
-      </div>
+        <input v-model="roomId" placeholder="创建或加入后自动填充" />
+        <div class="actions">
+          <button @click="joinRoom" :disabled="busy || !sessionToken || !roomId">加入</button>
+          <button class="secondary" @click="restoreCurrentRoom" :disabled="busy || !sessionToken">恢复当前</button>
+          <button class="secondary" @click="loadSnapshot" :disabled="busy || !sessionToken || !roomId">快照</button>
+          <button class="secondary" @click="loadRuntimeState" :disabled="busy || !sessionToken || !roomId">运行态</button>
+          <button class="warn" @click="leaveRoom" :disabled="busy || !sessionToken || !roomId">离开</button>
+        </div>
+        <p class="muted" v-if="snapshot && snapshot.summary">{{ snapshot.summary.title }} / {{ snapshot.summary.roomType }} / {{ snapshot.members?.length || 0 }}人</p>
+      </section>
 
-      <div class="card full">
-        <h2>Create Room</h2>
+      <section class="card wide">
+        <h2>6. 房间列表</h2>
         <div class="row">
-          <div>
-            <label>Region</label>
-            <input v-model="create.region" placeholder="cn" />
+          <div><label>过滤 RoomType</label><input v-model="list.roomType" placeholder="留空则使用当前玩法" /></div>
+          <div><label>Limit</label><input type="number" v-model.number="list.limit" /></div>
+        </div>
+        <div class="actions">
+          <button class="secondary" @click="listRooms" :disabled="busy || !sessionToken">查询公开房间</button>
+        </div>
+        <div v-if="rooms.length === 0" class="muted">暂无房间。</div>
+        <div v-for="room in rooms" :key="room.roomId" class="room">
+          <div class="room-title">
+            <strong>{{ room.title || room.roomId }}</strong>
+            <button class="secondary" @click="selectRoom(room.roomId)">选择</button>
           </div>
-          <div>
-            <label>ServerId</label>
-            <input v-model="create.serverId" placeholder="1" />
+          <div class="muted"><code>{{ room.roomId }}</code></div>
+          <div class="actions">
+            <span class="pill">{{ room.roomType }}</span>
+            <span class="pill">{{ room.playerCount }}/{{ room.maxPlayers }}</span>
+            <span class="pill" :class="room.isPublic ? 'ok' : 'warn'">{{ room.isPublic ? 'public' : 'private' }}</span>
           </div>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>7. 准备</h2>
+        <label>Ready</label>
+        <select v-model="ready"><option :value="true">true</option><option :value="false">false</option></select>
+        <div class="actions">
+          <button class="success" @click="setReady" :disabled="busy || !sessionToken || !roomId">提交准备</button>
+        </div>
+        <p class="muted" v-if="snapshot">CanStart: {{ snapshot.canStart }}</p>
+      </section>
+
+      <section class="card">
+        <h2>8. MOBA Loadout</h2>
         <div class="row">
-          <div>
-            <label>RoomType</label>
-            <input v-model="create.roomType" placeholder="test" />
-          </div>
-          <div>
-            <label>MaxPlayers</label>
-            <input v-model.number="create.maxPlayers" type="number" min="1" max="200" />
-          </div>
+          <div><label>HeroId</label><input type="number" v-model.number="loadout.heroId" /></div>
+          <div><label>TeamId</label><input type="number" v-model.number="loadout.teamId" /></div>
         </div>
         <div class="row">
-          <div>
-            <label>Title</label>
-            <input v-model="create.title" placeholder="room1" />
-          </div>
-          <div>
-            <label>IsPublic</label>
-            <input v-model="create.isPublic" type="checkbox" style="width:auto;" />
-          </div>
+          <div><label>SpawnPointId</label><input type="number" v-model.number="loadout.spawnPointId" /></div>
+          <div><label>Level</label><input type="number" v-model.number="loadout.level" /></div>
         </div>
+        <div class="row">
+          <div><label>AttributeTemplateId</label><input type="number" v-model.number="loadout.attributeTemplateId" /></div>
+          <div><label>BasicAttackSkillId</label><input type="number" v-model.number="loadout.basicAttackSkillId" /></div>
+        </div>
+        <label>SkillIds CSV</label>
+        <input v-model="loadout.skillIdsCsv" />
+        <div class="actions">
+          <button class="warn" @click="pickHero" :disabled="busy || !sessionToken || !roomId">配置 Loadout</button>
+        </div>
+      </section>
 
-        <label>Tags (JSON object, optional)</label>
-        <textarea v-model="create.tagsJson" placeholder='{"mode":"pvp"}'></textarea>
+      <section class="card">
+        <h2>9. 启动战斗</h2>
+        <div class="row">
+          <div><label>GameplayId</label><input type="number" v-model.number="battle.gameplayId" /></div>
+          <div><label>RuleSetId</label><input type="number" v-model.number="battle.ruleSetId" /></div>
+        </div>
+        <div class="row">
+          <div><label>ConfigVersion</label><input type="number" v-model.number="battle.configVersion" /></div>
+          <div><label>ProtocolVersion</label><input type="number" v-model.number="battle.protocolVersion" /></div>
+        </div>
+        <label>WorldType</label>
+        <input v-model="battle.worldType" />
+        <label>SyncTemplateId</label>
+        <input v-model="battle.syncTemplateId" />
+        <div class="actions">
+          <button class="success" @click="startBattle" :disabled="busy || !sessionToken || !roomId">Start Battle</button>
+        </div>
+      </section>
 
-        <button @click="createRoom" :disabled="busy || !sessionToken">POST /api/rooms/create</button>
-      </div>
+      <section class="card wide">
+        <h2>10. Shooter Sandbox</h2>
+        <div class="row">
+          <div><label>SandboxId</label><input v-model="sandbox.sandboxId" /></div>
+          <div><label>BotCount</label><input type="number" v-model.number="sandbox.botCount" /></div>
+        </div>
+        <div class="row">
+          <div><label>MaxPlayers</label><input type="number" v-model.number="sandbox.maxPlayers" /></div>
+          <div><label>TickRate</label><input type="number" v-model.number="sandbox.tickRate" /></div>
+        </div>
+        <div class="actions">
+          <button class="success" @click="startShooterSandbox" :disabled="busy">启动机器人战斗</button>
+          <button class="secondary" @click="loadShooterSandbox" :disabled="busy">查看状态</button>
+          <button class="warn" @click="stopShooterSandbox" :disabled="busy">停止</button>
+        </div>
+        <p class="muted" v-if="sandbox.state">Room {{ sandbox.state.roomId || '-' }} / Battle {{ sandbox.state.battleId || '-' }} / Frame {{ sandbox.state.currentFrame }}</p>
+      </section>
 
-      <div class="card full">
-        <h2>Response</h2>
-        <div class="mono">{{ lastResponse }}</div>
-      </div>
+      <section class="card full">
+        <h2>响应 / 状态</h2>
+        <div class="actions">
+          <span class="pill" :class="busy ? 'warn' : 'ok'">{{ busy ? '请求中' : '空闲' }}</span>
+          <button class="secondary" @click="lastResponse = ''">清空输出</button>
+        </div>
+        <pre>{{ lastResponse || '等待操作...' }}</pre>
+      </section>
     </div>
   </div>
 
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script>
     const { createApp } = Vue;
 
@@ -98,94 +245,298 @@
         return {
           busy: false,
           sessionToken: localStorage.getItem('abilitykit.sessionToken') || '',
+          account: {
+            accountId: localStorage.getItem('abilitykit.accountId') || '',
+            expireSeconds: 86400,
+            kickExisting: true
+          },
+          region: localStorage.getItem('abilitykit.region') || 'cn',
+          serverId: localStorage.getItem('abilitykit.serverId') || 'dev',
+          selectedRoomType: 'battle',
+          gameplays: [],
+          rooms: [],
+          roomId: localStorage.getItem('abilitykit.roomId') || '',
+          snapshot: null,
+          runtimeState: null,
           lastResponse: '',
           create: {
-            region: 'cn',
-            serverId: '1',
-            roomType: 'test',
-            title: 'room1',
+            roomType: 'battle',
+            title: 'Web Debug Room',
             isPublic: true,
-            maxPlayers: 4,
-            tagsJson: ''
+            maxPlayers: 10,
+            tagsJson: '{\n  "source": "web-debug"\n}'
           },
-          join: {
-            roomId: ''
+          list: { roomType: '', limit: 20 },
+          ready: true,
+          loadout: {
+            heroId: 1001,
+            teamId: 1,
+            spawnPointId: 1,
+            level: 1,
+            attributeTemplateId: 1001,
+            basicAttackSkillId: 10001,
+            skillIdsCsv: '10002,10003'
+          },
+          battle: {
+            gameplayId: 1,
+            ruleSetId: 1,
+            configVersion: 1,
+            protocolVersion: 1,
+            worldType: 'battle',
+            syncTemplateId: 'state-sync-authority'
+          },
+          sandbox: {
+            sandboxId: 'default',
+            botCount: 4,
+            maxPlayers: 32,
+            tickRate: 30,
+            state: null
           }
         };
       },
+      computed: {
+        selectedGameplay() {
+          return this.gameplays.find(g => g.roomType === this.selectedRoomType) || null;
+        }
+      },
+      async mounted() {
+        await this.loadGameplays();
+      },
+      watch: {
+        'account.accountId'(value) { localStorage.setItem('abilitykit.accountId', value || ''); },
+        region(value) { localStorage.setItem('abilitykit.region', value || ''); },
+        serverId(value) { localStorage.setItem('abilitykit.serverId', value || ''); },
+        roomId(value) { localStorage.setItem('abilitykit.roomId', value || ''); }
+      },
       methods: {
-        async callJson(url, body) {
+        async callJson(url, body, method) {
           this.busy = true;
           try {
-            const resp = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: body ? JSON.stringify(body) : null
-            });
+            const options = { method: method || (body ? 'POST' : 'GET'), headers: {} };
+            if (body) {
+              options.headers['Content-Type'] = 'application/json';
+              options.body = JSON.stringify(body);
+            }
 
+            const resp = await fetch(url, options);
             const text = await resp.text();
             let parsed = null;
             try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
 
-            this.lastResponse = JSON.stringify({
-              ok: resp.ok,
-              status: resp.status,
-              body: parsed
-            }, null, 2);
-
-            if (!resp.ok) {
-              return null;
-            }
-            return parsed;
-          } catch (e) {
-            this.lastResponse = String(e);
+            this.lastResponse = JSON.stringify({ ok: resp.ok, status: resp.status, body: parsed }, null, 2);
+            return resp.ok ? parsed : null;
+          } catch (error) {
+            this.lastResponse = String(error);
             return null;
           } finally {
             this.busy = false;
           }
         },
-
+        async loadGameplays() {
+          const data = await this.callJson('/api/gameplays');
+          if (Array.isArray(data)) {
+            this.gameplays = data;
+            if (!this.gameplays.some(g => g.roomType === this.selectedRoomType) && this.gameplays.length > 0) {
+              this.selectedRoomType = this.gameplays[0].roomType;
+            }
+            this.applyGameplayDefaults();
+          }
+        },
+        applyGameplayDefaults() {
+          const gameplay = this.selectedGameplay;
+          if (!gameplay) return;
+          this.create.roomType = gameplay.roomType;
+          this.create.maxPlayers = gameplay.defaultMaxPlayers || this.create.maxPlayers;
+          this.list.roomType = gameplay.roomType;
+          this.battle.worldType = gameplay.defaultWorldType || gameplay.roomType;
+          this.battle.syncTemplateId = gameplay.defaultSyncTemplateId || '';
+        },
         async guestLogin() {
-          const data = await this.callJson('/api/guest/login');
+          const data = await this.callJson('/api/guest/login', {}, 'POST');
           if (data && data.sessionToken) {
             this.sessionToken = data.sessionToken;
             localStorage.setItem('abilitykit.sessionToken', this.sessionToken);
           }
         },
-
+        async accountLogin() {
+          const data = await this.callJson('/api/accounts/login', {
+            accountId: this.account.accountId,
+            expireSeconds: Number(this.account.expireSeconds || 86400),
+            kickExisting: this.account.kickExisting === true || this.account.kickExisting === 'true'
+          });
+          if (data && data.sessionToken) {
+            this.sessionToken = data.sessionToken;
+            localStorage.setItem('abilitykit.sessionToken', this.sessionToken);
+          }
+        },
+        async validateSession() {
+          await this.callJson('/api/session/validate', { sessionToken: this.sessionToken });
+        },
+        async renewSession() {
+          const data = await this.callJson('/api/session/renew', {
+            sessionToken: this.sessionToken,
+            extendSeconds: Number(this.account.expireSeconds || 3600),
+            rotateToken: false
+          });
+          if (data && data.sessionToken) {
+            this.sessionToken = data.sessionToken;
+            localStorage.setItem('abilitykit.sessionToken', this.sessionToken);
+          }
+        },
+        async logout() {
+          await this.callJson('/api/session/logout', { sessionToken: this.sessionToken });
+          this.clearSession();
+        },
+        clearSession() {
+          this.sessionToken = '';
+          localStorage.removeItem('abilitykit.sessionToken');
+        },
+        parseTags() {
+          const text = (this.create.tagsJson || '').trim();
+          if (!text) return null;
+          return JSON.parse(text);
+        },
         async createRoom() {
           let tags = null;
-          const t = (this.create.tagsJson || '').trim();
-          if (t) {
-            try {
-              tags = JSON.parse(t);
-            } catch {
-              this.lastResponse = 'Invalid tags JSON';
-              return;
-            }
-          }
-
+          try { tags = this.parseTags(); } catch { this.lastResponse = 'Invalid tags JSON'; return; }
           const data = await this.callJson('/api/rooms/create', {
             sessionToken: this.sessionToken,
-            region: this.create.region,
-            serverId: this.create.serverId,
+            region: this.region,
+            serverId: this.serverId,
             roomType: this.create.roomType,
             title: this.create.title,
-            isPublic: !!this.create.isPublic,
+            isPublic: this.create.isPublic === true || this.create.isPublic === 'true',
             maxPlayers: Number(this.create.maxPlayers || 0),
             tags
           });
-
           if (data && data.roomId) {
-            this.join.roomId = data.roomId;
+            this.roomId = data.roomId;
+            await this.joinRoom();
+            await this.listRooms();
           }
         },
-
-        async joinRoom() {
-          await this.callJson('/api/rooms/join', {
+        async listRooms() {
+          const data = await this.callJson('/api/rooms/list', {
             sessionToken: this.sessionToken,
-            roomId: this.join.roomId
+            region: this.region,
+            serverId: this.serverId,
+            offset: 0,
+            limit: Number(this.list.limit || 20),
+            roomType: this.list.roomType || this.selectedRoomType || null
           });
+          if (data && Array.isArray(data.rooms)) {
+            this.rooms = data.rooms;
+          }
+        },
+        selectRoom(roomId) {
+          this.roomId = roomId;
+        },
+        async joinRoom() {
+          const data = await this.callJson('/api/rooms/join', { sessionToken: this.sessionToken, roomId: this.roomId });
+          if (data) this.snapshot = data;
+        },
+        async restoreCurrentRoom() {
+          const data = await this.callJson('/api/rooms/restore-current', { sessionToken: this.sessionToken });
+          if (data && data.hasActiveRoom && data.snapshot) {
+            this.snapshot = data.snapshot;
+            this.roomId = data.snapshot.summary?.roomId || this.roomId;
+          }
+        },
+        async leaveRoom() {
+          const data = await this.callJson('/api/rooms/leave', { sessionToken: this.sessionToken, roomId: this.roomId });
+          if (data && data.success) {
+            this.snapshot = null;
+            this.runtimeState = null;
+            this.roomId = '';
+            await this.listRooms();
+          }
+        },
+        async loadSnapshot() {
+          const data = await this.callJson('/api/rooms/snapshot', { sessionToken: this.sessionToken, roomId: this.roomId });
+          if (data) this.snapshot = data;
+        },
+        async loadRuntimeState() {
+          const data = await this.callJson('/api/rooms/runtime-state', { sessionToken: this.sessionToken, roomId: this.roomId });
+          if (data) this.runtimeState = data;
+        },
+        async setReady() {
+          const data = await this.callJson('/api/rooms/ready', {
+            sessionToken: this.sessionToken,
+            roomId: this.roomId,
+            ready: this.ready === true || this.ready === 'true'
+          });
+          if (data) this.snapshot = data;
+        },
+        parseSkillIds() {
+          return (this.loadout.skillIdsCsv || '')
+            .split(',')
+            .map(x => Number(x.trim()))
+            .filter(x => Number.isFinite(x) && x > 0);
+        },
+        async pickHero() {
+          const data = await this.callJson('/api/rooms/pick-hero', {
+            sessionToken: this.sessionToken,
+            roomId: this.roomId,
+            heroId: Number(this.loadout.heroId || 0),
+            teamId: Number(this.loadout.teamId || 0),
+            spawnPointId: Number(this.loadout.spawnPointId || 0),
+            level: Number(this.loadout.level || 1),
+            attributeTemplateId: Number(this.loadout.attributeTemplateId || 0),
+            basicAttackSkillId: Number(this.loadout.basicAttackSkillId || 0),
+            skillIds: this.parseSkillIds()
+          });
+          if (data) this.snapshot = data;
+        },
+        async startBattle() {
+          const data = await this.callJson('/api/rooms/start-battle', {
+            sessionToken: this.sessionToken,
+            roomId: this.roomId,
+            gameplayId: Number(this.battle.gameplayId || 0),
+            ruleSetId: Number(this.battle.ruleSetId || 0),
+            configVersion: Number(this.battle.configVersion || 0),
+            protocolVersion: Number(this.battle.protocolVersion || 0),
+            worldType: this.battle.worldType || null,
+            clientId: 'web-debug',
+            syncTemplateId: this.battle.syncTemplateId || null,
+            syncModel: null,
+            networkEnvironmentId: null,
+            carrierName: null,
+            enableAuthoritativeWorld: true,
+            interpolationEnabled: false,
+            inputDelayFrames: 0
+          });
+          if (data) await this.loadRuntimeState();
+        },
+        async startShooterSandbox() {
+          const data = await this.callJson('/api/shooter-sandbox/start', {
+            sandboxId: this.sandbox.sandboxId || 'default',
+            region: this.region,
+            serverId: this.serverId,
+            botCount: Number(this.sandbox.botCount || 4),
+            maxPlayers: Number(this.sandbox.maxPlayers || 32),
+            tickRate: Number(this.sandbox.tickRate || 30),
+            title: 'Shooter Server Sandbox',
+            tags: { source: 'web-debug' }
+          });
+          if (data) {
+            this.sandbox.state = data;
+            this.roomId = data.roomId || this.roomId;
+            this.snapshot = data.snapshot || this.snapshot;
+            await this.listRooms();
+          }
+        },
+        async loadShooterSandbox() {
+          const data = await this.callJson(`/api/shooter-sandbox/${encodeURIComponent(this.sandbox.sandboxId || 'default')}`);
+          if (data) {
+            this.sandbox.state = data;
+            this.roomId = data.roomId || this.roomId;
+            this.snapshot = data.snapshot || this.snapshot;
+          }
+        },
+        async stopShooterSandbox() {
+          await this.callJson('/api/shooter-sandbox/stop', { sandboxId: this.sandbox.sandboxId || 'default' });
+          this.sandbox.state = null;
+          await this.listRooms();
         }
       }
     }).mount('#app');

@@ -22,6 +22,23 @@ namespace AbilityKit.Triggering.Variables.Numeric
 
         public static bool TryResolve(this in NumericValueRef ref_, object ctx, out double value)
         {
+            if (!TryResolveSource(in ref_, ctx, out value))
+            {
+                if (!ref_.HasFallback || ref_.Required)
+                {
+                    value = 0.0;
+                    return false;
+                }
+
+                value = ref_.FallbackValue;
+            }
+
+            value = ApplyNumericValuePolicy(in ref_, value);
+            return true;
+        }
+
+        private static bool TryResolveSource(in NumericValueRef ref_, object ctx, out double value)
+        {
             value = 0.0;
             return ref_.Kind switch
             {
@@ -85,9 +102,18 @@ namespace AbilityKit.Triggering.Variables.Numeric
                    varResolvable.TryResolveVarValue(domainId, key, out value);
         }
 
+        private static double ApplyNumericValuePolicy(in NumericValueRef ref_, double value)
+        {
+            if (ref_.HasScale) value *= ref_.Scale;
+            if (ref_.Offset != 0d) value += ref_.Offset;
+            if (ref_.HasMin && value < ref_.MinValue) value = ref_.MinValue;
+            if (ref_.HasMax && value > ref_.MaxValue) value = ref_.MaxValue;
+            return value;
+        }
+
         private static string Describe(in NumericValueRef ref_)
         {
-            return ref_.Kind switch
+            var source = ref_.Kind switch
             {
                 ENumericValueRefKind.Const => $"Const({ref_.ConstValue})",
                 ENumericValueRefKind.Blackboard => $"Blackboard(boardId={ref_.BoardId}, keyId={ref_.KeyId})",
@@ -96,6 +122,16 @@ namespace AbilityKit.Triggering.Variables.Numeric
                 ENumericValueRefKind.Expr => "Expr(" + ref_.ExprText + ")",
                 _ => "Unsupported(" + ref_.Kind + ")"
             };
+
+            if (!string.IsNullOrEmpty(ref_.Label)) source += $", label='{ref_.Label}'";
+            if (!string.IsNullOrEmpty(ref_.Scope)) source += $", scope='{ref_.Scope}'";
+            if (ref_.Required) source += ", required=true";
+            if (ref_.HasFallback) source += $", fallback={ref_.FallbackValue}";
+            if (ref_.HasScale) source += $", scale={ref_.Scale}";
+            if (ref_.Offset != 0d) source += $", offset={ref_.Offset}";
+            if (ref_.HasMin) source += $", min={ref_.MinValue}";
+            if (ref_.HasMax) source += $", max={ref_.MaxValue}";
+            return source;
         }
     }
 

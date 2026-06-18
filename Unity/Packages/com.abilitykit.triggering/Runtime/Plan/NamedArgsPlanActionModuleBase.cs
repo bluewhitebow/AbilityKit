@@ -188,6 +188,12 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         private TActionArgs ParseNamedArgs(ExecCtx<TCtx> ctx, object triggerArgs, Dictionary<string, ActionArgValue> namedArgs)
         {
+            var parseContext = new TriggerActionParseContext(triggerArgs);
+            if (Schema is ITriggerActionParseContextAwareSchema<TActionArgs, TCtx> parseContextAwareSchema)
+            {
+                return parseContextAwareSchema.ParseArgs(namedArgs, ctx, in parseContext);
+            }
+
             if (Schema is ITriggerArgsAwareActionSchema<TActionArgs, TCtx> triggerArgsAwareSchema)
             {
                 return triggerArgsAwareSchema.ParseArgs(namedArgs, ctx, triggerArgs);

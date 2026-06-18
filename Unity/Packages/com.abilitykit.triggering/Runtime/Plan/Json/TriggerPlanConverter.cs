@@ -14,7 +14,11 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
     internal sealed class TriggerPlanConverter
     {
         private const string TemplateParamKind = "TemplateParam";
+        private static readonly System.Collections.Generic.Dictionary<ETriggerPlanExecutableKind, ExecutionNodeConverterBase> _executionNodeConverters = BuildExecutionNodeConverters();
         private System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.NumericValueRefDto> _templateBindings;
+        private System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.ExecutionNodeDto> _behaviorCatalog;
+        private System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.ExecutionNodeDto> _nodeCatalog;
+        private System.Collections.Generic.HashSet<string> _executionNodeResolving;
 
         internal TriggerPlan<object> Convert(TriggerPlanJsonDatabase.TriggerPlanDto dto, ITriggerCue cue = null)
         {
@@ -104,10 +108,23 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         internal ITriggerPlanExecutable ConvertExecutionRoot(TriggerPlanJsonDatabase.TriggerPlanDto dto)
         {
+            return ConvertExecutionRoot(dto, null);
+        }
+
+        internal ITriggerPlanExecutable ConvertExecutionRoot(
+            TriggerPlanJsonDatabase.TriggerPlanDto dto,
+            TriggerPlanJsonDatabase.TriggerPlanDatabaseDto databaseDto)
+        {
             if (dto == null) return null;
 
             var previousBindings = _templateBindings;
+            var previousBehaviorCatalog = _behaviorCatalog;
+            var previousNodeCatalog = _nodeCatalog;
+            var previousExecutionNodeResolving = _executionNodeResolving;
             _templateBindings = BuildTemplateBindings(dto.Template);
+            _behaviorCatalog = BuildExecutionNodeCatalog(databaseDto?.Behaviors);
+            _nodeCatalog = BuildExecutionNodeCatalog(databaseDto?.Nodes);
+            _executionNodeResolving = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 return ConvertExecutionRootCore(dto);
@@ -115,6 +132,9 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             finally
             {
                 _templateBindings = previousBindings;
+                _behaviorCatalog = previousBehaviorCatalog;
+                _nodeCatalog = previousNodeCatalog;
+                _executionNodeResolving = previousExecutionNodeResolving;
             }
         }
 
@@ -141,55 +161,152 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         {
             if (dto == null) return null;
 
-            if (!Enum.TryParse<ETriggerPlanExecutableKind>(NormalizeKind(dto.Kind), true, out var kind))
+            var resolvingKeys = new System.Collections.Generic.List<string>();
+            dto = ResolveExecutionNodeReference(dto, resolvingKeys);
+            try
             {
-                throw new InvalidOperationException($"Execution node kind not supported: {dto.Kind}");
+                if (!Enum.TryParse<ETriggerPlanExecutableKind>(NormalizeKind(dto.Kind), true, out var kind))
+                {
+                    throw new InvalidOperationException($"Execution node kind not supported: {dto.Kind}");
+                }
+
+                if (!_executionNodeConverters.TryGetValue(kind, out var converter) || converter == null)
+                {
+                    throw new InvalidOperationException($"Execution node kind not supported: {kind}");
+                }
+
+                return converter.Convert(this, dto);
+            }
+            finally
+            {
+                EndResolveExecutionNodeReference(resolvingKeys);
+            }
+        }
+
+        private static System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.ExecutionNodeDto> BuildExecutionNodeCatalog(
+            System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.ExecutionNodeDto> catalog)
+        {
+            if (catalog == null || catalog.Count == 0)
+            {
+                return null;
             }
 
-            var condition = ConvertCondition(dto.Condition);
-            var children = ConvertExecutionNodes(dto.Children);
-            var elseChildren = ConvertExecutionNodes(dto.ElseChildren);
+            return new System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.ExecutionNodeDto>(catalog, StringComparer.OrdinalIgnoreCase);
+        }
 
-            switch (kind)
+        private TriggerPlanJsonDatabase.ExecutionNodeDto ResolveExecutionNodeReference(
+            TriggerPlanJsonDatabase.ExecutionNodeDto dto,
+            System.Collections.Generic.List<string> resolvingKeys)
+        {
+            while (dto != null && TryGetExecutionNodeReference(dto, out var id, out var kind))
             {
-                case ETriggerPlanExecutableKind.Action:
-                    if (dto.Action == null)
-                    {
-                        throw new InvalidOperationException("Action execution node requires Action payload.");
-                    }
-                    return new ActionCallTriggerPlanExecutable(ConvertAction(dto.Action), condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Sequence:
-                    return new SequenceTriggerPlanExecutable(children, condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Selector:
-                    return new SelectorTriggerPlanExecutable(children, condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Random:
-                    return new RandomTriggerPlanExecutable(children, condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Parallel:
-                    return new ParallelTriggerPlanExecutable(children, condition, dto.Weight);
-                case ETriggerPlanExecutableKind.If:
-                    return new IfTriggerPlanExecutable(
-                        condition,
-                        BuildBranch(children),
-                        BuildBranch(elseChildren),
-                        guardCondition: null,
-                        weight: dto.Weight);
-                case ETriggerPlanExecutableKind.Repeat:
-                    return new RepeatTriggerPlanExecutable(BuildBranch(children), dto.Count, condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Until:
-                    return new UntilTriggerPlanExecutable(
-                        BuildBranch(children),
-                        ConvertCondition(dto.UntilCondition),
-                        dto.MaxIterations,
-                        condition,
-                        dto.Weight);
-                case ETriggerPlanExecutableKind.Invert:
-                    return new InvertTriggerPlanExecutable(BuildBranch(children), condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Succeed:
-                    return new SucceedTriggerPlanExecutable(BuildBranch(children), condition, dto.Weight);
-                case ETriggerPlanExecutableKind.Fail:
-                    return new FailTriggerPlanExecutable(BuildBranch(children), dto.Reason, condition, dto.Weight);
-                default:
-                    throw new InvalidOperationException($"Execution node kind not supported: {kind}");
+                var key = kind + ":" + id;
+                if (_executionNodeResolving == null)
+                {
+                    _executionNodeResolving = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                if (!_executionNodeResolving.Add(key))
+                {
+                    throw new InvalidOperationException($"Cyclic execution node reference detected: {key}");
+                }
+
+                resolvingKeys?.Add(key);
+                dto = ResolveExecutionNodeReferenceTarget(id, kind);
+            }
+
+            return dto;
+        }
+
+        private TriggerPlanJsonDatabase.ExecutionNodeDto ResolveExecutionNodeReferenceTarget(string id, string kind)
+        {
+            if (string.Equals(kind, "behavior", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_behaviorCatalog != null && _behaviorCatalog.TryGetValue(id, out var behavior) && behavior != null)
+                {
+                    return behavior;
+                }
+
+                throw new InvalidOperationException($"Behavior reference not found: {id}");
+            }
+
+            if (string.Equals(kind, "node", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_nodeCatalog != null && _nodeCatalog.TryGetValue(id, out var node) && node != null)
+                {
+                    return node;
+                }
+
+                throw new InvalidOperationException($"Node reference not found: {id}");
+            }
+
+            if (_behaviorCatalog != null && _behaviorCatalog.TryGetValue(id, out var behaviorRef) && behaviorRef != null)
+            {
+                return behaviorRef;
+            }
+
+            if (_nodeCatalog != null && _nodeCatalog.TryGetValue(id, out var nodeRef) && nodeRef != null)
+            {
+                return nodeRef;
+            }
+
+            throw new InvalidOperationException($"Execution node reference not found: {id}");
+        }
+
+        private static bool TryGetExecutionNodeReference(TriggerPlanJsonDatabase.ExecutionNodeDto dto, out string id, out string kind)
+        {
+            id = null;
+            kind = null;
+            if (dto == null) return false;
+
+            if (!string.IsNullOrEmpty(dto.BehaviorRef))
+            {
+                id = dto.BehaviorRef;
+                kind = "behavior";
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(dto.BehaviorId))
+            {
+                id = dto.BehaviorId;
+                kind = "behavior";
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(dto.NodeRef))
+            {
+                id = dto.NodeRef;
+                kind = "node";
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(dto.NodeId))
+            {
+                id = dto.NodeId;
+                kind = "node";
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(dto.Ref))
+            {
+                id = dto.Ref;
+                kind = "any";
+                return true;
+            }
+
+            return false;
+        }
+
+        private void EndResolveExecutionNodeReference(System.Collections.Generic.List<string> resolvingKeys)
+        {
+            if (resolvingKeys == null || _executionNodeResolving == null)
+            {
+                return;
+            }
+
+            for (int i = resolvingKeys.Count - 1; i >= 0; i--)
+            {
+                _executionNodeResolving.Remove(resolvingKeys[i]);
             }
         }
 
@@ -210,6 +327,24 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         {
             if (children == null || children.Length == 0) return null;
             return children.Length == 1 ? children[0] : new SequenceTriggerPlanExecutable(children);
+        }
+
+        private static System.Collections.Generic.Dictionary<ETriggerPlanExecutableKind, ExecutionNodeConverterBase> BuildExecutionNodeConverters()
+        {
+            return new System.Collections.Generic.Dictionary<ETriggerPlanExecutableKind, ExecutionNodeConverterBase>
+            {
+                [ETriggerPlanExecutableKind.Action] = new ActionExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Sequence] = new SequenceExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Selector] = new SelectorExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Random] = new RandomExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Parallel] = new ParallelExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.If] = new IfExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Repeat] = new RepeatExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Until] = new UntilExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Invert] = new InvertExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Succeed] = new SucceedExecutionNodeConverter(),
+                [ETriggerPlanExecutableKind.Fail] = new FailExecutionNodeConverter()
+            };
         }
 
         private ITriggerPlanCondition ConvertCondition(TriggerPlanJsonDatabase.PredicatePlanDto dto)
@@ -273,6 +408,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             if (dto == null) return default;
 
             var id = new ActionId(dto.ActionId);
+            var scheduleMode = ParseActionScheduleMode(dto.ScheduleMode);
             var executionPolicy = ParseActionExecutionPolicy(dto.ExecutionPolicy);
             var retryMaxRetries = dto.RetryMaxRetries;
 
@@ -308,10 +444,10 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                     arg0,
                     arg1,
                     namedArgs,
-                    EActionScheduleMode.Immediate,
-                    0,
-                    -1,
-                    true,
+                    scheduleMode,
+                    dto.ScheduleParam,
+                    dto.MaxExecutions,
+                    dto.CanBeInterrupted,
                     executionPolicy,
                     retryMaxRetries,
                     dto.RetryDelayMs);
@@ -339,13 +475,28 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 plan.Arg0,
                 plan.Arg1,
                 plan.Args,
-                plan.ScheduleMode,
-                plan.ScheduleParam,
-                plan.MaxExecutions,
-                plan.CanBeInterrupted,
+                scheduleMode,
+                dto.ScheduleParam,
+                dto.MaxExecutions,
+                dto.CanBeInterrupted,
                 executionPolicy,
                 retryMaxRetries,
                 dto.RetryDelayMs);
+        }
+
+        private static EActionScheduleMode ParseActionScheduleMode(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return EActionScheduleMode.Immediate;
+            }
+
+            if (Enum.TryParse<EActionScheduleMode>(value, true, out var mode))
+            {
+                return mode;
+            }
+
+            throw new InvalidOperationException($"Unknown action schedule mode: {value}");
         }
 
         private static EActionExecutionPolicy ParseActionExecutionPolicy(string value)
@@ -374,7 +525,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 throw new InvalidOperationException($"Unknown NumericValueRef kind: {dto.Kind}");
             }
 
-            return kind switch
+            var valueRef = kind switch
             {
                 ENumericValueRefKind.Const => NumericValueRef.Const(dto.ConstValue),
                 ENumericValueRefKind.Blackboard => NumericValueRef.Blackboard(dto.BoardId, dto.KeyId),
@@ -383,6 +534,17 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                 ENumericValueRefKind.Expr => NumericValueRef.Expr(dto.ExprText),
                 _ => throw new InvalidOperationException($"Unsupported NumericValueRef kind: {kind}")
             };
+
+            if (dto.Required) valueRef = valueRef.AsRequired();
+            if (dto.HasFallback) valueRef = valueRef.WithFallback(dto.FallbackValue);
+            if (dto.HasMin) valueRef = valueRef.WithMin(dto.MinValue);
+            if (dto.HasMax) valueRef = valueRef.WithMax(dto.MaxValue);
+            if (dto.HasScale) valueRef = valueRef.WithScale(dto.Scale);
+            if (dto.Offset != 0d) valueRef = valueRef.WithOffset(dto.Offset);
+            if (!string.IsNullOrEmpty(dto.Label)) valueRef = valueRef.WithLabel(dto.Label);
+            if (!string.IsNullOrEmpty(dto.Scope)) valueRef = valueRef.WithScope(dto.Scope);
+
+            return valueRef;
         }
 
         private static System.Collections.Generic.Dictionary<string, TriggerPlanJsonDatabase.NumericValueRefDto> BuildTemplateBindings(TriggerPlanJsonDatabase.TriggerTemplateBindingDto dto)
@@ -482,6 +644,158 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             }
 
             return arr;
+        }
+
+        private abstract class ExecutionNodeConverterBase
+        {
+            public abstract ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto);
+
+            protected static ITriggerPlanCondition Condition(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return context.ConvertCondition(dto.Condition);
+            }
+
+            protected static ITriggerPlanExecutable[] Children(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return context.ConvertExecutionNodes(dto.Children);
+            }
+
+            protected static ITriggerPlanExecutable Branch(
+                ITriggerPlanExecutable[] children)
+            {
+                return BuildBranch(children);
+            }
+        }
+
+        private sealed class ActionExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                if (dto.Action == null)
+                {
+                    throw new InvalidOperationException("Action execution node requires Action payload.");
+                }
+
+                return new ActionCallTriggerPlanExecutable(context.ConvertAction(dto.Action), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class SequenceExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new SequenceTriggerPlanExecutable(Children(context, dto), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class SelectorExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new SelectorTriggerPlanExecutable(Children(context, dto), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class RandomExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new RandomTriggerPlanExecutable(Children(context, dto), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class ParallelExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new ParallelTriggerPlanExecutable(Children(context, dto), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class IfExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new IfTriggerPlanExecutable(
+                    Condition(context, dto),
+                    Branch(Children(context, dto)),
+                    Branch(context.ConvertExecutionNodes(dto.ElseChildren)),
+                    guardCondition: null,
+                    weight: dto.Weight);
+            }
+        }
+
+        private sealed class RepeatExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new RepeatTriggerPlanExecutable(Branch(Children(context, dto)), dto.Count, Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class UntilExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new UntilTriggerPlanExecutable(
+                    Branch(Children(context, dto)),
+                    context.ConvertCondition(dto.UntilCondition),
+                    dto.MaxIterations,
+                    Condition(context, dto),
+                    dto.Weight);
+            }
+        }
+
+        private sealed class InvertExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new InvertTriggerPlanExecutable(Branch(Children(context, dto)), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class SucceedExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new SucceedTriggerPlanExecutable(Branch(Children(context, dto)), Condition(context, dto), dto.Weight);
+            }
+        }
+
+        private sealed class FailExecutionNodeConverter : ExecutionNodeConverterBase
+        {
+            public override ITriggerPlanExecutable Convert(
+                TriggerPlanConverter context,
+                TriggerPlanJsonDatabase.ExecutionNodeDto dto)
+            {
+                return new FailTriggerPlanExecutable(Branch(Children(context, dto)), dto.Reason, Condition(context, dto), dto.Weight);
+            }
         }
     }
 }

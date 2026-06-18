@@ -1,3 +1,4 @@
+using AbilityKit.Demo.Shooter;
 using AbilityKit.Orleans.Contracts.Rooms;
 using AbilityKit.Orleans.Grains.Rooms;
 using Xunit;
@@ -36,7 +37,7 @@ public sealed class RoomLifecycleCleanupTests
             Region: "local",
             ServerId: "server-a",
             RoomId: "room-a",
-            RoomType: "shooter",
+            RoomType: ShooterGameplay.RoomType,
             Title: "Shooter Room",
             IsPublic: true,
             MaxPlayers: 2,

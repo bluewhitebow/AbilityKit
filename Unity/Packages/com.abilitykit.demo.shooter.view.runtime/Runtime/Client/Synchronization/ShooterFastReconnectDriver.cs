@@ -7,18 +7,16 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Wraps the gameplay-agnostic framework <see cref="FastReconnectSession"/> so the Shooter
-    /// recovery layer can drive it (audit §10.4: first real consumer of FastReconnect).
+    /// 包装玩法无关的框架 <see cref="FastReconnectSession"/>，让 Shooter 恢复层可以驱动它
+    /// （审计 §10.4：FastReconnect 的第一个真实消费方）。
     ///
-    /// Shooter keeps its own snapshot import / replay / business-reason classification as the source
-    /// of truth for routing; this driver mirrors each <see cref="ShooterClientRecoveryState"/>
-    /// transition onto the framework's phase machine (Connected → Disconnected →
-    /// {Resuming | AwaitingFullSnapshot} → Recovered) and collects the unified
-    /// <see cref="SyncHealthEvent"/> stream the session emits, so the framework owns phase
-    /// adjudication + health telemetry without re-implementing recovery logic.
+    /// Shooter 仍以自身的快照导入、重放和业务原因分类作为路由依据；该驱动会把每个
+    /// <see cref="ShooterClientRecoveryState"/> 迁移映射到框架阶段机
+    /// （Connected → Disconnected → {Resuming | AwaitingFullSnapshot} → Recovered），并采集会话发出的统一
+    /// <see cref="SyncHealthEvent"/> 流，让框架负责阶段判定与健康遥测，而不需要重新实现恢复逻辑。
     ///
-    /// The reconciler tolerates the session's strict transition guards: any illegal step is skipped
-    /// rather than thrown, keeping the wrap purely additive (design §6 rollback note).
+    /// 协调器会容忍会话严格的迁移守卫：任何非法步骤都会被跳过而不是抛出异常，使包装保持纯增量
+    /// （设计 §6 回滚说明）。
     /// </summary>
     internal sealed class ShooterFastReconnectDriver
     {
@@ -30,24 +28,24 @@ namespace AbilityKit.Demo.Shooter.View
             _session = new FastReconnectSession(resumeWindowFrames < 1 ? 1 : resumeWindowFrames);
         }
 
-        /// <summary>Current framework recovery phase, the projection target for Shooter's recovery state.</summary>
+        /// <summary>当前框架恢复阶段，也是 Shooter 恢复状态的投影目标。</summary>
         public FastReconnectPhase Phase => _session.Phase;
 
-        /// <summary>The framework resume window (frames) that splits short catch-up from full snapshot.</summary>
+        /// <summary>框架恢复窗口（帧数），用于区分短距离追帧与完整快照恢复。</summary>
         public int ResumeWindowFrames => _session.ResumeWindowFrames;
 
-        /// <summary>Health events accumulated since the last <see cref="ResetEventBuffer"/>.</summary>
+        /// <summary>自上次 <see cref="ResetEventBuffer"/> 以来累计的健康事件。</summary>
         public IReadOnlyList<SyncHealthEvent> CollectedEvents => _events;
 
-        /// <summary>Clears the per-operation health-event buffer; call at each public entry point.</summary>
+        /// <summary>清空单次操作的健康事件缓冲；每个公共入口点调用。</summary>
         public void ResetEventBuffer()
         {
             _events.Clear();
         }
 
         /// <summary>
-        /// Records a routine authoritative heartbeat (a clean snapshot receipt with no pending
-        /// recovery). Emits the framework's <see cref="SyncHealthEventKind.SnapshotReceived"/>.
+        /// 记录一次常规权威心跳（收到干净快照且没有待处理恢复）。
+        /// 发出框架 <see cref="SyncHealthEventKind.SnapshotReceived"/> 事件。
         /// </summary>
         public void Heartbeat(int authoritativeFrame)
         {
@@ -59,8 +57,7 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// Moves the session toward the phase that matches Shooter's new recovery state, taking one
-        /// legal framework transition at a time and harvesting the emitted health events.
+        /// 将会话推进到与 Shooter 新恢复状态匹配的阶段，每次只执行一个合法框架迁移，并收集发出的健康事件。
         /// </summary>
         public void Reconcile(FastReconnectPhase target, int authoritativeFrame, int gapHint)
         {
@@ -92,7 +89,7 @@ namespace AbilityKit.Demo.Shooter.View
             switch (current)
             {
                 case FastReconnectPhase.Connected:
-                    // Leaving Connected toward any recovery/Recovered phase starts with a disconnect.
+                    // 从 Connected 离开并进入任何恢复/Recovered 阶段都要先断开连接。
                     return TryDisconnect();
 
                 case FastReconnectPhase.Recovered:
@@ -103,16 +100,14 @@ namespace AbilityKit.Demo.Shooter.View
                     return TryDisconnect();
 
                 case FastReconnectPhase.Disconnected:
-                    // Choose the recovery path by framing the gap relative to the resume window so the
-                    // session lands on the phase Shooter already decided on.
+                    // 根据 gap 与恢复窗口的关系选择恢复路径，让会话落到 Shooter 已经决定的阶段。
                     return target == FastReconnectPhase.AwaitingFullSnapshot
                         ? TryReconnect(LargeGapFrame(gap))
                         : TryReconnect(SmallGapFrame(gap));
 
                 case FastReconnectPhase.Resuming:
                 case FastReconnectPhase.AwaitingFullSnapshot:
-                    // The only legal exit is completing recovery; subsequent iterations walk on toward
-                    // Connected / a fresh recovery path if that is the requested target.
+                    // 唯一合法出口是完成恢复；后续迭代再根据目标继续走向 Connected 或新的恢复路径。
                     return TryComplete();
 
                 default:

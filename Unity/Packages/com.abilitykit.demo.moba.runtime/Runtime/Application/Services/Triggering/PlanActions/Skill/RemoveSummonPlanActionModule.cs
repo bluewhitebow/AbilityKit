@@ -31,30 +31,36 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
-            var ownerActorIds = new List<int>(8);
-
-            if (args.RootOwnerActorId > 0)
+            var ownerActorIds = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                ownerActorIds.Add(args.RootOwnerActorId);
-            }
-            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveSummon, ownerActorIds) || ownerActorIds.Count == 0)
-            {
-                if (coreInput.HasCasterActor)
+                if (args.RootOwnerActorId > 0)
                 {
-                    ownerActorIds.Add(coreInput.CasterActorId);
+                    ownerActorIds.Add(args.RootOwnerActorId);
                 }
-            }
+                else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveSummon, ownerActorIds) || ownerActorIds.Count == 0)
+                {
+                    if (coreInput.HasCasterActor)
+                    {
+                        ownerActorIds.Add(coreInput.CasterActorId);
+                    }
+                }
 
-            var reason = args.Reason == SummonDespawnReason.None ? SummonDespawnReason.ManualRemove : args.Reason;
-            var removed = 0;
-            for (var i = 0; i < ownerActorIds.Count; i++)
+                var reason = args.Reason == SummonDespawnReason.None ? SummonDespawnReason.ManualRemove : args.Reason;
+                var removed = 0;
+                for (var i = 0; i < ownerActorIds.Count; i++)
+                {
+                    var ownerActorId = ownerActorIds[i];
+                    if (ownerActorId <= 0) continue;
+                    removed += summons.RemoveSummons(ownerActorId, args.SummonId, args.RemoveAll, reason);
+                }
+
+                LogApplied(ctx, $"summonId={args.SummonId} owners={ownerActorIds.Count} removed={removed} reason={reason}");
+            }
+            finally
             {
-                var ownerActorId = ownerActorIds[i];
-                if (ownerActorId <= 0) continue;
-                removed += summons.RemoveSummons(ownerActorId, args.SummonId, args.RemoveAll, reason);
+                PooledMobaPlanActionLists.Release(ownerActorIds);
             }
-
-            LogApplied(ctx, $"summonId={args.SummonId} owners={ownerActorIds.Count} removed={removed} reason={reason}");
         }
     }
 }

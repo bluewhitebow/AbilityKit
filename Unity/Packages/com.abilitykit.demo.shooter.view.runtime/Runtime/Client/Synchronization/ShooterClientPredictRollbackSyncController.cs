@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
@@ -11,11 +12,10 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// <see cref="NetworkSyncModel.PredictRollback"/> client controller.
-    /// Wraps the existing local prediction, authoritative snapshot, rollback and replay chain
-    /// (<see cref="ShooterClientFrameSyncCoordinator"/> + <see cref="ShooterClientInputCoordinator"/>)
-    /// behind the common <see cref="IShooterClientSyncController"/> seam so the session can
-    /// delegate without knowing the active synchronization model.
+    /// <see cref="NetworkSyncModel.PredictRollback"/> 客户端控制器。
+    /// 将现有本地预测、权威快照、回滚与重放链路
+    /// （<see cref="ShooterClientFrameSyncCoordinator"/> + <see cref="ShooterClientInputCoordinator"/>）
+    /// 包装到通用 <see cref="IShooterClientSyncController"/> 接缝之后，让会话无需了解当前同步模型即可委托执行。
     /// </summary>
     public sealed class ShooterClientPredictRollbackSyncController : IShooterClientSyncController
     {
@@ -53,8 +53,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public AbilityKit.Network.Runtime.Sync.FastReconnectPhase FastReconnectPhase => _frameSync.FastReconnectPhase;
 
-        public System.Collections.Generic.IReadOnlyList<AbilityKit.Network.Runtime.Sync.SyncHealthEvent> LastFastReconnectHealthEvents
-            => _frameSync.LastFastReconnectHealthEvents;
+        public IReadOnlyList<SyncHealthEvent> LastFastReconnectHealthEvents
+            => MergeHealthEvents(_frameSync.LastFastReconnectHealthEvents, _input.LastHealthEvents);
 
         public ShooterClientResyncReason LastResyncReason => _frameSync.LastResyncReason;
 
@@ -121,8 +121,36 @@ namespace AbilityKit.Demo.Shooter.View
             return _frameSync.ApplyGatewayPush(opCode, payload);
         }
 
+        private static IReadOnlyList<SyncHealthEvent> MergeHealthEvents(
+            IReadOnlyList<SyncHealthEvent> primary,
+            IReadOnlyList<SyncHealthEvent> secondary)
+        {
+            if (primary.Count == 0)
+            {
+                return secondary;
+            }
+
+            if (secondary.Count == 0)
+            {
+                return primary;
+            }
+
+            var merged = new SyncHealthEvent[primary.Count + secondary.Count];
+            for (int i = 0; i < primary.Count; i++)
+            {
+                merged[i] = primary[i];
+            }
+
+            for (int i = 0; i < secondary.Count; i++)
+            {
+                merged[primary.Count + i] = secondary[i];
+            }
+
+            return merged;
+        }
+
         // --- IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample> ---
-        // Explicit framework-contract surface that maps onto the existing demo behaviour.
+        // 显式框架契约接口，映射到现有示例行为。
 
         SyncTickResult IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>.Tick(float deltaSeconds)
         {
@@ -136,9 +164,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         void IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>.ObserveRemote(in ShooterRemoteSnapshotSample sample)
         {
-            // Predict-rollback does not consume per-actor remote samples: it reconciles by importing
-            // packed authoritative snapshot bytes via ApplyGatewayPush and rolling the local
-            // simulation back/forward. Observing a decoded sample is therefore a no-op for this model.
+            // 预测回滚不消费逐 actor 远端样本：它通过 ApplyGatewayPush 导入打包权威快照字节，
+            // 再回滚/前滚本地模拟完成校正。因此对该模型来说，观察已解码样本是空操作。
         }
 
         SyncReconciliationReport IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>.GetReconciliationReport()

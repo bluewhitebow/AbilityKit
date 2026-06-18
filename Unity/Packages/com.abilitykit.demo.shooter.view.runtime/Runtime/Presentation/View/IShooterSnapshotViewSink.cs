@@ -10,8 +10,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         new void Clear();
 
-        // Bridge the framework's ApplyBatch contract onto the Shooter-specific ApplySnapshot name,
-        // so existing sinks satisfy IViewSink<ShooterSnapshotViewBatch> without renames.
+        // 将框架的 ApplyBatch 契约桥接到 Shooter 专用的 ApplySnapshot 命名上，
+        // 这样现有 sink 无需重命名就能满足 IViewSink<ShooterSnapshotViewBatch>。
         void IViewSink<ShooterSnapshotViewBatch>.ApplyBatch(in ShooterSnapshotViewBatch batch)
         {
             ApplySnapshot(in batch);

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.Host;
 using AbilityKit.Demo.Moba.Share;
@@ -15,7 +16,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         private readonly BattleContext _ctx;
         private readonly IBattleEntityQuery _query;
         private readonly BattlePresentationCueVfxSpawner _spawner;
-        private readonly Dictionary<string, EC.IEntityId> _activeByRequestKey = new();
+        private readonly Dictionary<CueRequestKey, EC.IEntityId> _activeByRequestKey = new();
 
         public BattlePresentationCueViewEventHandler(
             BattleContext ctx,
@@ -53,7 +54,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
         private void HandleSnapshotEntry(in PresentationCueData data)
         {
             var requestKey = GetRequestKey(in data);
-            if (string.IsNullOrEmpty(requestKey)) return;
+            if (requestKey.IsEmpty) return;
  
             if (ShouldStart(data.Stage) || ShouldKeepActive(data.Stage))
             {
@@ -67,7 +68,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
             }
         }
 
-        private void Play(string requestKey, in PresentationCueData data)
+        private void Play(in CueRequestKey requestKey, in PresentationCueData data)
         {
             if (_activeByRequestKey.ContainsKey(requestKey)) return;
 
@@ -82,7 +83,7 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
             }
         }
 
-        private void Stop(string requestKey, PresentationCueStage stage)
+        private void Stop(in CueRequestKey requestKey, PresentationCueStage stage)
         {
             if (!_activeByRequestKey.TryGetValue(requestKey, out var entityId)) return;
 
@@ -174,22 +175,116 @@ namespace AbilityKit.Game.Flow.Battle.ViewEvents
             return _query.TryResolve(new EntityBattleNetId(actorId), out entity);
         }
 
-        private static string GetRequestKey(in PresentationCueData data)
+        private static CueRequestKey GetRequestKey(in PresentationCueData data)
         {
-            if (!string.IsNullOrWhiteSpace(data.InstanceKey)) return data.InstanceKey;
-            if (!string.IsNullOrWhiteSpace(data.RequestKey)) return data.RequestKey;
- 
-            if (data.TriggerId > 0)
+            if (!string.IsNullOrWhiteSpace(data.InstanceKey)) return CueRequestKey.FromExternal(data.InstanceKey);
+            if (!string.IsNullOrWhiteSpace(data.RequestKey)) return CueRequestKey.FromExternal(data.RequestKey);
+
+            return CueRequestKey.FromGenerated(data.TriggerId, data.TriggerEventId, data.ActionIndex, data.Order, data.SourceActorId, data.TargetActorId);
+        }
+
+        private readonly struct CueRequestKey : IEquatable<CueRequestKey>
+        {
+            private readonly string _externalKey;
+            private readonly int _triggerKey;
+            private readonly int _triggerEventId;
+            private readonly int _actionIndex;
+            private readonly int _order;
+            private readonly int _sourceActorId;
+            private readonly int _targetActorId;
+            private readonly bool _hasExternalKey;
+            private readonly bool _hasValue;
+
+            public bool IsEmpty => !_hasValue;
+
+            private CueRequestKey(string externalKey)
             {
-                return $"cue:{data.TriggerId}:{data.ActionIndex}:{data.Order}:{data.SourceActorId}:{data.TargetActorId}";
+                _externalKey = externalKey;
+                _triggerKey = 0;
+                _triggerEventId = 0;
+                _actionIndex = 0;
+                _order = 0;
+                _sourceActorId = 0;
+                _targetActorId = 0;
+                _hasExternalKey = true;
+                _hasValue = true;
             }
 
-            if (data.TriggerEventId > 0)
+            private CueRequestKey(int triggerKey, int triggerEventId, int actionIndex, int order, int sourceActorId, int targetActorId)
             {
-                return $"cue:{data.TriggerEventId}:{data.ActionIndex}:{data.Order}:{data.SourceActorId}:{data.TargetActorId}";
+                _externalKey = null;
+                _triggerKey = triggerKey;
+                _triggerEventId = triggerEventId;
+                _actionIndex = actionIndex;
+                _order = order;
+                _sourceActorId = sourceActorId;
+                _targetActorId = targetActorId;
+                _hasExternalKey = false;
+                _hasValue = true;
             }
 
-            return $"cue:{data.ActionIndex}:{data.Order}:{data.SourceActorId}:{data.TargetActorId}";
+            public static CueRequestKey FromExternal(string externalKey)
+            {
+                return string.IsNullOrWhiteSpace(externalKey) ? default : new CueRequestKey(externalKey);
+            }
+
+            public static CueRequestKey FromGenerated(int triggerKey, int triggerEventId, int actionIndex, int order, int sourceActorId, int targetActorId)
+            {
+                return new CueRequestKey(triggerKey, triggerEventId, actionIndex, order, sourceActorId, targetActorId);
+            }
+
+            public bool Equals(CueRequestKey other)
+            {
+                if (_hasValue != other._hasValue) return false;
+                if (!_hasValue) return true;
+                if (_hasExternalKey != other._hasExternalKey) return false;
+                if (_hasExternalKey) return string.Equals(_externalKey, other._externalKey, StringComparison.Ordinal);
+
+                if (_triggerKey > 0 || other._triggerKey > 0)
+                {
+                    return _triggerKey == other._triggerKey && _order == other._order;
+                }
+
+                if (_triggerEventId > 0 || other._triggerEventId > 0)
+                {
+                    return _triggerEventId == other._triggerEventId && _order == other._order;
+                }
+
+                return _actionIndex == other._actionIndex
+                    && _order == other._order
+                    && _sourceActorId == other._sourceActorId
+                    && _targetActorId == other._targetActorId;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is CueRequestKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                if (!_hasValue) return 0;
+                if (_hasExternalKey) return _externalKey != null ? StringComparer.Ordinal.GetHashCode(_externalKey) : 0;
+
+                unchecked
+                {
+                    if (_triggerKey > 0)
+                    {
+                        return (_triggerKey * 397) ^ _order;
+                    }
+
+                    if (_triggerEventId > 0)
+                    {
+                        return (_triggerEventId * 397) ^ _order;
+                    }
+
+                    var hash = _actionIndex;
+                    hash = (hash * 397) ^ _order;
+                    hash = (hash * 397) ^ _sourceActorId;
+                    hash = (hash * 397) ^ _targetActorId;
+                    return hash;
+                }
+            }
         }
 
     }

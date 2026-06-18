@@ -1,5 +1,6 @@
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Host.Extensions.Moba.Runtime;
+using AbilityKit.Ability.Host.Extensions.Moba.StartSources;
 using AbilityKit.Demo.Moba.Services.LogicWorld;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -54,16 +55,23 @@ namespace AbilityKit.Demo.Moba.Services
 
         private static bool ValidateGameStartSpec(in MobaRuntimeValidationContext context, MobaRuntimeValidationReport report)
         {
-            if (!context.TryResolve<MobaGameStartSpecService>(out var starts) || starts == null)
+            if (!context.TryResolve<IMobaPendingGameStartSpecStore>(out var starts) || starts == null)
             {
-                report.Error(Source, "world.start_spec.service", "MobaGameStartSpecService is required to retain the validated battle game start spec before the formal world flow starts.", nameof(MobaGameStartSpecService), blocksStartup: true);
+                report.Error(Source, "world.start_spec.service", "IMobaPendingGameStartSpecStore is required to retain the validated battle start plan before the formal world flow starts.", nameof(IMobaPendingGameStartSpecStore), blocksStartup: true);
                 return false;
             }
 
-            var validation = starts.ValidatePendingSpec();
-            if (validation.Succeeded) return true;
+            var specValidation = starts.ValidatePendingSpec();
+            if (!specValidation.Succeeded)
+            {
+                report.Error(Source, "world.start_spec.pending", specValidation.Message, nameof(IMobaPendingGameStartSpecStore), blocksStartup: true);
+                return false;
+            }
 
-            report.Error(Source, "world.start_spec.pending", validation.Message, nameof(MobaGameStartSpecService), blocksStartup: true);
+            var planValidation = starts.ValidatePendingPlan();
+            if (planValidation.Succeeded) return true;
+
+            report.Error(Source, "world.start_plan.pending", planValidation.Message, nameof(IMobaPendingGameStartSpecStore), blocksStartup: true);
             return false;
         }
 

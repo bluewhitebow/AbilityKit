@@ -97,8 +97,7 @@ namespace AbilityKit.Demo.Moba.Systems.Effects
                 in _systemServices,
                 MobaBattleDiagnosticMetric.EffectsStep,
                 start,
-                MobaBattleDiagnosticsDefaults.EffectsStepWarnMs,
-                $"candidates={entities.Length} processed={processed}");
+                MobaBattleDiagnosticsDefaults.EffectsStepWarnMs);
         }
     }
 }

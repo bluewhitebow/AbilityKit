@@ -10,7 +10,7 @@ namespace AbilityKit.Demo.Shooter.View
         new void Clear();
         new void RebindAll();
 
-        // Bridge the framework's ApplyBatch contract onto the Shooter-specific Sync name.
+        // 将框架的 ApplyBatch 契约桥接到 Shooter 专用的 Sync 命名上。
         void IViewSink<ShooterSnapshotViewBatch>.ApplyBatch(in ShooterSnapshotViewBatch batch)
         {
             Sync(in batch);

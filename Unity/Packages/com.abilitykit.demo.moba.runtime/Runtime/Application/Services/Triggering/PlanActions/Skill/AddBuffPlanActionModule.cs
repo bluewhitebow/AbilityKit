@@ -31,15 +31,22 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
             var sourceActorId = effectInput.CasterActorId;
-            var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, ActionName, targets))
+            var targets = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                return;
-            }
+                if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, ActionName, targets))
+                {
+                    return;
+                }
 
-            for (int i = 0; i < targets.Count; i++)
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    ApplyBuffs(buffSvc, args, effectInput, sourceActorId, targets[i]);
+                }
+            }
+            finally
             {
-                ApplyBuffs(buffSvc, args, effectInput, sourceActorId, targets[i]);
+                PooledMobaPlanActionLists.Release(targets);
             }
         }
 

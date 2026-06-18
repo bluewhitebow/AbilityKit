@@ -26,9 +26,11 @@ namespace AbilityKit.Demo.Moba.Services
 
             context.TryResolve<TriggerPlanJsonDatabase>(out var triggers);
 
+            ValidateBattleAttributeTemplates(config, report);
             ValidateSkills(config, triggers, report);
             ValidatePassiveSkills(config, triggers, report);
             ValidateBuffs(config, triggers, report);
+            ValidateCharacters(config, report);
             ValidateProjectiles(config, report);
             ValidateProjectileLaunchers(config, report);
             ValidateSummons(config, report);
@@ -36,6 +38,47 @@ namespace AbilityKit.Demo.Moba.Services
             ValidateGameplay(config, triggers, report);
             ValidateTagTemplates(config, report);
             ValidateContinuousTagTemplates(config, report);
+        }
+
+        private static void ValidateBattleAttributeTemplates(MobaConfigDatabase config, MobaRuntimeValidationReport report)
+        {
+            foreach (var template in All<BattleAttributeTemplateMO>(config))
+            {
+                if (template == null) continue;
+                var path = $"battleAttributeTemplate.{template.Id}";
+
+                if (template.Hp < 0)
+                {
+                    report.Warning(Source, path + ".hp", "battle attribute template hp is negative.", template.Id.ToString());
+                }
+
+                if (template.MaxHp < 0)
+                {
+                    report.Warning(Source, path + ".maxHp", "battle attribute template max hp is negative.", template.Id.ToString());
+                }
+
+                if (template.MaxHp > 0 && template.Hp > template.MaxHp)
+                {
+                    report.Warning(Source, path + ".hp", "battle attribute template hp exceeds max hp.", template.Id.ToString());
+                }
+
+                ValidateRefs(Ref<SkillMO>(config.TryGetSkill), template.ActiveSkills, report, path + ".activeSkills", "skill", template.Id);
+                ValidateRefs(Ref<PassiveSkillMO>(config.TryGetPassiveSkill), template.PassiveSkills, report, path + ".passiveSkills", "passive skill", template.Id);
+            }
+        }
+
+        private static void ValidateCharacters(MobaConfigDatabase config, MobaRuntimeValidationReport report)
+        {
+            foreach (var character in All<CharacterMO>(config))
+            {
+                if (character == null) continue;
+                var path = $"character.{character.Id}";
+
+                OptionalRef(Ref<ModelMO>(config.TryGetModel), character.ModelId, report, path + ".modelId", "model", character.Id);
+                RequiredRef(Ref<BattleAttributeTemplateMO>(config.TryGetAttributeTemplate), character.AttributeTemplateId, report, path + ".attributeTemplateId", "attribute template", character.Id);
+                ValidateRefs(Ref<SkillMO>(config.TryGetSkill), character.SkillIds, report, path + ".skillIds", "skill", character.Id);
+                ValidateRefs(Ref<PassiveSkillMO>(config.TryGetPassiveSkill), character.PassiveSkillIds, report, path + ".passiveSkillIds", "passive skill", character.Id);
+            }
         }
 
         private static void ValidateSkills(MobaConfigDatabase config, TriggerPlanJsonDatabase triggers, MobaRuntimeValidationReport report)
@@ -108,6 +151,7 @@ namespace AbilityKit.Demo.Moba.Services
                 ValidateTriggerRefs(triggers, buff.OnIntervalEffects, report, path + ".onIntervalEffects", buff.Id);
                 ValidateTriggerRefs(triggers, buff.TriggerIds, report, path + ".triggerIds", buff.Id, TriggerPlanScope.OwnerBound);
                 OptionalRef(Ref<ContinuousTagTemplateMO>(config.TryGetContinuousTagTemplate), buff.ContinuousTagTemplateId, report, path + ".continuousTagTemplateId", "continuous tag template", buff.Id);
+                OptionalRef((int id, out PresentationTemplateMO value) => TryGetTableRef(config, id, out value), buff.PresentationTemplateId, report, path + ".presentationTemplateId", "presentation template", buff.Id);
 
                 ValidateBuffModifiers(config, buff, report);
             }
@@ -483,6 +527,15 @@ namespace AbilityKit.Demo.Moba.Services
             if (config == null) return Array.Empty<T>();
             var table = config.GetTable<T>();
             return table != null ? table.All() : Array.Empty<T>();
+        }
+
+        private static bool TryGetTableRef<T>(MobaConfigDatabase config, int id, out T value) where T : class
+        {
+            value = null;
+            if (config == null) return false;
+
+            var table = config.GetTable<T>();
+            return table != null && table.TryGet(id, out value);
         }
 
         private static void WarnEmptyName(string name, MobaRuntimeValidationReport report, string path, int businessId)

@@ -7,48 +7,41 @@ using AbilityKit.Network.Runtime.Conditioning;
 namespace AbilityKit.Demo.Shooter.View.Network
 {
     /// <summary>
-    /// Abstraction for network condition sources. Both the Editor window (Editor-direct mode) and
-    /// the Play-mode session host use this to obtain the current <see cref="NetworkConditionProfile"/>
-    /// without knowing whether the values come from built-in sliders, a preset catalog, or an external
-    /// tool (e.g. Clumsy, Network Link Conditioner, or a custom packet-loss injector).
+    /// 网络条件来源抽象。Editor 窗口（Editor-direct 模式）和 Play-mode 会话 host 都通过它获取当前
+    /// <see cref="NetworkConditionProfile"/>，无需关心数值来自内置滑条、预设目录还是外部工具
+    /// （例如 Clumsy、Network Link Conditioner 或自定义丢包注入器）。
     /// <para>
-    /// Extension: implement this interface to plug in software-based network conditioning
-    /// (OS-level packet loss, proxy-based latency injection, etc.) alongside the built-in
-    /// parameter sliders. Subscribers pick up changes via <see cref="ProfileChanged"/>
-    /// and forward them to <see cref="ShooterAcceptanceSession.ApplyNetwork"/>.
+    /// 扩展方式：实现该接口即可把软件网络调节（操作系统级丢包、代理延迟注入等）接入内置参数滑条之外。
+    /// 订阅方通过 <see cref="ProfileChanged"/> 感知变化，并转发给 <see cref="ShooterAcceptanceSession.ApplyNetwork"/>。
     /// </para>
     /// <para>
-    /// This type lives in the runtime assembly (View.Runtime, no platform restriction) so that
-    /// Play-mode runtime code can register and read providers. The Editor window references the
-    /// same types so a single registry serves both the Editor-direct and Play-mode-attach channels.
+    /// 该类型位于 runtime 程序集（View.Runtime，无平台限制），方便 Play-mode 运行时代码注册与读取 provider。
+    /// Editor 窗口也引用同一组类型，因此一个注册表即可同时服务 Editor-direct 与 Play-mode-attach 通道。
     /// </para>
     /// </summary>
     public interface IShooterNetworkConditionProvider : IDisposable
     {
-        /// <summary>Human-readable label for display in the Editor window.</summary>
+        /// <summary>显示在 Editor 窗口中的人类可读标签。</summary>
         string DisplayName { get; }
 
-        /// <summary>The current network condition profile.</summary>
+        /// <summary>当前网络条件档案。</summary>
         NetworkConditionProfile Profile { get; }
 
         /// <summary>
-        /// True when this provider is actively controlling network conditions
-        /// (e.g. an external tool is running). When false, the built-in parameter
-        /// sliders are used instead.
+        /// 当该 provider 正在主动控制网络条件时为 true（例如外部工具正在运行）。
+        /// 为 false 时改用内置参数滑条。
         /// </summary>
         bool IsActive { get; }
 
         /// <summary>
-        /// Raised when the profile changes (either from external tool feedback
-        /// or from internal parameter changes). Subscribers forward changes to
-        /// the running session.
+        /// 档案变化时触发（可能来自外部工具反馈，也可能来自内部参数变化）。
+        /// 订阅方会把变化转发给正在运行的会话。
         /// </summary>
         event Action<NetworkConditionProfile>? ProfileChanged;
     }
 
     /// <summary>
-    /// Built-in provider driven by slider values. This is the default provider
-    /// used when no external tool is connected.
+    /// 由滑条数值驱动的内置 provider。没有外部工具连接时默认使用它。
     /// </summary>
     public sealed class ShooterBuiltinNetworkConditionProvider : IShooterNetworkConditionProvider
     {
@@ -68,8 +61,7 @@ namespace AbilityKit.Demo.Shooter.View.Network
         public event Action<NetworkConditionProfile>? ProfileChanged;
 
         /// <summary>
-        /// Updates the profile from slider values and notifies subscribers.
-        /// Called by the Editor window when the user adjusts network parameter sliders.
+        /// 根据滑条数值更新档案并通知订阅方。用户在 Editor 窗口调整网络参数滑条时调用。
         /// </summary>
         public void ApplyProfile(NetworkConditionProfile profile)
         {
@@ -78,7 +70,7 @@ namespace AbilityKit.Demo.Shooter.View.Network
         }
 
         /// <summary>
-        /// Applies a preset profile and notifies subscribers.
+        /// 应用一个预设档案并通知订阅方。
         /// </summary>
         public void ApplyPreset(NetworkConditionProfile profile, string presetName)
         {
@@ -93,14 +85,12 @@ namespace AbilityKit.Demo.Shooter.View.Network
     }
 
     /// <summary>
-    /// Registry of <see cref="IShooterNetworkConditionProvider"/> instances. The Editor window
-    /// queries this to populate the network source dropdown. External tools register themselves
-    /// here on enable and unregister on disable. The Play-mode session host subscribes so a
-    /// running match is hot-tuned through the same registry the Editor writes to.
+    /// <see cref="IShooterNetworkConditionProvider"/> 实例注册表。Editor 窗口查询它来填充网络来源下拉框。
+    /// 外部工具启用时在这里注册，禁用时注销。Play-mode 会话 host 订阅该注册表，
+    /// 让运行中的对局通过 Editor 写入的同一注册表完成热调参。
     /// <para>
-    /// Extension point: to add a new network conditioning source (e.g. Clumsy integration,
-    /// custom packet-loss middleware), implement <see cref="IShooterNetworkConditionProvider"/>
-    /// and call <see cref="Register"/> from your tool's startup code.
+    /// 扩展点：若要新增网络调节来源（例如 Clumsy 集成、自定义丢包中间件），实现
+    /// <see cref="IShooterNetworkConditionProvider"/> 并在工具启动代码中调用 <see cref="Register"/>。
     /// </para>
     /// </summary>
     public static class ShooterNetworkConditionRegistry
@@ -109,10 +99,10 @@ namespace AbilityKit.Demo.Shooter.View.Network
         private static readonly ShooterBuiltinNetworkConditionProvider _builtin =
             new(NetworkConditionProfile.Ideal);
 
-        /// <summary>The built-in slider-based provider, always available.</summary>
+        /// <summary>基于滑条的内置 provider，始终可用。</summary>
         public static ShooterBuiltinNetworkConditionProvider Builtin => _builtin;
 
-        /// <summary>All registered providers including the built-in one.</summary>
+        /// <summary>全部已注册 provider，包含内置 provider。</summary>
         public static IReadOnlyList<IShooterNetworkConditionProvider> All
         {
             get
@@ -123,7 +113,7 @@ namespace AbilityKit.Demo.Shooter.View.Network
             }
         }
 
-        /// <summary>Registers an external network condition provider.</summary>
+        /// <summary>注册一个外部网络条件 provider。</summary>
         public static void Register(IShooterNetworkConditionProvider provider)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
@@ -133,7 +123,7 @@ namespace AbilityKit.Demo.Shooter.View.Network
             }
         }
 
-        /// <summary>Unregisters an external network condition provider.</summary>
+        /// <summary>注销一个外部网络条件 provider。</summary>
         public static void Unregister(IShooterNetworkConditionProvider provider)
         {
             _providers.Remove(provider);

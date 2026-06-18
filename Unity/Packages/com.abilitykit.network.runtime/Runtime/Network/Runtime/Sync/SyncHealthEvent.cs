@@ -5,12 +5,10 @@ using System;
 namespace AbilityKit.Network.Runtime.Sync
 {
     /// <summary>
-    /// A single gameplay-agnostic synchronization health signal emitted during one sync tick. Carriers
-    /// surface these alongside <see cref="SyncReconciliationReport"/> so the demo harness can aggregate a
-    /// uniform health picture (snapshot flow, interpolation, recovery, input, validation) instead of
-    /// continuing to widen the reconciliation report. The event is intentionally lightweight: a kind, a
-    /// severity, the frame it relates to and a single numeric payload whose meaning depends on the kind
-    /// (e.g. replay tick count, dropped snapshot count, remapped frame).
+    /// 单次同步 tick 中发出的玩法无关同步健康信号。Carrier 会将它与 <see cref="SyncReconciliationReport"/> 一起暴露，
+    /// 让 DemoHarness 可以聚合统一的健康视图（快照流、插值、恢复、输入、验证），而不是继续扩展校正报告。
+    /// 该事件刻意保持轻量：包含类别、严重级别、关联帧，以及一个含义由类别决定的数值负载
+    /// （例如重放 tick 数、丢弃快照数、重映射帧）。
     /// </summary>
     public readonly struct SyncHealthEvent : IEquatable<SyncHealthEvent>
     {
@@ -36,19 +34,19 @@ namespace AbilityKit.Network.Runtime.Sync
 
         public static SyncHealthEvent None { get; } = default;
 
-        /// <summary>Creates an <see cref="SyncHealthSeverity.Info"/> event of the given kind.</summary>
+        /// <summary>创建指定类别的 <see cref="SyncHealthSeverity.Info"/> 事件。</summary>
         public static SyncHealthEvent Info(SyncHealthEventKind kind, int frame = 0, long value = 0L)
         {
             return new SyncHealthEvent(kind, SyncHealthSeverity.Info, frame, value);
         }
 
-        /// <summary>Creates a <see cref="SyncHealthSeverity.Warning"/> event of the given kind.</summary>
+        /// <summary>创建指定类别的 <see cref="SyncHealthSeverity.Warning"/> 事件。</summary>
         public static SyncHealthEvent Warning(SyncHealthEventKind kind, int frame = 0, long value = 0L)
         {
             return new SyncHealthEvent(kind, SyncHealthSeverity.Warning, frame, value);
         }
 
-        /// <summary>Creates a <see cref="SyncHealthSeverity.Error"/> event of the given kind.</summary>
+        /// <summary>创建指定类别的 <see cref="SyncHealthSeverity.Error"/> 事件。</summary>
         public static SyncHealthEvent Error(SyncHealthEventKind kind, int frame = 0, long value = 0L)
         {
             return new SyncHealthEvent(kind, SyncHealthSeverity.Error, frame, value);

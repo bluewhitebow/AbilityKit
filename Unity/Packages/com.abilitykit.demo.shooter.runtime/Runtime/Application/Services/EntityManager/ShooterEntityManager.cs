@@ -28,6 +28,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _limits = limits;
         }
 
+        public ISveltoWorldContext SveltoContext => _context;
+
         public int MaxEntityCount => _limits.MaxEntityCount;
 
         public int PlayerCount => _playerIds.Count;

@@ -10,6 +10,7 @@ namespace AbilityKit.Game.View.Flow
         private readonly List<TKey> _states;
         private readonly List<PhaseStateTransitionSpec<TKey, TEvent>> _transitions;
         private bool _hasStartState;
+        private bool _isFrozen;
         private TKey _startState;
 
         public PhaseStateMachineSpec(string id, int initialStateCapacity = 8, int initialTransitionCapacity = 8)
@@ -24,12 +25,20 @@ namespace AbilityKit.Game.View.Flow
 
         public string Id { get; }
         public bool HasStartState => _hasStartState;
+        public bool IsFrozen => _isFrozen;
         public TKey StartState => _hasStartState ? _startState : throw new InvalidOperationException($"State machine '{Id}' has no start state.");
         public IReadOnlyList<TKey> States => _states;
         public IReadOnlyList<PhaseStateTransitionSpec<TKey, TEvent>> Transitions => _transitions;
 
+        public PhaseStateMachineSpec<TKey, TEvent> Freeze()
+        {
+            _isFrozen = true;
+            return this;
+        }
+
         public PhaseStateMachineSpec<TKey, TEvent> AddState(TKey state)
         {
+            ThrowIfFrozen();
             if (state == null) throw new ArgumentNullException(nameof(state));
 
             _states.Add(state);
@@ -38,6 +47,7 @@ namespace AbilityKit.Game.View.Flow
 
         public PhaseStateMachineSpec<TKey, TEvent> SetStartState(TKey state)
         {
+            ThrowIfFrozen();
             if (state == null) throw new ArgumentNullException(nameof(state));
 
             _startState = state;
@@ -47,12 +57,21 @@ namespace AbilityKit.Game.View.Flow
 
         public PhaseStateMachineSpec<TKey, TEvent> AddTransition(TEvent trigger, TKey from, TKey to, string? conditionId = null)
         {
+            ThrowIfFrozen();
             if (trigger == null) throw new ArgumentNullException(nameof(trigger));
             if (from == null) throw new ArgumentNullException(nameof(from));
             if (to == null) throw new ArgumentNullException(nameof(to));
 
             _transitions.Add(new PhaseStateTransitionSpec<TKey, TEvent>(trigger, from, to, conditionId));
             return this;
+        }
+
+        private void ThrowIfFrozen()
+        {
+            if (_isFrozen)
+            {
+                throw new InvalidOperationException($"Phase state machine spec '{Id}' is frozen.");
+            }
         }
     }
 

@@ -76,6 +76,16 @@ namespace AbilityKit.Demo.Moba.Services.Snapshot
             _buffer.Clear();
         }
 
+        protected int CopyTo(IList<TEntry> destination)
+        {
+            return _buffer.CopyTo(destination);
+        }
+
+        protected int DrainTo(IList<TEntry> destination)
+        {
+            return _buffer.DrainTo(destination);
+        }
+
         protected TEntry[] ToArrayClearAndTrim()
         {
             return _buffer.ToArrayClearAndTrim();

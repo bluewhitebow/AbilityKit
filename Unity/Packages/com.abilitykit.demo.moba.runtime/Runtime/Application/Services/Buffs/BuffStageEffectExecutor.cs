@@ -19,31 +19,83 @@ namespace AbilityKit.Demo.Moba.Services
             if (_effects == null) return;
             if (triggerIds == null || triggerIds.Count == 0) return;
 
-            ValidateSource(buffId, sourceActorId, targetActorId, sourceContextId, stage, runtime);
+            var persistentSource = CapturePersistentSource(buffId, sourceActorId, targetActorId, sourceContextId, stage, runtime);
+            if (!ValidateSource(buffId, sourceActorId, targetActorId, sourceContextId, stage, runtime, in persistentSource)) return;
 
             for (int i = 0; i < triggerIds.Count; i++)
             {
                 var triggerId = triggerIds[i];
                 if (triggerId <= 0) continue;
 
-                _effects.ExecuteTriggerId(triggerId, CreatePayload(triggerId, buffId, sourceActorId, targetActorId, sourceContextId, stage, runtime, removeReason, durationSeconds));
+                _effects.ExecuteTriggerId(triggerId, CreatePayload(triggerId, buffId, sourceActorId, targetActorId, sourceContextId, stage, runtime, in persistentSource, removeReason, durationSeconds));
             }
         }
 
-        private static void ValidateSource(int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime)
+        private static bool ValidateSource(int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime, in MobaPersistentContextSourceSnapshot persistentSource)
         {
-            if (runtime == null)
+            if (runtime == null && !persistentSource.HasExecutionSource)
             {
-                throw new System.InvalidOperationException($"Buff stage effect requires live runtime context. buffId={buffId} stage={stage} sourceActorId={sourceActorId} targetActorId={targetActorId} sourceContextId={sourceContextId}");
+                AbilityKit.Core.Logging.Log.Warning($"[BuffStageEffectExecutor] missing runtime or persistent source. buffId={buffId} stage={stage} sourceActorId={sourceActorId} targetActorId={targetActorId} sourceContextId={sourceContextId}");
+                return false;
             }
 
             if (sourceActorId <= 0 || targetActorId <= 0 || sourceContextId == 0L)
             {
-                throw new System.InvalidOperationException($"Buff stage effect source context is incomplete. buffId={buffId} stage={stage} sourceActorId={sourceActorId} targetActorId={targetActorId} sourceContextId={sourceContextId}");
+                AbilityKit.Core.Logging.Log.Warning($"[BuffStageEffectExecutor] incomplete source context. buffId={buffId} stage={stage} sourceActorId={sourceActorId} targetActorId={targetActorId} sourceContextId={sourceContextId}");
+                return false;
             }
+
+            return true;
         }
 
-        private static BuffTriggerContext CreatePayload(int triggerId, int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime, TraceLifecycleReason removeReason, float durationSeconds)
+        private static MobaPersistentContextSourceSnapshot CapturePersistentSource(int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime)
+        {
+            var traceKind = BuffTriggerContext.ResolveTraceKind(stage);
+            if (runtime != null && runtime.ContextSource.IsValid)
+            {
+                var source = new MobaContextSourceView(
+                    MobaContextSourceResolveKind.DirectProvider,
+                    MobaContextSourceBoundary.Snapshot,
+                    runtime.ContextSource.ContextKind != EffectContextKind.Unknown ? runtime.ContextSource.ContextKind : EffectContextKind.Buff,
+                    traceKind,
+                    runtime.ContextSource.SourceActorId != 0 ? runtime.ContextSource.SourceActorId : sourceActorId,
+                    runtime.ContextSource.TargetActorId != 0 ? runtime.ContextSource.TargetActorId : targetActorId,
+                    runtime.ContextSource.SourceContextId != 0 ? runtime.ContextSource.SourceContextId : sourceContextId,
+                    runtime.ContextSource.ParentContextId != 0 ? runtime.ContextSource.ParentContextId : sourceContextId,
+                    runtime.ContextSource.RootContextId != 0 ? runtime.ContextSource.RootContextId : sourceContextId,
+                    runtime.ContextSource.OwnerContextId != 0 ? runtime.ContextSource.OwnerContextId : sourceContextId,
+                    runtime.ContextSource.ConfigId != 0 ? runtime.ContextSource.ConfigId : buffId,
+                    0,
+                    runtime.ContextSource.Frame,
+                    MobaRuntimeKindNames.Buff,
+                    buffId,
+                    false,
+                    runtime.ContextSource.SkillRuntimeHandle.IsValid ? runtime.ContextSource.SkillRuntimeHandle : runtime.SkillRuntimeHandle);
+                return MobaPersistentContextSourceSnapshot.FromContextSource(in source);
+            }
+
+            var fallback = new MobaContextSourceView(
+                MobaContextSourceResolveKind.DirectProvider,
+                MobaContextSourceBoundary.Snapshot,
+                EffectContextKind.Buff,
+                traceKind,
+                sourceActorId,
+                targetActorId,
+                sourceContextId,
+                sourceContextId,
+                sourceContextId,
+                sourceContextId,
+                buffId,
+                0,
+                0,
+                MobaRuntimeKindNames.Buff,
+                buffId,
+                false,
+                runtime != null ? runtime.SkillRuntimeHandle : default);
+            return MobaPersistentContextSourceSnapshot.FromContextSource(in fallback);
+        }
+
+        private static BuffTriggerContext CreatePayload(int triggerId, int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime, in MobaPersistentContextSourceSnapshot persistentSource, TraceLifecycleReason removeReason, float durationSeconds)
         {
             return new BuffTriggerContext
             {
@@ -58,6 +110,7 @@ namespace AbilityKit.Demo.Moba.Services
                 DurationSecondsSnapshot = durationSeconds,
                 RemoveReason = removeReason,
                 Runtime = runtime,
+                PersistentSource = persistentSource,
             };
         }
     }
@@ -75,7 +128,7 @@ namespace AbilityKit.Demo.Moba.Services
         bool TryGetBuffRuntime(out BuffRuntime runtime);
     }
 
-    internal sealed class BuffTriggerContext : IBuffTriggerContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaTriggerRuntimeContext<BuffRuntime>, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaTriggerStageSnapshotProvider, IMobaContextSourceProvider
+    internal sealed class BuffTriggerContext : IBuffTriggerContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaTriggerRuntimeContext<BuffRuntime>, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaTriggerStageSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
         public int TriggerId { get; set; }
         public EffectContextKind Kind => EffectContextKind.Buff;
@@ -99,7 +152,8 @@ namespace AbilityKit.Demo.Moba.Services
         }
         public TraceLifecycleReason RemoveReason { get; set; }
         public BuffRuntime Runtime { get; set; }
-        public MobaSkillCastRuntimeHandle SkillRuntimeHandle => Runtime != null ? Runtime.SkillRuntimeHandle : default;
+        public MobaPersistentContextSourceSnapshot PersistentSource { get; set; }
+        public MobaSkillCastRuntimeHandle SkillRuntimeHandle => Runtime != null && Runtime.SkillRuntimeHandle.IsValid ? Runtime.SkillRuntimeHandle : PersistentSource.Source.SkillRuntimeHandle;
         public MobaTriggerLineageContext LineageContext => ResolveLineageContext();
         public MobaTriggerTraceContext TraceContext => LineageContext.ToTraceContext();
         public MobaGameplayOrigin Origin
@@ -174,8 +228,31 @@ namespace AbilityKit.Demo.Moba.Services
             return snapshot.IsValid;
         }
 
+        public bool TryGetPersistentContextSource(out MobaPersistentContextSourceSnapshot snapshot)
+        {
+            if (PersistentSource.IsValid)
+            {
+                snapshot = PersistentSource;
+                return snapshot.HasExecutionSource;
+            }
+
+            if (TryGetContextSource(out var source))
+            {
+                snapshot = MobaPersistentContextSourceSnapshot.FromContextSource(in source);
+                return snapshot.HasExecutionSource;
+            }
+
+            snapshot = default;
+            return false;
+        }
+
         public bool TryGetContextSource(out MobaContextSourceView source)
         {
+            if (PersistentSource.IsValid && (Runtime == null || !Runtime.ContextSource.IsValid))
+            {
+                return PersistentSource.TryGetContextSource(out source);
+            }
+
             if (Runtime != null && Runtime.ContextSource.IsValid)
             {
                 source = new MobaContextSourceView(
@@ -203,9 +280,9 @@ namespace AbilityKit.Demo.Moba.Services
             source = MobaContextSourceView.FromLineage(
                 in lineageContext,
                 MobaContextSourceResolveKind.DirectProvider,
-                Runtime != null ? MobaContextSourceBoundary.LiveRuntime : MobaContextSourceBoundary.Snapshot,
+                MobaContextSourceBoundary.Snapshot,
                 SkillRuntimeHandle,
-                Runtime != null,
+                false,
                 "Buff",
                 BuffId);
             return source.IsValid;
@@ -230,7 +307,7 @@ namespace AbilityKit.Demo.Moba.Services
             return new MobaTriggerLineageContext(Kind, ResolveTraceKind(Stage), SourceActorId, TargetActorId, SourceContextId, SourceContextId, SourceContextId, BuffId);
         }
 
-        private static MobaTraceKind ResolveTraceKind(string stage)
+        internal static MobaTraceKind ResolveTraceKind(string stage)
         {
             if (MobaBuffTriggering.Stages.IsRemove(stage)) return MobaTraceKind.BuffRemove;
             if (MobaBuffTriggering.Stages.IsInterval(stage)) return MobaTraceKind.BuffTick;

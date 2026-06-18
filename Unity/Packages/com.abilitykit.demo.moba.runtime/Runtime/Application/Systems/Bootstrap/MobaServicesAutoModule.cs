@@ -87,7 +87,6 @@ namespace AbilityKit.Demo.Moba.Systems
         public static readonly string[] NamespacePrefixes = new[]
         {
             "AbilityKit.Demo.Moba.Util",
-            "AbilityKit.Demo.Moba.Util.Generator",
         };
 
         public MobaInfrastructureServicesModule(Assembly targetAssembly)

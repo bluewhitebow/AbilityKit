@@ -5,6 +5,7 @@ using AbilityKit.Network.Runtime;
 using AbilityKit.Network.Runtime.Conditioning;
 using AbilityKit.Network.Runtime.DemoHarness;
 using AbilityKit.Network.Runtime.LagCompensation;
+using AbilityKit.Network.Runtime.Sync;
 using AbilityKit.Demo.Shooter.View.PlayMode;
 using Xunit;
 
@@ -23,6 +24,39 @@ public sealed class ShooterAcceptanceLabTests
             m => m.Model == NetworkSyncModel.PredictRollback && m.Implemented);
         Assert.Contains(ShooterAcceptanceCatalog.NetworkEnvironments, n => n.Id == "ideal");
         Assert.Contains(ShooterAcceptanceCatalog.NetworkEnvironments, n => n.Id == "poorwifi");
+    }
+
+    [Fact]
+    public void CatalogExposesFormalSyncModeMatrixForEveryTemplate()
+    {
+        var matrix = ShooterAcceptanceCatalog.SyncModeMatrix;
+
+        Assert.Equal(ShooterAcceptanceCatalog.SyncTemplates.Count, matrix.Rows.Count);
+        foreach (var template in ShooterAcceptanceCatalog.SyncTemplates)
+        {
+            var row = matrix.GetRow(template.Id);
+            Assert.Equal(template.Id, row.TemplateId);
+            Assert.Equal(template.SyncModel, row.SyncModel);
+            Assert.Equal(template.ExpectedCarrierName, row.ExpectedCarrierName);
+            Assert.Equal(template.EnableAuthoritativeWorld, row.RequiresAuthoritativeWorld);
+            Assert.Equal(template.ExpectsInterpolationDiagnostics, row.ExposesInterpolationDiagnostics);
+            Assert.NotEmpty(row.AcceptanceCriteria);
+            Assert.Equal(NetworkSyncProfiles.FromCompatibilityModel(template.SyncModel).CompatibilityModel, row.Profile.CompatibilityModel);
+        }
+    }
+
+    [Fact]
+    public void SyncModeMatrixDocumentsDifferentAcceptanceBoundaries()
+    {
+        var predict = ShooterAcceptanceCatalog.GetSyncModeMatrixRow("predict-rollback-authority");
+        var interpolation = ShooterAcceptanceCatalog.GetSyncModeMatrixRow("authoritative-interpolation-presentation");
+        var hybrid = ShooterAcceptanceCatalog.GetSyncModeMatrixRow("hybrid-hero-prediction");
+
+        Assert.Contains(predict.AcceptanceCriteria, c => c.Id == "prediction-reconciliation");
+        Assert.Contains(interpolation.AcceptanceCriteria, c => c.Id == "remote-buffer");
+        Assert.Contains(interpolation.AcceptanceCriteria, c => c.Id == "server-authority");
+        Assert.Contains(hybrid.AcceptanceCriteria, c => c.Id == "local-hero-prediction");
+        Assert.Contains(hybrid.AcceptanceCriteria, c => c.Id == "full-snapshot-recovery");
     }
 
     [Fact]

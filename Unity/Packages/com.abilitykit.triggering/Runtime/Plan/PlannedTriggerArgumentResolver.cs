@@ -14,13 +14,14 @@ namespace AbilityKit.Triggering.Runtime.Plan
     {
         public static NamedArgsDict ResolveNamedArgs(in TArgs args, in ActionCallPlan call, in ExecCtx<TCtx> ctx)
         {
-            if (call.Args == null || call.Args.Count == 0)
+            var arguments = call.Arguments;
+            if (arguments.NamedArgs == null || arguments.NamedArgs.Count == 0)
             {
                 return NamedArgsDict.Empty;
             }
 
-            var parsed = ActionSchemaRegistry.GetParsedArgs<TArgs, TCtx>(call.Id, call.Args, ctx);
-            return ConvertToNamedArgsDict(parsed, call.Args);
+            var parsed = ActionSchemaRegistry.GetParsedArgs<TArgs, TCtx>(call.Id, arguments.NamedArgs, ctx);
+            return ConvertToNamedArgsDict(parsed, arguments.NamedArgs);
         }
 
         public static NamedArgsDict CreatePositionalArgs(double v0)
@@ -89,19 +90,35 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         private static string FormatNumericResolveError(in NumericValueRef valueRef, in ExecCtx<TCtx> ctx)
         {
+            string message;
             switch (valueRef.Kind)
             {
                 case ENumericValueRefKind.Blackboard:
-                    return $"Numeric blackboard value not found. boardId={FormatBoardId(in ctx, valueRef.BoardId)} keyId={FormatKeyId(in ctx, valueRef.KeyId)}";
+                    message = $"Numeric blackboard value not found. boardId={FormatBoardId(in ctx, valueRef.BoardId)} keyId={FormatKeyId(in ctx, valueRef.KeyId)}";
+                    break;
                 case ENumericValueRefKind.PayloadField:
-                    return $"Numeric payload field not found. argsType={typeof(TArgs).Name} fieldId={FormatFieldId(in ctx, valueRef.FieldId)}";
+                    message = $"Numeric payload field not found. argsType={typeof(TArgs).Name} fieldId={FormatFieldId(in ctx, valueRef.FieldId)}";
+                    break;
                 case ENumericValueRefKind.Var:
-                    return $"Numeric var not found. domainId='{valueRef.DomainId}' key='{valueRef.Key}'";
+                    message = $"Numeric var not found. domainId='{valueRef.DomainId}' key='{valueRef.Key}'";
+                    break;
                 case ENumericValueRefKind.Expr:
-                    return "Numeric expr evaluate failed: " + valueRef.ExprText;
+                    message = "Numeric expr evaluate failed: " + valueRef.ExprText;
+                    break;
                 default:
-                    return $"Unsupported NumericValueRef kind: {valueRef.Kind}";
+                    message = $"Unsupported NumericValueRef kind: {valueRef.Kind}";
+                    break;
             }
+
+            if (!string.IsNullOrEmpty(valueRef.Label)) message += $" label='{valueRef.Label}'";
+            if (!string.IsNullOrEmpty(valueRef.Scope)) message += $" scope='{valueRef.Scope}'";
+            if (valueRef.Required) message += " required=true";
+            if (valueRef.HasFallback) message += $" fallback={valueRef.FallbackValue}";
+            if (valueRef.HasScale) message += $" scale={valueRef.Scale}";
+            if (valueRef.Offset != 0d) message += $" offset={valueRef.Offset}";
+            if (valueRef.HasMin) message += $" min={valueRef.MinValue}";
+            if (valueRef.HasMax) message += $" max={valueRef.MaxValue}";
+            return message;
         }
 
         private static string FormatBoardId(in ExecCtx<TCtx> ctx, int id)

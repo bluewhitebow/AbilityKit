@@ -83,9 +83,19 @@ namespace AbilityKit.Demo.Moba.Services
             Write(MobaRuntimeLogLevel.Info, module, purpose, owner, message);
         }
 
+        public static void Info(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Info, module, purpose, owner, messageFactory);
+        }
+
         public static void Debug(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
         {
             Write(MobaRuntimeLogLevel.Debug, module, purpose, owner, message);
+        }
+
+        public static void Debug(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Debug, module, purpose, owner, messageFactory);
         }
 
         public static void Trace(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
@@ -93,14 +103,39 @@ namespace AbilityKit.Demo.Moba.Services
             Write(MobaRuntimeLogLevel.Trace, module, purpose, owner, message);
         }
 
+        public static void Trace(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Trace, module, purpose, owner, messageFactory);
+        }
+
+        public static bool IsEnabled(MobaRuntimeLogLevel level, MobaRuntimeLogPurpose purpose)
+        {
+            return ShouldLog(level, purpose);
+        }
+
+        public static bool IsEnabled(MobaRuntimeLogLevel level, in MobaRuntimeLogContext context)
+        {
+            return ShouldLog(level, context.Purpose);
+        }
+
         public static void Warning(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
         {
             Write(MobaRuntimeLogLevel.Warning, module, purpose, owner, message);
         }
 
+        public static void Warning(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Warning, module, purpose, owner, messageFactory);
+        }
+
         public static void Error(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
         {
             Write(MobaRuntimeLogLevel.Error, module, purpose, owner, message);
+        }
+
+        public static void Error(MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Error, module, purpose, owner, messageFactory);
         }
 
         public static void Exception(Exception exception, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
@@ -115,14 +150,29 @@ namespace AbilityKit.Demo.Moba.Services
             Write(MobaRuntimeLogLevel.Info, context.Module, context.Purpose, context.Owner, message);
         }
 
+        public static void Info(in MobaRuntimeLogContext context, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Info, context.Module, context.Purpose, context.Owner, messageFactory);
+        }
+
         public static void Warning(in MobaRuntimeLogContext context, string message)
         {
             Write(MobaRuntimeLogLevel.Warning, context.Module, context.Purpose, context.Owner, message);
         }
 
+        public static void Warning(in MobaRuntimeLogContext context, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Warning, context.Module, context.Purpose, context.Owner, messageFactory);
+        }
+
         public static void Error(in MobaRuntimeLogContext context, string message)
         {
             Write(MobaRuntimeLogLevel.Error, context.Module, context.Purpose, context.Owner, message);
+        }
+
+        public static void Error(in MobaRuntimeLogContext context, Func<string> messageFactory)
+        {
+            Write(MobaRuntimeLogLevel.Error, context.Module, context.Purpose, context.Owner, messageFactory);
         }
 
         public static void WarningOnce(string key, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
@@ -131,15 +181,35 @@ namespace AbilityKit.Demo.Moba.Services
             Warning(module, purpose, owner, message);
         }
 
+        public static void WarningOnce(string key, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            if (!ShouldLogOnce(key)) return;
+            Warning(module, purpose, owner, messageFactory);
+        }
+
         public static void ResetCounters()
         {
             s_counts.Clear();
         }
 
+        private static void Write(MobaRuntimeLogLevel level, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, Func<string> messageFactory)
+        {
+            if (messageFactory == null) return;
+            if (!ShouldLog(level, purpose)) return;
+
+            WriteEnabled(level, module, purpose, owner, messageFactory());
+        }
+
         private static void Write(MobaRuntimeLogLevel level, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
         {
-            if (string.IsNullOrEmpty(message)) return;
             if (!ShouldLog(level, purpose)) return;
+
+            WriteEnabled(level, module, purpose, owner, message);
+        }
+
+        private static void WriteEnabled(MobaRuntimeLogLevel level, MobaRuntimeLogModule module, MobaRuntimeLogPurpose purpose, string owner, string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
 
             var formatted = Format(module, purpose, owner, message);
             switch (level)

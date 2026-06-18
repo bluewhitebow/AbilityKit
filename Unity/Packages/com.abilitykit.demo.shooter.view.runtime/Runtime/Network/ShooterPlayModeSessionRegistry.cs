@@ -6,17 +6,17 @@ using System.Collections.Generic;
 namespace AbilityKit.Demo.Shooter.View.Network
 {
     /// <summary>
-    /// Host-neutral runtime bridge that publishes the currently running Shooter session host so
-    /// tooling can discover and observe it without referencing a concrete platform host.
+    /// 宿主无关的运行时桥接器，用于发布当前运行中的 Shooter 会话 host，
+    /// 让工具无需引用具体平台 host 即可发现并观察它。
     /// </summary>
     public static class ShooterHostSessionRegistry
     {
         private static readonly List<IShooterSessionHost> _hosts = new();
 
-        /// <summary>Raised whenever the set of registered hosts changes.</summary>
+        /// <summary>已注册 host 集合变化时触发。</summary>
         public static event Action? HostsChanged;
 
-        /// <summary>The most recently registered active host, or null when none is running.</summary>
+        /// <summary>最近注册的活跃 host；没有运行中 host 时为 null。</summary>
         public static IShooterSessionHost? Active
         {
             get
@@ -33,7 +33,7 @@ namespace AbilityKit.Demo.Shooter.View.Network
             }
         }
 
-        /// <summary>All currently registered hosts.</summary>
+        /// <summary>当前所有已注册 host。</summary>
         public static IReadOnlyList<IShooterSessionHost> All => _hosts;
 
         public static void Register(IShooterSessionHost host)
@@ -61,44 +61,41 @@ namespace AbilityKit.Demo.Shooter.View.Network
     }
 
     /// <summary>
-    /// Surface a session host exposes to tools so they can observe diagnostics and request teardown
-    /// without referencing concrete runtime or platform implementation details.
+    /// 会话 host 暴露给工具的表面接口，让工具无需引用具体运行时或平台实现细节即可观察诊断并请求拆卸。
     /// </summary>
     public interface IShooterSessionHost
     {
-        /// <summary>True when a session is currently assembled and stepping.</summary>
+        /// <summary>当前已经装配会话并正在推进时为 true。</summary>
         bool IsRunning { get; }
 
-        /// <summary>Human-readable label for the host (scene/object name).</summary>
+        /// <summary>host 的人类可读标签（场景/对象名称）。</summary>
         string DisplayName { get; }
 
-        /// <summary>The live acceptance session, or null before start / after stop.</summary>
+        /// <summary>正在运行的验收会话；启动前或停止后为 null。</summary>
         ShooterAcceptanceSession? Session { get; }
 
         /// <summary>
-        /// Requests the host to tear down its live session and release any host-specific
-        /// platform wiring (e.g. PlayerLoop / input / network hooks).
+        /// 请求 host 拆卸正在运行的会话，并释放 host 专属的平台接线（例如 PlayerLoop、输入、网络钩子）。
         /// </summary>
         void Stop();
     }
 
     /// <summary>
-    /// Backward-compatible Play-mode registry facade. New tooling should use
-    /// <see cref="ShooterHostSessionRegistry"/>.
+    /// 向后兼容的 Play-mode 注册表门面。新工具应使用 <see cref="ShooterHostSessionRegistry"/>。
     /// </summary>
     public static class ShooterPlayModeSessionRegistry
     {
-        /// <summary>Raised whenever the set of registered hosts changes.</summary>
+        /// <summary>已注册 host 集合变化时触发。</summary>
         public static event Action? HostsChanged
         {
             add => ShooterHostSessionRegistry.HostsChanged += value;
             remove => ShooterHostSessionRegistry.HostsChanged -= value;
         }
 
-        /// <summary>The most recently registered active host, or null when none is running.</summary>
+        /// <summary>最近注册的活跃 host；没有运行中 host 时为 null。</summary>
         public static IShooterPlayModeSessionHost? Active => ShooterHostSessionRegistry.Active as IShooterPlayModeSessionHost;
 
-        /// <summary>All currently registered Play-mode hosts.</summary>
+        /// <summary>当前所有已注册 Play-mode host。</summary>
         public static IReadOnlyList<IShooterPlayModeSessionHost> All
         {
             get
@@ -134,8 +131,8 @@ namespace AbilityKit.Demo.Shooter.View.Network
     }
 
     /// <summary>
-    /// Backward-compatible Play-mode host contract. New hosts should implement
-    /// <see cref="IShooterSessionHost"/> directly unless they need legacy Editor integration.
+    /// 向后兼容的 Play-mode host 契约。新 host 除非需要旧版 Editor 集成，否则应直接实现
+    /// <see cref="IShooterSessionHost"/>。
     /// </summary>
     public interface IShooterPlayModeSessionHost : IShooterSessionHost
     {

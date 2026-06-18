@@ -1,5 +1,6 @@
 using System;
 using AbilityKit.Ability.Host;
+using AbilityKit.Ability.Host.Extensions.Moba.StartSources;
 using AbilityKit.Protocol.Moba.CreateWorld;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
@@ -62,9 +63,9 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                 throw new InvalidOperationException($"WorldInitStage create-world init payload validation failed. {validation}");
             }
 
-            if (!services.TryResolve<MobaGameStartSpecService>(out var specService) || specService == null)
+            if (!services.TryResolve<IMobaPendingGameStartSpecStore>(out var specService) || specService == null)
             {
-                throw new InvalidOperationException("WorldInitStage requires MobaGameStartSpecService to store the decoded battle game start spec.");
+                throw new InvalidOperationException("WorldInitStage requires IMobaPendingGameStartSpecStore to store the decoded battle game start spec.");
             }
 
             var spec = initPayload.ToGameStartSpec();

@@ -51,7 +51,7 @@ builder.Services.AddSingleton<GatewayAbstractions.IGatewayRequestRouter>(sp => s
 // 注册传输层事件处理器（在 TcpTransportServer 之前）
 builder.Services.AddSingleton<GatewayCore.GatewayBackgroundTaskQueue>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayCore.GatewayBackgroundTaskQueue>());
-builder.Services.AddSingleton<GatewayNetworking.IGatewayTransportEvents, GatewayCore.GatewayTransportHandler>();
+builder.Services.AddSingleton<GatewayAbstractions.IGatewayTransportEvents, GatewayCore.GatewayTransportHandler>();
 builder.Services.AddSingleton<GatewayCore.GatewayTransportHandler>();
 
 // 注册传输层
@@ -62,7 +62,7 @@ builder.Services.AddHostedService<GatewayCore.TcpTransportHostedService>();
 builder.Services.AddSingleton<GatewayCore.GatewayPushTargetGrain>();
 builder.Services.AddSingleton<AbilityKit.Orleans.Contracts.Battle.IGatewayPushTargetGrain>(sp => sp.GetRequiredService<GatewayCore.GatewayPushTargetGrain>());
 
-// Orleans Client
+// Orleans 客户端
 builder.Host.UseOrleansClient(client =>
 {
     client.UseLocalhostClustering();

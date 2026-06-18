@@ -26,9 +26,11 @@ public sealed class TcpTransportSession : IGatewayTransportSession
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     public long ConnectionId { get; }
+    public string TransportName => "TCP";
+
     public bool IsConnected => _stream.CanWrite;
 
-    internal GatewaySessionContext Context { get; }
+    public GatewaySessionContext Context { get; }
 
     internal TcpTransportSession(long connectionId, TcpTransportServer server, Stream stream)
     {
@@ -223,12 +225,3 @@ public sealed class TcpTransportServer : IGatewayTransportServer
     private static long GenerateConnectionId() => Interlocked.Increment(ref _nextConnectionId);
 }
 
-/// <summary>
-/// 传输层事件接口
-/// </summary>
-public interface IGatewayTransportEvents
-{
-    void OnConnected(TcpTransportSession session);
-    void OnRequest(long connectionId, uint opCode, uint seq, byte[] payload);
-    void OnClosed(long connectionId);
-}

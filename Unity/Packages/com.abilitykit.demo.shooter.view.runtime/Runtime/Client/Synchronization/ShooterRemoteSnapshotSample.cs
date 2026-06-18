@@ -7,10 +7,9 @@ using AbilityKit.Network.Runtime;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// A remote authoritative actor sample captured from a gateway snapshot for
-    /// <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> playback. Stores just the actor
-    /// transforms plus the world/frame/server-tick metadata needed to buffer and interpolate them.
-    /// The <see cref="TimelineTicks"/> is the authoritative <c>ServerTicks</c> of the snapshot.
+    /// 从网关快照采集的远端权威 actor 样本，用于 <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> 播放。
+    /// 只保存 actor 变换，以及缓冲和插值所需的世界、帧与服务器 tick 元数据。
+    /// <see cref="TimelineTicks"/> 对应快照的权威 <c>ServerTicks</c>。
     /// </summary>
     public sealed class ShooterRemoteSnapshotSample : IRemoteSnapshotSample
     {
@@ -34,14 +33,11 @@ namespace AbilityKit.Demo.Shooter.View
     }
 
     /// <summary>
-    /// Builds an interpolated <see cref="ShooterGatewaySnapshot"/> from a pair of bracketing
-    /// <see cref="ShooterRemoteSnapshotSample"/> samples so the existing presentation pipeline can
-    /// render delayed, smoothly interpolated remote actor state without any rollback.
+    /// 基于一对包围播放时间点的 <see cref="ShooterRemoteSnapshotSample"/> 样本构建插值后的
+    /// <see cref="ShooterGatewaySnapshot"/>，让现有表现管线无需回滚即可渲染延迟且平滑插值的远端 actor 状态。
     ///
-    /// This is a stateful, single-consumer projector: it reuses its internal actor list and index
-    /// across calls so steady-state playback does not allocate per frame. The produced snapshot is
-    /// only valid until the next <see cref="Project"/> call, which is fine because the presentation
-    /// pipeline consumes it synchronously and copies out the fields it needs.
+    /// 这是一个有状态、单消费者的投影器：它会跨调用复用内部 actor 列表与索引，避免稳定播放期逐帧分配。
+    /// 产出的快照只在下一次 <see cref="Project"/> 调用前有效；表现管线会同步消费并拷贝所需字段，因此这是安全的。
     /// </summary>
     public sealed class ShooterRemoteSnapshotProjector
     {
@@ -50,11 +46,9 @@ namespace AbilityKit.Demo.Shooter.View
         private readonly HashSet<int> _emitted = new HashSet<int>();
 
         /// <summary>
-        /// Produces a snapshot whose actors are linearly interpolated between the two bracketing
-        /// samples by <paramref name="interpolation"/>.Alpha. Actors present in both samples blend
-        /// position/rotation/velocity/hp; actors present only in one side are handled so that newly
-        /// spawned remotes appear at their authoritative pose and despawning remotes hold their last
-        /// pose through the in-between frame instead of popping out mid-interpolation.
+        /// 生成 actor 按 <paramref name="interpolation"/>.Alpha 在两个包围样本之间线性插值的快照。
+        /// 两个样本都存在的 actor 会混合位置、旋转、速度和生命值；只存在于一侧的 actor 会特殊处理：
+        /// 新生成的远端对象直接以权威姿态出现，消失中的远端对象则在中间帧保持最后姿态，避免插值中途闪烁消失。
         /// </summary>
         public ShooterGatewaySnapshot Project(in RemoteSnapshotInterpolation<ShooterRemoteSnapshotSample> interpolation)
         {
@@ -76,8 +70,7 @@ namespace AbilityKit.Demo.Shooter.View
             _emitted.Clear();
             BuildIndex(from.Actors);
 
-            // Emit every target actor, blending with its prior pose when present (spawned-only actors
-            // pass through at the authoritative pose).
+            // 输出每个目标 actor；若存在上一姿态则混合，否则新生成 actor 直接使用权威姿态。
             for (int i = 0; i < to.Actors.Count; i++)
             {
                 var target = to.Actors[i];
@@ -93,9 +86,8 @@ namespace AbilityKit.Demo.Shooter.View
                 _emitted.Add(target.ActorId);
             }
 
-            // Carry actors that exist in 'from' but not in 'to' (despawned between samples). Holding
-            // their last pose for the in-between frame avoids a one-frame flicker; the next sample's
-            // target set will drop them once playback advances past 'to'.
+            // 保留存在于 from 但不存在于 to 的 actor（两个样本之间消失）。
+            // 中间帧保持最后姿态可避免单帧闪烁；播放越过 to 后，下一个样本的目标集合会移除它们。
             for (int i = 0; i < from.Actors.Count; i++)
             {
                 var source = from.Actors[i];
@@ -136,8 +128,7 @@ namespace AbilityKit.Demo.Shooter.View
                 to.ActorId,
                 InterpolationMath.Lerp(from.X, to.X, alpha),
                 InterpolationMath.Lerp(from.Y, to.Y, alpha),
-                // Rotation is an angle (radians, derived from the aim vector). Blend it along the
-                // shortest arc so values straddling the ±π seam do not spin the long way around.
+                // Rotation 是由瞄准向量导出的弧度角。沿最短弧混合，避免跨 ±π 接缝时绕远路旋转。
                 InterpolationMath.LerpAngleRadians(from.Rotation, to.Rotation, alpha),
                 InterpolationMath.Lerp(from.VelocityX, to.VelocityX, alpha),
                 InterpolationMath.Lerp(from.VelocityY, to.VelocityY, alpha),

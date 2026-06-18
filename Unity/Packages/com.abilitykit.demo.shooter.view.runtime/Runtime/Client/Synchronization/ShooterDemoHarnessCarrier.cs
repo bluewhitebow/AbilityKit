@@ -11,8 +11,8 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Thin adapter that lets the framework demo harness drive an existing Shooter sync strategy.
-    /// It does not own Shooter lifecycle; callers start/configure the underlying controller before running scenarios.
+    /// 让框架 DemoHarness 驱动现有 Shooter 同步策略的轻量适配器。
+    /// 它不拥有 Shooter 生命周期；调用方在运行场景前负责启动并配置底层控制器。
     /// </summary>
     public sealed class ShooterDemoHarnessCarrier : ISyncDemoCarrier, ISyncDemoCarrierCapabilities
     {
@@ -50,17 +50,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         public SyncDemoCapabilityResult Supports(in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile)
         {
-            if (profile.ClientPlayback != ClientPlaybackPolicy.PredictRollback)
-            {
-                return SyncDemoCapabilityResult.Unsupported("Shooter carrier currently supports predict rollback playback only.");
-            }
-
-            if (!profile.Snapshot.HasFlag(SnapshotPolicy.FullSnapshot) && !profile.Snapshot.HasFlag(SnapshotPolicy.AuthorityOverride))
-            {
-                return SyncDemoCapabilityResult.Unsupported("Shooter rollback carrier requires full or authority override snapshots.");
-            }
-
-            return SyncDemoCapabilityResult.Supported;
+            return ShooterDemoHarnessCarrierProfileRules.SupportsPredictRollback(in profile, in networkProfile);
         }
 
         public DemoHarnessStepTelemetry Step(in DemoHarnessStepContext context)
@@ -69,8 +59,8 @@ namespace AbilityKit.Demo.Shooter.View
             var tick = _strategy.Tick(context.DeltaSeconds);
             var report = _strategy.GetReconciliationReport();
 
-            // §4.4.5: forward the framework FastReconnect health events the Shooter controller
-            // collected this step into the shared DemoHarness telemetry stream.
+            // §4.4.5：将 Shooter 控制器在本步骤采集到的框架 FastReconnect 健康事件，
+            // 转发到共享 DemoHarness 遥测流中。
             var healthEvents = CollectFastReconnectHealthEvents();
 
             return new DemoHarnessStepTelemetry(
@@ -85,24 +75,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         private SyncHealthEvent[]? CollectFastReconnectHealthEvents()
         {
-            if (_strategy is not IShooterClientSyncController controller)
-            {
-                return null;
-            }
-
-            var events = controller.LastFastReconnectHealthEvents;
-            if (events == null || events.Count == 0)
-            {
-                return null;
-            }
-
-            var buffer = new SyncHealthEvent[events.Count];
-            for (var i = 0; i < events.Count; i++)
-            {
-                buffer[i] = events[i];
-            }
-
-            return buffer;
+            return ShooterDemoHarnessCarrierProfileRules.CollectFastReconnectHealthEvents(_strategy);
         }
     }
 }

@@ -626,6 +626,7 @@ namespace ET.AbilityKit.Demo.ET.App
                 BindingFlags.Instance | BindingFlags.NonPublic);
 
             private readonly EtBattleSmokeCase _smokeCase;
+            private readonly List<LogicWorldEntityState> _entityStates = new List<LogicWorldEntityState>(16);
             private readonly List<SkillPipelineRunner.RunningSnapshot> _runningSkills = new List<SkillPipelineRunner.RunningSnapshot>(8);
             private readonly HashSet<int> _spawnedActorIds = new HashSet<int>();
 
@@ -736,12 +737,12 @@ namespace ET.AbilityKit.Demo.ET.App
                     RuntimeStatus = status.ToString();
                     HasReadyRuntime |= status.IsReadyForGameStart && status.IsReadyForBattleLoop && status.Has(MobaBattleRuntimeCapability.StateReadModel);
 
-                    var entityStates = runtime.GetAllEntityStates() ?? Array.Empty<LogicWorldEntityState>();
-                    var entityCount = entityStates.Length;
+                    _entityStates.Clear();
+                    var entityCount = runtime.FillAllEntityStates(_entityStates);
                     MaxEntityCount = Math.Max(MaxEntityCount, entityCount);
                     HasRuntimeEntities |= entityCount > 0;
-                    SelectSkillTarget(entityStates);
-                    SampleTargetHealth(entityStates);
+                    SelectSkillTarget(_entityStates);
+                    SampleTargetHealth(_entityStates);
 
                     if (battleScene != null)
                     {
@@ -1041,15 +1042,15 @@ namespace ET.AbilityKit.Demo.ET.App
                 HasDecodedEventSnapshot = true;
             }
 
-            private void SelectSkillTarget(LogicWorldEntityState[] states)
+            private void SelectSkillTarget(IReadOnlyList<LogicWorldEntityState> states)
             {
-                if (HasSkillTargetActor || states == null || states.Length < 2)
+                if (HasSkillTargetActor || states == null || states.Count < 2)
                 {
                     return;
                 }
 
                 var localIndex = -1;
-                for (int i = 0; i < states.Length; i++)
+                for (int i = 0; i < states.Count; i++)
                 {
                     if (states[i].EntityId > 0 && states[i].TeamId == 1)
                     {
@@ -1064,7 +1065,7 @@ namespace ET.AbilityKit.Demo.ET.App
                 }
 
                 var local = states[localIndex];
-                for (int i = 0; i < states.Length; i++)
+                for (int i = 0; i < states.Count; i++)
                 {
                     var candidate = states[i];
                     if (candidate.EntityId <= 0 || candidate.EntityId == local.EntityId || candidate.TeamId == local.TeamId)
@@ -1084,14 +1085,14 @@ namespace ET.AbilityKit.Demo.ET.App
                 }
             }
 
-            private void SampleTargetHealth(LogicWorldEntityState[] states)
+            private void SampleTargetHealth(IReadOnlyList<LogicWorldEntityState> states)
             {
-                if (!HasSkillTargetActor || states == null || states.Length == 0)
+                if (!HasSkillTargetActor || states == null || states.Count == 0)
                 {
                     return;
                 }
 
-                for (int i = 0; i < states.Length; i++)
+                for (int i = 0; i < states.Count; i++)
                 {
                     var state = states[i];
                     if (state.EntityId != TargetActorId)

@@ -92,8 +92,12 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             };
 
             bus.Publish(new EventKey<PresentationEventArgs>(eid), in payload);
-            object boxedPayload = payload;
-            bus.Publish(new EventKey<object>(eid), in boxedPayload);
+            var objectKey = new EventKey<object>(eid);
+            if (bus.HasSubscribers(objectKey))
+            {
+                object boxedPayload = payload;
+                bus.Publish(objectKey, in boxedPayload);
+            }
         }
     }
 }

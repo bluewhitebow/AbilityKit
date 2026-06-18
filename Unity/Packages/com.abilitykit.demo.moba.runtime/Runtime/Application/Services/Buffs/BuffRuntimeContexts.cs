@@ -74,32 +74,85 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
-    internal sealed class BuffApplyRequest
+    internal struct BuffApplyRequest
     {
         public int TargetActorId;
         public int BuffId;
         public int SourceActorId;
         public int DurationOverrideMs;
+        public long SourceContextId;
+        public bool ForceNewInstance;
         public BuffOriginContext Origin;
         public MobaSkillCastRuntimeHandle SkillRuntimeHandle => Origin.SkillRuntimeHandle;
 
         public bool IsValid => TargetActorId > 0 && BuffId > 0;
     }
 
-    internal sealed class BuffRemoveRequest
+    internal struct BuffRemoveRequest
     {
         public int TargetActorId;
         public int BuffId;
         public int SourceActorId;
+        public long SourceContextId;
         public TraceLifecycleReason Reason;
 
         public bool IsValid => TargetActorId > 0 && BuffId > 0;
     }
 
-    internal sealed class BuffOperationContext
+    internal readonly struct BuffRuntimeKey
+    {
+        public readonly int BuffId;
+        public readonly int SourceActorId;
+        public readonly long SourceContextId;
+
+        private BuffRuntimeKey(int buffId, int sourceActorId, long sourceContextId)
+        {
+            BuffId = buffId;
+            SourceActorId = sourceActorId;
+            SourceContextId = sourceContextId;
+        }
+
+        public static BuffRuntimeKey MatchBuff(int buffId)
+        {
+            return new BuffRuntimeKey(buffId, 0, 0L);
+        }
+
+        public static BuffRuntimeKey MatchBuffAndSource(int buffId, int sourceActorId)
+        {
+            return new BuffRuntimeKey(buffId, sourceActorId, 0L);
+        }
+
+        public static BuffRuntimeKey MatchInstance(int buffId, int sourceActorId, long sourceContextId)
+        {
+            return new BuffRuntimeKey(buffId, sourceActorId, sourceContextId);
+        }
+
+        public static BuffRuntimeKey MatchApplyRequest(in BuffApplyRequest request)
+        {
+            if (request.SourceContextId != 0L) return MatchInstance(request.BuffId, request.SourceActorId, request.SourceContextId);
+            return MatchBuff(request.BuffId);
+        }
+
+        public static BuffRuntimeKey MatchRemoveRequest(in BuffRemoveRequest request)
+        {
+            if (request.SourceContextId != 0L) return MatchInstance(request.BuffId, request.SourceActorId, request.SourceContextId);
+            if (request.SourceActorId > 0) return MatchBuffAndSource(request.BuffId, request.SourceActorId);
+            return MatchBuff(request.BuffId);
+        }
+
+        public bool Matches(BuffRuntime runtime)
+        {
+            if (runtime == null) return false;
+            if (BuffId > 0 && runtime.BuffId != BuffId) return false;
+            if (SourceActorId > 0 && runtime.SourceId != SourceActorId) return false;
+            if (SourceContextId != 0L && runtime.SourceContextId != SourceContextId) return false;
+            return true;
+        }
+    }
+
+    internal struct BuffOperationContext
     {
         public BuffApplyRequest ApplyRequest;
-        public BuffRemoveRequest RemoveRequest;
         public BuffMO Buff;
         public BuffRuntime Runtime;
         public int TargetActorId;
@@ -256,6 +309,11 @@ namespace AbilityKit.Demo.Moba.Services
         public void ClearRuntimeBindings()
         {
             if (_runtime == null) return;
+            _runtime.BuffId = 0;
+            _runtime.Remaining = 0f;
+            _runtime.IntervalRemainingSeconds = 0f;
+            _runtime.SourceId = 0;
+            _runtime.StackCount = 0;
             _runtime.SourceContextId = 0;
             _runtime.Origin = default;
             _runtime.ContextSource = default;

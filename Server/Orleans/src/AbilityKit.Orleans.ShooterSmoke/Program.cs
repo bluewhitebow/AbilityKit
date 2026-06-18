@@ -17,8 +17,8 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-builder.Services.AddSingleton<ServerMobaWorldManager>(sp =>
-    new ServerMobaWorldManager(sp.GetRequiredService<ILogger<ServerMobaWorldManager>>()));
+builder.Services.AddSingleton<ServerBattleWorldManager>(sp =>
+    new ServerBattleWorldManager(sp.GetRequiredService<ILogger<ServerBattleWorldManager>>()));
 builder.Services.AddShooterSmokeGateway(options.TcpGatewayPort);
 
 builder.UseOrleans(silo =>
@@ -112,3 +112,4 @@ readonly record struct ShooterSmokeProgramOptions(bool ServerMode, int TcpGatewa
         return new ShooterSmokeProgramOptions(serverMode, tcpGatewayPort);
     }
 }
+

@@ -5,6 +5,7 @@ using AbilityKit.Demo.Shooter.View;
 using AbilityKit.Demo.Shooter.View.Hosting;
 using AbilityKit.Demo.Shooter.View.PlayMode;
 using AbilityKit.Network.Runtime;
+using AbilityKit.Network.Runtime.LagCompensation;
 using AbilityKit.Protocol.Shooter;
 using Xunit;
 
@@ -135,6 +136,42 @@ public sealed class ShooterPlaySessionRunnerTests
     }
 
     [Fact]
+    public void TickAdvancesLocalTimeAnchorAndProjectsItToDiagnostics()
+    {
+        const int tickRate = 20;
+        var input = new ScriptedInputSource(Array.Empty<ShooterHostFrameInput>());
+        var view = new RecordingViewSink();
+        using var runner = new ShooterPlaySessionRunner(input, view);
+        runner.Start(new ShooterPlayModeSessionOptions(
+            NetworkSyncModel.PredictRollback,
+            tickRate,
+            playerCount: 2,
+            randomSeed: 42,
+            controlledPlayerId: 1,
+            enableAuthoritativeWorld: true,
+            latencyMs: 0,
+            jitterMs: 0,
+            packetLossRate: 0f,
+            reorderRate: 0f,
+            bandwidthKbps: 0,
+            worldScale: 1f,
+            networkName: "local anchor smoke"));
+
+        var actualTickRate = runner.Options.TickRate;
+        runner.Tick(1f / actualTickRate);
+        runner.Tick(1f / actualTickRate);
+
+        var frame = Assert.Single(view.Frames, f => f.LocalTimeAnchor.LocalFrame == 1);
+        Assert.Equal(2, runner.StepCount);
+        Assert.Equal(1, runner.LastLocalTimeAnchor.LocalFrame);
+        Assert.Equal(1L, runner.LastLocalTimeAnchor.TimelineTicks);
+        Assert.Equal(1d / actualTickRate, runner.LastLocalTimeAnchor.ElapsedSeconds, precision: 6);
+
+        var diagnostics = ShooterHostDiagnosticsProjector.ProjectFromFrame(in frame, previousTotalEvents: 0);
+        Assert.Equal(frame.LocalTimeAnchor, diagnostics.LocalTimeAnchor);
+    }
+
+    [Fact]
     public void FireUnderFiveHundredMsLatencySpawnsPredictedAndAuthoritativeBulletsAtSameOrigin()
     {
         const int tickRate = 30;
@@ -199,6 +236,82 @@ public sealed class ShooterPlaySessionRunnerTests
         var playerDy = predictedFirePlayerValue.Y - authoritativeFirePlayerValue.Y;
         var playerDistance = Math.Sqrt(playerDx * playerDx + playerDy * playerDy);
         Assert.True(distance <= 0.05d, $"Predicted and authoritative bullet origins diverged by {distance:0.0000}. predicted=({predicted.X:0.0000},{predicted.Y:0.0000}) authority=({authoritative.X:0.0000},{authoritative.Y:0.0000}); fire-frame player predicted=({predictedFirePlayerValue.X:0.0000},{predictedFirePlayerValue.Y:0.0000}) authority=({authoritativeFirePlayerValue.X:0.0000},{authoritativeFirePlayerValue.Y:0.0000}) playerDistance={playerDistance:0.0000}");
+    }
+
+    [Fact]
+    public void LagCompensationEvaluationIsProjectedToHostDiagnostics()
+    {
+        const int tickRate = 30;
+        var input = new ScriptedInputSource(Array.Empty<ShooterHostFrameInput>());
+        var view = new RecordingViewSink();
+        using var runner = new ShooterPlaySessionRunner(input, view);
+        runner.Start(new ShooterPlayModeSessionOptions(
+            NetworkSyncModel.PredictRollback,
+            tickRate,
+            playerCount: 2,
+            randomSeed: 44,
+            controlledPlayerId: 1,
+            enableAuthoritativeWorld: true,
+            latencyMs: 0,
+            jitterMs: 0,
+            packetLossRate: 0f,
+            reorderRate: 0f,
+            bandwidthKbps: 0,
+            worldScale: 1f,
+            networkName: "lag compensation diagnostics smoke"));
+        runner.Tick(1f / tickRate);
+        var shot = new ShooterLagCompensationShot(
+            shooterPlayerId: 1,
+            originX: 0f,
+            originY: 0f,
+            directionX: 1f,
+            directionY: 0f,
+            maxDistance: 10f,
+            rewindFrame: 1,
+            serverReceiveFrame: 1);
+
+        var accepted = runner.Session!.TryEvaluateLagCompensationShot(in shot, out var evaluation);
+        runner.Tick(1f / tickRate);
+
+        Assert.True(accepted);
+        Assert.Equal(LagCompensationResultReason.Hit, evaluation.Reason);
+        var frame = Assert.Single(view.Frames, f => f.LagCompensationEvaluation.HasValue);
+        var frameEvaluation = Assert.IsType<ShooterLagCompensationEvaluation>(frame.LagCompensationEvaluation);
+        Assert.Equal(evaluation, frameEvaluation);
+        var diagnostics = ShooterHostDiagnosticsProjector.ProjectFromFrame(in frame, previousTotalEvents: 0);
+        Assert.Equal(evaluation, diagnostics.LagCompensationEvaluation);
+    }
+
+    [Fact]
+    public void PureStateRecoveryDiagnosticsAreProjectedFromHostFrame()
+    {
+        var frame = new ShooterHostPresentationFrame(
+            ShooterSnapshotViewBatch.Empty,
+            ShooterSnapshotViewBatch.Empty,
+            false,
+            controlledPlayerId: 1,
+            worldScale: 1f,
+            carrierNetworkStats: null,
+            lastCarrierSnapshotApplyResult: ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded,
+            lastCarrierTimeAnchor: default,
+            localTimeAnchor: default,
+            lagCompensationTelemetry: null,
+            lagCompensationEvaluation: null,
+            needsPureStateBaselineResync: true,
+            lastPureStateResyncReason: ShooterPureStateResyncReason.BaselineMismatch,
+            lastPureStateAppliedFrame: 12,
+            lastPureStateAppliedStateHash: 0x1234u,
+            lastPureStateResyncFrame: 18,
+            lastPureStateResyncStateHash: 0x5678u);
+
+        var diagnostics = ShooterHostDiagnosticsProjector.ProjectFromFrame(in frame, previousTotalEvents: 0);
+
+        Assert.True(diagnostics.NeedsPureStateBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.BaselineMismatch, diagnostics.LastPureStateResyncReason);
+        Assert.Equal(12, diagnostics.LastPureStateAppliedFrame);
+        Assert.Equal(0x1234u, diagnostics.LastPureStateAppliedStateHash);
+        Assert.Equal(18, diagnostics.LastPureStateResyncFrame);
+        Assert.Equal(0x5678u, diagnostics.LastPureStateResyncStateHash);
     }
 
     private static bool TryGetTransformX(in ShooterSnapshotViewBatch batch, ShooterViewEntityKey key, out float x)

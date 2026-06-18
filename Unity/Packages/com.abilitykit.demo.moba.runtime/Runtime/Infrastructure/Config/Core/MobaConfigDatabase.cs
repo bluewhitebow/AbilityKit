@@ -465,6 +465,7 @@ using GameplayMO = AbilityKit.Demo.Moba.Config.BattleDemo.MO.GameplayMO;
 
         public bool TryGetCharacter(int id, out CharacterMO mo) => GetTable<CharacterMO>().TryGet(id, out mo);
         public bool TryGetSkill(int id, out SkillMO mo) => GetTable<SkillMO>().TryGet(id, out mo);
+        public IEnumerable<SkillMO> GetAllSkills() => GetTable<SkillMO>().All();
         public bool TryGetPassiveSkill(int id, out PassiveSkillMO mo) => GetTable<PassiveSkillMO>().TryGet(id, out mo);
         public bool TryGetSkillFlow(int id, out SkillFlowMO mo) => GetTable<SkillFlowMO>().TryGet(id, out mo);
         public bool TryGetSkillLevelTable(int id, out SkillLevelTableMO mo) => GetTable<SkillLevelTableMO>().TryGet(id, out mo);
@@ -575,5 +576,7 @@ using GameplayMO = AbilityKit.Demo.Moba.Config.BattleDemo.MO.GameplayMO;
         }
 
         public bool TryGet(int id, out TMO mo) => _inner.TryGet(id, out mo);
+
+        public IEnumerable<TMO> All() => _inner.All();
     }
 }

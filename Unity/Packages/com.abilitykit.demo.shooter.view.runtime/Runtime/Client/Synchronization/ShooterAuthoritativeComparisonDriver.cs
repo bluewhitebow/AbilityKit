@@ -10,8 +10,8 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// 负责验收会话中的权威世界推进、Carrier 快照发布�?LagComp 历史采集�?
-    /// <see cref="ShooterAcceptanceSession"/> 只保留会话门面职责，具体的权威侧编排集中在这里�?
+    /// 负责验收会话中的权威世界推进、Carrier 快照发布和 LagComp 历史采集。
+    /// <see cref="ShooterAcceptanceSession"/> 只保留会话门面职责，具体的权威侧编排集中在这里。
     /// </summary>
     internal sealed class ShooterAuthoritativeComparisonDriver
     {

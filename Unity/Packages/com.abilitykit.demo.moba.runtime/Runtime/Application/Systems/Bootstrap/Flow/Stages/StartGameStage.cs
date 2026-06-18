@@ -1,5 +1,6 @@
 using System;
 using AbilityKit.Ability.Host.Extensions.Moba.Runtime;
+using AbilityKit.Ability.Host.Extensions.Moba.StartSources;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Core.Logging;
 using AbilityKit.Demo.Moba.Services;
@@ -21,10 +22,18 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
             Entitas.Systems systems,
             IWorldResolver services)
         {
-            if (!services.TryResolve<MobaGameStartSpecService>(out var specs) || specs == null || !specs.TryGet(out var spec))
+            if (!services.TryResolve<IMobaPendingGameStartSpecStore>(out var specs) || specs == null || !specs.TryGetPlan(out var plan))
             {
-                throw new InvalidOperationException("StartGameStage requires a pending MobaGameStartSpec produced by WorldInitStage.");
+                throw new InvalidOperationException("StartGameStage requires a validated MobaBattleStartPlan produced by WorldInitStage.");
             }
+
+            var planValidation = specs.ValidatePendingPlan();
+            if (!planValidation.Succeeded)
+            {
+                throw new InvalidOperationException("StartGameStage battle start plan validation failed. " + planValidation.Message);
+            }
+
+            var spec = plan.ToGameStartSpec();
 
             if (!services.TryResolve<IMobaGameStartPort>(out var gameStart) || gameStart == null)
             {
@@ -35,7 +44,7 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
             if (result.Succeeded)
             {
                 specs.Clear();
-                Log.Info("[StartGameStage] game start spec applied");
+                Log.Info("[StartGameStage] battle start plan applied");
                 return;
             }
 

@@ -190,9 +190,20 @@ namespace AbilityKit.Triggering.Validation
         public const string EMPTY_ACTION_LIST = "EMPTY_ACTION_LIST";
         public const string INVALID_PHASE_ORDER = "INVALID_PHASE_ORDER";
         public const string INVALID_EXPRESSION = "INVALID_EXPRESSION";
+        public const string UNSUPPORTED_ACTION_ARITY = "UNSUPPORTED_ACTION_ARITY";
+        public const string ACTION_ARG_COUNT_MISMATCH = "ACTION_ARG_COUNT_MISMATCH";
+        public const string INVALID_ACTION_ARGUMENT = "INVALID_ACTION_ARGUMENT";
+        public const string INVALID_ACTION_SCHEDULE = "INVALID_ACTION_SCHEDULE";
+        public const string UNSUPPORTED_ACTION_SCHEDULE = "UNSUPPORTED_ACTION_SCHEDULE";
+        public const string INVALID_ACTION_RETRY = "INVALID_ACTION_RETRY";
+        public const string INVALID_RULE_SCHEDULE = "INVALID_RULE_SCHEDULE";
+        public const string AMBIGUOUS_RULE_SCHEDULE = "AMBIGUOUS_RULE_SCHEDULE";
 
         // 警告
         public const string HIGH_COMPLEXITY = "HIGH_COMPLEXITY";
+        public const string UNUSED_ACTION_SCHEDULE_PARAM = "UNUSED_ACTION_SCHEDULE_PARAM";
+        public const string UNUSED_ACTION_RETRY = "UNUSED_ACTION_RETRY";
+        public const string UNUSED_RULE_SCHEDULE_PARAM = "UNUSED_RULE_SCHEDULE_PARAM";
         public const string DEAD_CODE_BRANCH = "DEAD_CODE_BRANCH";
         public const string UNUSED_VARIABLE = "UNUSED_VARIABLE";
         public const string COMPLEX_EXPRESSION = "COMPLEX_EXPRESSION";

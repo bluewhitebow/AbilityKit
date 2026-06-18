@@ -7,6 +7,6 @@ namespace AbilityKit.Demo.Shooter
         public const int GameplayId = 2;
         public const int DefaultTickRate = 30;
         public const int DefaultMaxPlayers = 4;
-        public const int DefaultPlayerHp = 3;
+        public const int DefaultPlayerHp = 1000;
     }
 }

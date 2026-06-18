@@ -5,6 +5,7 @@ using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Host.Framework;
 using AbilityKit.Ability.Host.Extensions.Moba.CreateWorld;
+using AbilityKit.Ability.Host.Extensions.Moba.Runtime;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Ability.World.Management;
 using AbilityKit.Coordinator;
@@ -30,6 +31,7 @@ namespace ET.Logic
     {
         private readonly List<WorldStateSnapshot> _runtimeSnapshots = new List<WorldStateSnapshot>(32);
         private readonly List<PlayerInputCommand> _playerCommands = new List<PlayerInputCommand>(16);
+        private readonly List<object> _bufferedInputCommands = new List<object>(16);
 
         public int CurrentFrame { get; set; }
         public double LogicTimeSeconds { get; set; }
@@ -155,6 +157,7 @@ namespace ET.Logic
             _driverHost = null;
             _runtimeSnapshots.Clear();
             _playerCommands.Clear();
+            _bufferedInputCommands.Clear();
 
             RuntimeGameStarted = false;
             IsRunning = false;
@@ -238,16 +241,15 @@ namespace ET.Logic
                 return;
             }
 
-            var commands = inputComponent.GetInputsUpToFrame(targetFrame.Value);
-            if (commands == null || commands.Count == 0)
+            if (inputComponent.CopyInputsUpToFrame(targetFrame.Value, _bufferedInputCommands) == 0)
             {
                 return;
             }
 
             _playerCommands.Clear();
-            for (int i = 0; i < commands.Count; i++)
+            for (int i = 0; i < _bufferedInputCommands.Count; i++)
             {
-                if (TryConvertInputCommand(commands[i], targetFrame, out var playerCommand))
+                if (TryConvertInputCommand(_bufferedInputCommands[i], targetFrame, out var playerCommand))
                 {
                     _playerCommands.Add(playerCommand);
                 }

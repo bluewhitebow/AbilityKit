@@ -213,7 +213,7 @@ namespace AbilityKit.Demo.Shooter.View
                 timeout,
                 cancellationToken).ConfigureAwait(false);
 
-            _gatewayConnection.AttachSession(launched.Session);
+            _gatewayConnection.AttachBattle(launched.Battle);
             return new ShooterClientNetworkRestoreResult(_connection, _gatewayConnection, launched);
         }
 
@@ -298,7 +298,7 @@ namespace AbilityKit.Demo.Shooter.View
                 timeout,
                 cancellationToken).ConfigureAwait(false);
 
-            _gatewayConnection.AttachSession(launched.Session);
+            _gatewayConnection.AttachBattle(launched.Battle);
             return new ShooterClientNetworkLaunchResult(_connection, _gatewayConnection, launched);
         }
 
@@ -417,7 +417,7 @@ namespace AbilityKit.Demo.Shooter.View
                 timeout,
                 cancellationToken).ConfigureAwait(false);
 
-            _gatewayConnection.AttachSession(launched.Session);
+            _gatewayConnection.AttachBattle(launched.Battle);
             return new ShooterClientNetworkLaunchResult(_connection, _gatewayConnection, launched);
         }
 

@@ -33,14 +33,10 @@ namespace ET.Logic
             if (self.State != BattleState.InProgress)
                 return;
 
-            var currentFrame = self.BattleDriver?.CurrentFrame ?? 0;
-            Log.Debug($"[ETBattleComponentSystem.Update] Frame={currentFrame}, State={self.State}");
-
             // Tick the battle driver through the framework MOBA driver host.
             if (self.BattleDriver != null)
             {
                 float deltaTime = 1f / self.TickRate;
-                Log.Debug($"[ETBattleComponentSystem.Update] Calling driver.Tick, Frame={self.BattleDriver.CurrentFrame}, DeltaTime={deltaTime:F4}");
                 self.BattleDriver.Tick(deltaTime);
             }
 

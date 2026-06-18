@@ -12,10 +12,10 @@ using UnityEngine.PlayerLoop;
 namespace AbilityKit.Demo.Shooter.View.PlayMode
 {
     /// <summary>
-    /// Unity Play-mode wiring for the Shooter acceptance channel.
+    /// Shooter 验收通道的 Unity Play-mode 绑定。
     /// <para>
-    /// Session semantics live in <see cref="ShooterPlaySessionRunner"/>. This type only binds Unity lifecycle,
-    /// PlayerLoop time, legacy input and GameObject display adapters to that host-agnostic runner.
+    /// 会话语义位于 <see cref="ShooterPlaySessionRunner"/> 中；该类型只把 Unity 生命周期、PlayerLoop 时间、
+    /// 旧输入和 GameObject 展示适配器绑定到这个宿主无关的 runner 上。
     /// </para>
     /// </summary>
     public static class ShooterPlayModeSessionHost
@@ -90,6 +90,11 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         public static void Tick(float deltaSeconds)
         {
             _runner?.Tick(deltaSeconds);
+        }
+
+        public static void RebuildViews()
+        {
+            ViewSink.RebuildAll();
         }
 
         private static void TickFromPlayerLoop()
@@ -326,8 +331,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
             public void Stop()
             {
-                // Full lifecycle teardown: stop the live session and release all Unity
-                // platform wiring (PlayerLoop / network hook / registry publication).
+                // 完整生命周期拆卸：停止运行中的会话，并释放所有 Unity 平台绑定（PlayerLoop / 网络钩子 /
+                // 注册表发布）。
                 ShooterPlayModeSessionHost.Uninstall();
             }
         }

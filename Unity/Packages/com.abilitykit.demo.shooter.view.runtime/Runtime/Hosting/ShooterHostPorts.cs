@@ -35,7 +35,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             NetworkConditioningStats? carrierNetworkStats,
             ShooterSnapshotApplyResult? lastCarrierSnapshotApplyResult,
             SyncTimeAnchor lastCarrierTimeAnchor,
-            ShooterLagCompensationTelemetry? lagCompensationTelemetry)
+            SyncTimeAnchor localTimeAnchor,
+            ShooterLagCompensationTelemetry? lagCompensationTelemetry,
+            ShooterLagCompensationEvaluation? lagCompensationEvaluation,
+            bool needsPureStateBaselineResync,
+            ShooterPureStateResyncReason lastPureStateResyncReason,
+            int lastPureStateAppliedFrame,
+            uint lastPureStateAppliedStateHash,
+            int lastPureStateResyncFrame,
+            uint lastPureStateResyncStateHash)
         {
             ClientBatch = clientBatch;
             AuthorityBatch = authorityBatch;
@@ -45,7 +53,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             CarrierNetworkStats = carrierNetworkStats;
             LastCarrierSnapshotApplyResult = lastCarrierSnapshotApplyResult;
             LastCarrierTimeAnchor = lastCarrierTimeAnchor;
+            LocalTimeAnchor = localTimeAnchor;
             LagCompensationTelemetry = lagCompensationTelemetry;
+            LagCompensationEvaluation = lagCompensationEvaluation;
+            NeedsPureStateBaselineResync = needsPureStateBaselineResync;
+            LastPureStateResyncReason = lastPureStateResyncReason;
+            LastPureStateAppliedFrame = lastPureStateAppliedFrame;
+            LastPureStateAppliedStateHash = lastPureStateAppliedStateHash;
+            LastPureStateResyncFrame = lastPureStateResyncFrame;
+            LastPureStateResyncStateHash = lastPureStateResyncStateHash;
         }
 
         public ShooterSnapshotViewBatch ClientBatch { get; }
@@ -56,7 +72,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
         public NetworkConditioningStats? CarrierNetworkStats { get; }
         public ShooterSnapshotApplyResult? LastCarrierSnapshotApplyResult { get; }
         public SyncTimeAnchor LastCarrierTimeAnchor { get; }
+        public SyncTimeAnchor LocalTimeAnchor { get; }
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry { get; }
+        public ShooterLagCompensationEvaluation? LagCompensationEvaluation { get; }
+        public bool NeedsPureStateBaselineResync { get; }
+        public ShooterPureStateResyncReason LastPureStateResyncReason { get; }
+        public int LastPureStateAppliedFrame { get; }
+        public uint LastPureStateAppliedStateHash { get; }
+        public int LastPureStateResyncFrame { get; }
+        public uint LastPureStateResyncStateHash { get; }
     }
 
     public interface IShooterHostInputSource

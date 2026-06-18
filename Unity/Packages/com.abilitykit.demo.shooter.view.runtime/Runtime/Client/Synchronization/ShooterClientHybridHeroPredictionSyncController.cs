@@ -12,9 +12,8 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Hybrid controller for <see cref="NetworkSyncModel.HybridHeroPrediction"/>.
-    /// Local simulation and authoritative correction still delegate to predict/rollback, while decoded
-    /// remote actor samples are buffered and replayed through delayed authoritative interpolation.
+    /// <see cref="NetworkSyncModel.HybridHeroPrediction"/> 的混合同步控制器。
+    /// 本地模拟与权威校正仍委托给预测回滚；已解码的远端 actor 样本会进入缓冲，并通过延迟权威插值播放。
     /// </summary>
     public sealed class ShooterClientHybridHeroPredictionSyncController : IShooterClientSyncController, IInterpolationDiagnosticsProvider
     {
@@ -87,19 +86,19 @@ namespace AbilityKit.Demo.Shooter.View
 
         public bool HasGateway => _rollback.HasGateway;
 
-        /// <summary>Number of remote authoritative snapshots currently buffered for interpolation.</summary>
+        /// <summary>当前为插值缓冲的远端权威快照数量。</summary>
         public int BufferedRemoteSnapshotCount => _playback.BufferedSampleCount;
 
-        /// <summary>The current delayed remote playback time, in timeline ticks.</summary>
+        /// <summary>当前延迟远端播放时间，单位为时间线 tick。</summary>
         public long RemotePlaybackTicks => _playback.PlaybackTicks;
 
-        /// <summary>The current local estimate of authoritative server time, in timeline ticks.</summary>
+        /// <summary>当前本地估算的权威服务器时间，单位为时间线 tick。</summary>
         public long EstimatedServerTicks => _playback.EstimatedServerTicks;
 
-        /// <summary>Whether at least one remote interpolation frame has been published to presentation.</summary>
+        /// <summary>是否已经向表现层发布过至少一帧远端插值结果。</summary>
         public bool HasPublishedRemoteFrame => _playback.HasPublished;
 
-        /// <summary>Whether remote interpolation is holding the newest sample because the buffer is starved.</summary>
+        /// <summary>远端插值是否因缓冲饥饿而保持最新样本。</summary>
         public bool IsRemotePlaybackStarved => _playback.IsStarved;
 
         public bool StartGame(in ShooterStartGamePayload startGame)
@@ -162,11 +161,16 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             var snapshot = _decoder.Decode(payload);
+            if (snapshot.PureStateSnapshot.HasValue)
+            {
+                return rollbackResult;
+            }
+
             var interpolationResult = BufferRemoteSnapshot(in snapshot);
             return rollbackResult == ShooterSnapshotApplyResult.Ignored ? interpolationResult : rollbackResult;
         }
 
-        /// <summary>Buffers a decoded remote authoritative snapshot for delayed interpolation.</summary>
+        /// <summary>为延迟插值缓冲一个已经解码的远端权威快照。</summary>
         public ShooterSnapshotApplyResult BufferRemoteSnapshot(in ShooterGatewaySnapshot snapshot)
         {
             var sample = new ShooterRemoteSnapshotSample(

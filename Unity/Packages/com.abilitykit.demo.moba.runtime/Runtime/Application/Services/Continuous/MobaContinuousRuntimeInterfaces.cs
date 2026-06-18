@@ -17,9 +17,13 @@ namespace AbilityKit.Demo.Moba.Services
         void SyncManagedState();
     }
 
+    public interface IMobaContinuousExecutionContextProvider : IMobaCombatExecutionContextProvider, IMobaContextSourceProvider
+    {
+    }
+
     public interface IMobaContinuousIntervalHandler
     {
         bool CanHandle(IContinuous continuous);
-        void OnInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodicConfig);
+        void OnInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodicConfig, in MobaCombatExecutionContext executionContext);
     }
 }

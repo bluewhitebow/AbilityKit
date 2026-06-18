@@ -2,6 +2,7 @@ using System;
 using AbilityKit.Ability.Host;
 using AbilityKit.Ability.Host.Extensions.Moba.Struct;
 using AbilityKit.Orleans.Contracts.Battle;
+using AbilityKit.Orleans.Contracts.Rooms;
 using AbilityKit.Protocol.Room;
 
 namespace AbilityKit.Orleans.Grains.Rooms;
@@ -58,9 +59,9 @@ internal static class OrleansRoomBattleStartMapper
             ProtocolVersion = protocolVersion,
             RandomSeed = spec.RandomSeed,
             InputDelayFrames = spec.InputDelayFrames,
-            WorldType = string.IsNullOrWhiteSpace(worldType) ? "battle" : worldType,
+            WorldType = string.IsNullOrWhiteSpace(worldType) ? GameplayRoomTypes.Default : worldType,
             ClientId = string.IsNullOrWhiteSpace(clientId) ? "orleans_room" : clientId,
-            RoomType = string.IsNullOrWhiteSpace(roomType) ? "battle" : roomType
+            RoomType = string.IsNullOrWhiteSpace(roomType) ? GameplayRoomTypes.Default : roomType
         };
     }
 

@@ -5,16 +5,14 @@ using System;
 namespace AbilityKit.Network.Runtime.Sync
 {
     /// <summary>
-    /// Protocol-agnostic estimator that turns NTP-style time-sync round trips into a running estimate
-    /// of the offset between the local clock and an authoritative server clock, plus the round-trip
-    /// time (RTT). It deliberately takes only raw tick values so it stays decoupled from any specific
-    /// wire type (e.g. a gateway time-sync response): callers feed it <c>clientSendTicks</c>,
-    /// <c>serverReceiveTicks</c> and <c>clientReceiveTicks</c> and it folds each sample in.
+    /// 协议无关的估算器，用于把 NTP 风格的时间同步往返样本转换为本地时钟与权威服务器时钟之间的
+    /// 持续偏移估计，以及往返时间（RTT）。它刻意只接收原始 tick 值，从而与任何具体线协议类型
+    /// （例如网关时间同步响应）解耦：调用方传入 <c>clientSendTicks</c>、<c>serverReceiveTicks</c> 和
+    /// <c>clientReceiveTicks</c>，估算器会折叠每个样本。
     ///
-    /// Like a real NTP client, the most accurate samples are the ones with the lowest RTT (least
-    /// queuing/jitter), so the estimator keeps the offset associated with the lowest RTT observed so
-    /// far rather than averaging noisy samples. This makes <see cref="ServerTicksNow"/> stable under
-    /// jitter while still converging quickly when a better (lower-RTT) sample arrives.
+    /// 与真实 NTP 客户端类似，RTT 最低（排队/抖动最少）的样本通常最准确，因此估算器保留目前观测到的
+    /// 最低 RTT 样本对应偏移，而不是对噪声样本求平均。这样 <see cref="ServerTicksNow"/> 在抖动下保持稳定，
+    /// 同时在更好（更低 RTT）样本到来时仍能快速收敛。
     /// </summary>
     public sealed class ServerClockEstimator
     {
@@ -23,65 +21,61 @@ namespace AbilityKit.Network.Runtime.Sync
         private int _sampleCount;
 
         /// <param name="serverTickFrequency">
-        /// How many server ticks represent one second. Used to convert RTT/offset to seconds for
-        /// diagnostics. Must be positive; non-positive values are treated as 1 to avoid divide-by-zero.
+        /// 一秒对应多少个服务器 tick。用于把 RTT/偏移转换为秒以便诊断。必须为正；非正值会按 1 处理，避免除零。
         /// </param>
         public ServerClockEstimator(long serverTickFrequency)
         {
             ServerTickFrequency = serverTickFrequency <= 0L ? 1L : serverTickFrequency;
         }
 
-        /// <summary>How many server ticks represent one second.</summary>
+        /// <summary>一秒对应多少个服务器 tick。</summary>
         public long ServerTickFrequency { get; }
 
-        /// <summary>Whether at least one round-trip sample has been observed.</summary>
+        /// <summary>是否已经观测到至少一个往返样本。</summary>
         public bool HasSample => _sampleCount > 0;
 
-        /// <summary>Number of round-trip samples folded in so far.</summary>
+        /// <summary>目前已折叠的往返样本数量。</summary>
         public int SampleCount => _sampleCount;
 
         /// <summary>
-        /// The best (lowest) round-trip time observed so far, in ticks. Zero until the first sample.
+        /// 目前观测到的最佳（最低）往返时间，单位为 tick。首个样本到来前为零。
         /// </summary>
         public long BestRoundTripTicks => _bestRttTicks;
 
-        /// <summary>The best round-trip time observed so far, in seconds.</summary>
+        /// <summary>目前观测到的最佳往返时间，单位为秒。</summary>
         public double BestRoundTripSeconds => (double)_bestRttTicks / ServerTickFrequency;
 
         /// <summary>
-        /// The estimated offset to add to a local clock value to obtain server time, in ticks. This is
-        /// the offset associated with the lowest-RTT sample. Zero until the first sample.
+        /// 需要加到本地时钟值上以获得服务器时间的估算偏移，单位为 tick。该值来自最低 RTT 样本对应偏移。
+        /// 首个样本到来前为零。
         /// </summary>
         public long OffsetTicks => _bestOffsetTicks;
 
-        /// <summary>The estimated clock offset in seconds.</summary>
+        /// <summary>估算时钟偏移，单位为秒。</summary>
         public double OffsetSeconds => (double)_bestOffsetTicks / ServerTickFrequency;
 
         /// <summary>
-        /// Folds one round-trip time-sync sample into the estimate. All values share the same tick unit
-        /// (<see cref="ServerTickFrequency"/>). The local send/receive stamps are taken on the same
-        /// local clock; the server stamp is taken on the server clock.
+        /// 将一个往返时间同步样本折叠进估算。所有值都使用相同 tick 单位（<see cref="ServerTickFrequency"/>）。
+        /// 本地发送/接收时间戳来自同一个本地时钟；服务器时间戳来自服务器时钟。
         ///
-        /// RTT is <c>clientReceive - clientSend</c>. Assuming a symmetric path, the server stamp was
-        /// taken at local time <c>clientSend + RTT/2</c>, so the offset is
-        /// <c>serverReceive - (clientSend + RTT/2)</c>. The sample is only adopted when its RTT is the
-        /// lowest seen so far (or it is the first sample), mirroring NTP best-sample selection.
+        /// RTT 为 <c>clientReceive - clientSend</c>。假设路径对称，服务器时间戳相当于在本地时间
+        /// <c>clientSend + RTT/2</c> 处采集，因此偏移为 <c>serverReceive - (clientSend + RTT/2)</c>。
+        /// 只有当该样本 RTT 是目前最低值（或它是首个样本）时才会采纳，模拟 NTP 的最佳样本选择。
         /// </summary>
-        /// <param name="clientSendTicks">Local clock when the request was sent.</param>
-        /// <param name="serverReceiveTicks">Server clock when the server stamped the response.</param>
-        /// <param name="clientReceiveTicks">Local clock when the response was received.</param>
-        /// <returns><c>true</c> if this sample became the new best estimate; otherwise <c>false</c>.</returns>
+        /// <param name="clientSendTicks">请求发出时的本地时钟。</param>
+        /// <param name="serverReceiveTicks">服务器标记响应时的服务器时钟。</param>
+        /// <param name="clientReceiveTicks">收到响应时的本地时钟。</param>
+        /// <returns>如果该样本成为新的最佳估算则为 <c>true</c>；否则为 <c>false</c>。</returns>
         public bool ObserveRoundTrip(long clientSendTicks, long serverReceiveTicks, long clientReceiveTicks)
         {
             long rtt = clientReceiveTicks - clientSendTicks;
             if (rtt < 0L)
             {
-                // A negative RTT means the stamps are inconsistent (clock went backwards or out-of-order
-                // delivery); reject rather than poison the estimate.
+                // 负 RTT 表示时间戳不一致（时钟回退或乱序投递）；拒绝该样本，避免污染估算。
                 return false;
             }
 
-            // Server stamp is assumed taken at the midpoint of the round trip on the local timeline.
+            // 假设服务器时间戳采集点位于本地时间线上的往返中点。
             long localMidpoint = clientSendTicks + rtt / 2L;
             long offset = serverReceiveTicks - localMidpoint;
 
@@ -98,8 +92,7 @@ namespace AbilityKit.Network.Runtime.Sync
         }
 
         /// <summary>
-        /// Converts a local clock value to the estimated authoritative server clock value by applying
-        /// the current offset. Returns <paramref name="localTicks"/> unchanged until a sample exists.
+        /// 应用当前偏移，将本地时钟值转换为估算的权威服务器时钟值。没有样本前原样返回 <paramref name="localTicks"/>。
         /// </summary>
         public long ToServerTicks(long localTicks)
         {
@@ -107,16 +100,15 @@ namespace AbilityKit.Network.Runtime.Sync
         }
 
         /// <summary>
-        /// Stamps <paramref name="anchor"/> with the estimated server clock for its
-        /// <paramref name="localTicks"/>. When no sample has been observed yet the anchor is returned
-        /// unchanged so callers never publish a fabricated server time.
+        /// 使用 <paramref name="localTicks"/> 对应的估算服务器时钟标记 <paramref name="anchor"/>。
+        /// 尚未观测到样本时原样返回 anchor，确保调用方不会发布伪造的服务器时间。
         /// </summary>
         public SyncTimeAnchor StampServerTicks(SyncTimeAnchor anchor, long localTicks)
         {
             return HasSample ? anchor.WithServerTicks(ToServerTicks(localTicks)) : anchor;
         }
 
-        /// <summary>Clears all observed samples, returning the estimator to its initial state.</summary>
+        /// <summary>清除所有已观测样本，将估算器恢复到初始状态。</summary>
         public void Reset()
         {
             _bestRttTicks = 0L;

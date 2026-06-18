@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Demo.Shooter.View;
@@ -103,5 +105,82 @@ public sealed class ShooterRoomGatewayConnectionTests
         Assert.Equal(authority.CurrentFrame, presentation.ViewModel.Frame);
         Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 21)));
         Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 22)));
+    }
+
+    [Fact]
+    public void GatewayConnectionRequestsFullStateSyncWhenBattlePushNeedsPureStateBaseline()
+    {
+        var source = new ShooterBattleRuntimePort();
+        var start = new ShooterStartGamePayload(
+            "connection-pure-state-session",
+            30,
+            5902,
+            new[]
+            {
+                new ShooterStartPlayer(21, "P21", 0f, 0f),
+                new ShooterStartPlayer(22, "P22", 5f, 0f)
+            });
+        Assert.True(source.StartGame(in start));
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(9011ul, isFullBaseline: false, baselineFrame: 99, baselineHash: 123u);
+        var runtime = new ShooterBattleRuntimePort();
+        var presentation = new ShooterPresentationFacade();
+        var connection = new FakeGatewayConnection();
+        using var gatewayConnection = new ShooterRoomGatewayConnection(connection);
+        var gateway = new ShooterRoomGatewayClient(gatewayConnection);
+        var session = new ShooterClientSession(runtime, presentation, tickRate: 30, decoder: null, gateway);
+        Assert.True(session.StartGame(in start));
+        var roomClient = new ScriptedShooterRoomClient();
+        var anchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 0, 1d / 30d);
+        var flow = new ShooterRoomGatewayFlowResult(
+            "session-token",
+            "room-9",
+            1009ul,
+            "battle-9",
+            9011ul,
+            21u,
+            in anchor,
+            223456L,
+            ShooterRoomGatewayEntryKind.TeamLobby,
+            canStart: true,
+            started: true,
+            subscribed: true,
+            "ready");
+        var battle = new ShooterClientBattleHandle(session, flow, roomClient);
+        var dispatchedCount = 0;
+        var dispatchedResult = ShooterSnapshotApplyResult.Ignored;
+        gatewayConnection.SnapshotPushDispatched += (_, _, result) =>
+        {
+            dispatchedCount++;
+            dispatchedResult = result;
+        };
+        gatewayConnection.AttachBattle(battle);
+
+        connection.Push(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreatePureStateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+
+        Assert.Equal(1, dispatchedCount);
+        Assert.Equal(ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded, dispatchedResult);
+        Assert.Equal(ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded, gatewayConnection.LastPushResult);
+        Assert.True(presentation.NeedsPureStateFullBaselineResync);
+        Assert.Equal("PureStateMissingBaseline", roomClient.LastFullStateSyncRequest.Reason);
+        Assert.Equal(1, roomClient.Calls.Count(call => call.StartsWith("request-full-state:")));
+    }
+
+    private static ArraySegment<byte> CreatePureStateGatewayPayload(in ShooterPureStateSnapshotPayload pureState, int payloadOpCode, bool isFullSnapshot)
+    {
+        var wire = new WireStateSyncSnapshotPush
+        {
+            WorldId = pureState.WorldId,
+            Frame = pureState.Frame,
+            Timestamp = 456.5,
+            IsFullSnapshot = isFullSnapshot,
+            Actors = null,
+            PayloadOpCode = payloadOpCode,
+            Payload = ShooterPureStateSyncCodec.Serialize(in pureState),
+            ServerTicks = pureState.ServerTick
+        };
+        return WireRoomGatewayBinary.Serialize(in wire);
     }
 }

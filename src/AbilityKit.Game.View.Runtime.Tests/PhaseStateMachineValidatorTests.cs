@@ -114,4 +114,19 @@ public sealed class PhaseStateMachineValidatorTests
 
         Assert.Throws<System.InvalidOperationException>(() => spec.StartState);
     }
+
+    [Fact]
+    public void Freeze_RejectsLaterMutation()
+    {
+        var spec = new PhaseStateMachineSpec<TestState, TestEvent>("Root")
+            .AddState(TestState.Boot)
+            .SetStartState(TestState.Boot)
+            .AddTransition(TestEvent.BootCompleted, TestState.Boot, TestState.Lobby)
+            .Freeze();
+
+        Assert.True(spec.IsFrozen);
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddState(TestState.Lobby));
+        Assert.Throws<System.InvalidOperationException>(() => spec.SetStartState(TestState.Lobby));
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddTransition(TestEvent.EnterBattle, TestState.Lobby, TestState.Battle));
+    }
 }

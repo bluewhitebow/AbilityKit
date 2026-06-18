@@ -11,11 +11,10 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Thin adapter that lets the framework demo harness drive an existing Shooter
-    /// authoritative-interpolation sync strategy. Mirrors <see cref="ShooterDemoHarnessCarrier"/>
-    /// but accepts <see cref="ClientPlaybackPolicy.AuthoritativeInterpolation"/> profiles instead
-    /// of predict-rollback, so the acceptance matrix can validate both sync models through the
-    /// same <see cref="DemoHarnessRunner"/> pipeline.
+    /// 让框架 DemoHarness 驱动现有 Shooter 权威插值同步策略的轻量适配器。
+    /// 它与 <see cref="ShooterDemoHarnessCarrier"/> 对称，但接收
+    /// <see cref="ClientPlaybackPolicy.AuthoritativeInterpolation"/> profile，而不是预测回滚 profile，
+    /// 因此验收矩阵可以通过同一条 <see cref="DemoHarnessRunner"/> 管线验证两种同步模型。
     /// </summary>
     public sealed class ShooterInterpolationDemoHarnessCarrier : ISyncDemoCarrier, ISyncDemoCarrierCapabilities
     {
@@ -53,17 +52,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         public SyncDemoCapabilityResult Supports(in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile)
         {
-            if (profile.ClientPlayback != ClientPlaybackPolicy.AuthoritativeInterpolation)
-            {
-                return SyncDemoCapabilityResult.Unsupported("Shooter interpolation carrier supports authoritative interpolation playback only.");
-            }
-
-            if (!profile.Snapshot.HasFlag(SnapshotPolicy.FixedRateStateStream))
-            {
-                return SyncDemoCapabilityResult.Unsupported("Shooter interpolation carrier requires FixedRateStateStream snapshots.");
-            }
-
-            return SyncDemoCapabilityResult.Supported;
+            return ShooterDemoHarnessCarrierProfileRules.SupportsAuthoritativeInterpolation(in profile, in networkProfile);
         }
 
         public DemoHarnessStepTelemetry Step(in DemoHarnessStepContext context)
@@ -86,24 +75,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         private SyncHealthEvent[]? CollectFastReconnectHealthEvents()
         {
-            if (_strategy is not IShooterClientSyncController controller)
-            {
-                return null;
-            }
-
-            var events = controller.LastFastReconnectHealthEvents;
-            if (events == null || events.Count == 0)
-            {
-                return null;
-            }
-
-            var buffer = new SyncHealthEvent[events.Count];
-            for (var i = 0; i < events.Count; i++)
-            {
-                buffer[i] = events[i];
-            }
-
-            return buffer;
+            return ShooterDemoHarnessCarrierProfileRules.CollectFastReconnectHealthEvents(_strategy);
         }
     }
 }

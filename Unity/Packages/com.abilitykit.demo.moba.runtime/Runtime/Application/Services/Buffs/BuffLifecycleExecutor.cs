@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Triggering.Runtime;
 using AbilityKit.Ability.World.DI;
-using AbilityKit.Core.Logging;
 using AbilityKit.Core.Continuous;
+using AbilityKit.Core.Logging;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Components;
@@ -39,6 +39,7 @@ namespace AbilityKit.Demo.Moba.Services
     {
         private readonly MobaConfigDatabase _configs;
         private readonly MobaActorLookupService _actors;
+        private readonly MobaRuntimeLifecycleHookService _lifecycleHooks;
         private readonly IMobaEffectiveTagQueryService _tags;
         private readonly IMobaContinuousTagTemplateRegistry _tagTemplates;
         private readonly BuffRepository _repo;
@@ -46,9 +47,10 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly BuffEventPublisher _events;
         private readonly BuffStageEffectExecutor _stageEffects;
         private readonly BuffStackingPolicyApplier _stacking;
-        private readonly IContinuousManager _continuous;
+        private readonly BuffContinuousBindingService _continuousBindings;
         private readonly MobaSkillCastRuntimeService _skillRuntimes;
         private readonly MobaBuffPresentationCueReporter _presentationCues;
+        private readonly Dictionary<int, int[]> _triggerIdsByBuffId = new Dictionary<int, int[]>();
 
         public BuffLifecycleRejectResult LastReject { get; private set; }
         public string LastRejectReason => LastReject.Message;
@@ -56,6 +58,7 @@ namespace AbilityKit.Demo.Moba.Services
         public BuffLifecycleExecutor(
             MobaConfigDatabase configs,
             MobaActorLookupService actors,
+            MobaRuntimeLifecycleHookService lifecycleHooks,
             IMobaEffectiveTagQueryService tags,
             IMobaContinuousTagTemplateRegistry tagTemplates,
             BuffRepository repo,
@@ -63,12 +66,13 @@ namespace AbilityKit.Demo.Moba.Services
             BuffEventPublisher events,
             BuffStageEffectExecutor stageEffects,
             BuffStackingPolicyApplier stacking,
-            IContinuousManager continuous,
+            BuffContinuousBindingService continuousBindings,
             MobaSkillCastRuntimeService skillRuntimes,
             MobaBuffPresentationCueReporter presentationCues)
         {
             _configs = configs;
             _actors = actors;
+            _lifecycleHooks = lifecycleHooks;
             _tags = tags;
             _tagTemplates = tagTemplates;
             _repo = repo ?? new BuffRepository();
@@ -76,15 +80,14 @@ namespace AbilityKit.Demo.Moba.Services
             _events = events;
             _stageEffects = stageEffects;
             _stacking = stacking ?? new BuffStackingPolicyApplier();
-            _continuous = continuous;
+            _continuousBindings = continuousBindings;
             _skillRuntimes = skillRuntimes;
             _presentationCues = presentationCues;
         }
 
-        public bool Apply(BuffApplyRequest request)
+        public bool Apply(in BuffApplyRequest request)
         {
             LastReject = BuffLifecycleRejectResult.None;
-            if (request == null) return Reject("buff.apply.nullRequest", "apply request is null.");
             if (!request.IsValid) return Reject("buff.apply.invalidRequest", $"apply request is invalid. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId}.");
             if (_configs == null) return Reject("buff.apply.configDatabaseMissing", $"config database is missing. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId}.");
             if (!_configs.TryGetBuff(request.BuffId, out var buff) || buff == null) return Reject("buff.apply.configNotFound", $"buff config not found. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId}.");
@@ -108,21 +111,22 @@ namespace AbilityKit.Demo.Moba.Services
                 Requirements = requirements,
             };
 
-            var existingIndex = BuffRepository.FindExistingBuffIndex(list, buff.Id);
-            if (existingIndex >= 0)
+            var existingKey = BuffRuntimeKey.MatchApplyRequest(in request);
+            if (!request.ForceNewInstance && BuffRepository.TryGetRuntime(list, in existingKey, out var existingRuntime, out var existingIndex))
             {
-                context.Runtime = list[existingIndex];
+                context.Runtime = existingRuntime;
                 context.IsExistingRuntime = true;
-                return ApplyToExisting(target, context);
+                var applied = ApplyToExisting(target, ref context);
+                if (applied) BuffRepository.MarkDirty(list);
+                return applied;
             }
 
-            return ApplyNew(target, list, context);
+            return ApplyNew(target, list, ref context);
         }
 
-        public bool Remove(BuffRemoveRequest request)
+        public bool Remove(in BuffRemoveRequest request)
         {
             LastReject = BuffLifecycleRejectResult.None;
-            if (request == null) return Reject("buff.remove.nullRequest", "remove request is null.");
             if (!request.IsValid) return Reject("buff.remove.invalidRequest", $"remove request is invalid. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason}.");
             if (!TryGetTarget(request.TargetActorId, out var target)) return Reject("buff.remove.targetNotFound", $"target actor not found. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason}.");
             if (!target.hasBuffs) return Reject("buff.remove.buffsComponentMissing", $"target has no buffs component. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason}.");
@@ -132,14 +136,14 @@ namespace AbilityKit.Demo.Moba.Services
 
             var removed = false;
             var normalizedReason = NormalizeRemoveReason(request.Reason);
+            var key = BuffRuntimeKey.MatchRemoveRequest(in request);
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 var runtime = list[i];
-                if (runtime == null) continue;
-                if (runtime.BuffId != request.BuffId) continue;
+                if (!key.Matches(runtime)) continue;
 
                 removed = true;
-                EndRuntime(target, list, i, runtime, request.SourceActorId, normalizedReason);
+                EndRuntime(target, list, i, runtime, request.SourceActorId > 0 ? request.SourceActorId : runtime.SourceId, normalizedReason);
             }
 
             if (!removed) return Reject("buff.remove.runtimeNotFound", $"buff runtime not found. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason}.");
@@ -171,36 +175,31 @@ namespace AbilityKit.Demo.Moba.Services
             var hadSkillRuntimeRetain = runtime.SkillRuntimeRetainHandle.IsValid;
             var hadModifierBindings = runtime.ModifierBindings != null && runtime.ModifierBindings.Count > 0;
 
-            var continuousReason = ToContinuousEndReason(normalizedReason);
-            EndContinuous(runtime, continuousReason);
-            CleanupContinuousBindings(target, targetActorId, runtime, applyRemovalTags: true);
+            var continuousReason = BuffContinuousBindingService.ToContinuousEndReason(normalizedReason);
+            _continuousBindings?.End(runtime, continuousReason);
+            _continuousBindings?.Cleanup(target, targetActorId, runtime, applyRemovalTags: true);
             _ctx?.EndByRuntimeNoClear(runtime, normalizedReason);
             CleanupOwnerBindings(target, targetActorId, runtime.SourceContextId);
             PublishRemove(targetActorId, sourceActorId, runtime, normalizedReason);
             ReportEnded(targetActorId, sourceActorId, runtime, normalizedReason);
             ReleaseSkillRuntime(runtime);
-
-            new BuffRuntimeView(runtime).ClearRuntimeBindings();
-            var removedFromList = false;
-            if (list != null && index >= 0 && index < list.Count && ReferenceEquals(list[index], runtime))
+            NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Ended, "buff.lifecycle.ended");
+ 
+            var removedFromList = BuffRepository.RemoveAt(list, index, runtime);
+            if (removedFromList)
             {
-                list.RemoveAt(index);
-                removedFromList = true;
+                new BuffRuntimeView(runtime).ClearRuntimeBindings();
+                BuffRepository.ReleaseRuntime(runtime);
             }
 
-            LogBuffCleanup(buffId, targetActorId, sourceActorId, sourceContextId, normalizedReason, hadContinuous, runtime.Continuous == null, hadSkillRuntimeRetain, !runtime.SkillRuntimeRetainHandle.IsValid, hadModifierBindings, runtime.ModifierBindings == null, removedFromList);
+            LogBuffCleanup(buffId, targetActorId, sourceActorId, sourceContextId, normalizedReason, hadContinuous, removedFromList, hadSkillRuntimeRetain, removedFromList, hadModifierBindings, removedFromList, removedFromList);
         }
 
         private static void LogBuffCleanup(int buffId, int targetActorId, int sourceActorId, long sourceContextId, TraceLifecycleReason reason, bool hadContinuous, bool continuousCleared, bool hadSkillRuntimeRetain, bool skillRuntimeCleared, bool hadModifierBindings, bool modifierBindingsCleared, bool removedFromList)
         {
-            var message = $"[MobaBuffCleanup] buff ended. buffId={buffId}, target={targetActorId}, source={sourceActorId}, sourceContextId={sourceContextId}, reason={reason}, hadContinuous={hadContinuous}, continuousCleared={continuousCleared}, hadSkillRuntimeRetain={hadSkillRuntimeRetain}, skillRuntimeCleared={skillRuntimeCleared}, hadModifierBindings={hadModifierBindings}, modifierBindingsCleared={modifierBindingsCleared}, removedFromList={removedFromList}";
-            if (IsExpectedLifecycleEnd(reason))
-            {
-                Log.Info(message);
-                return;
-            }
+            if (IsExpectedLifecycleEnd(reason)) return;
 
-            Log.Warning(message);
+            Log.Warning($"[MobaBuffCleanup] buff ended unexpectedly. buffId={buffId}, target={targetActorId}, source={sourceActorId}, sourceContextId={sourceContextId}, reason={reason}, hadContinuous={hadContinuous}, continuousCleared={continuousCleared}, hadSkillRuntimeRetain={hadSkillRuntimeRetain}, skillRuntimeCleared={skillRuntimeCleared}, hadModifierBindings={hadModifierBindings}, modifierBindingsCleared={modifierBindingsCleared}, removedFromList={removedFromList}");
         }
 
         private static bool IsExpectedLifecycleEnd(TraceLifecycleReason reason)
@@ -208,15 +207,13 @@ namespace AbilityKit.Demo.Moba.Services
             return reason == TraceLifecycleReason.Expired || reason == TraceLifecycleReason.Completed;
         }
 
-        private bool ApplyToExisting(global::ActorEntity target, BuffOperationContext context)
+        private bool ApplyToExisting(global::ActorEntity target, ref BuffOperationContext context)
         {
-            if (context == null) return Reject("apply existing context is null.");
             var runtime = context.Runtime;
             var buff = context.Buff;
             var request = context.ApplyRequest;
             if (runtime == null) return Reject("existing buff runtime is null.");
             if (buff == null) return Reject("existing buff config is null.");
-            if (request == null) return Reject("existing buff apply request is null.");
 
             var runtimeState = context.RuntimeView;
             var oldStackCount = runtime.StackCount;
@@ -224,16 +221,18 @@ namespace AbilityKit.Demo.Moba.Services
             var oldOwnerKey = runtime.SourceContextId;
             if (isReplace)
             {
-                EndContinuous(runtime, ContinuousEndReason.Interrupted);
-                CleanupContinuousBindings(target, context.TargetActorId, runtime, applyRemovalTags: false);
+                _continuousBindings?.End(runtime, AbilityKit.Core.Continuous.ContinuousEndReason.Interrupted);
+                _continuousBindings?.Cleanup(target, context.TargetActorId, runtime, applyRemovalTags: false);
                 _ctx?.CancelAndEnd(runtime);
                 CleanupOwnerBindings(target, context.TargetActorId, oldOwnerKey);
                 ReleaseSkillRuntime(runtime);
+                NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Cleared, "buff.lifecycle.replaced");
                 runtimeState.ClearRuntimeBindings();
             }
 
             var applied = _stacking.ApplyToExisting(runtime, buff, request.SourceActorId, context.DurationSeconds);
             _ctx?.EnsureBuffContext(runtime, buff.Id, request.SourceActorId, context.TargetActorId, request.Origin);
+            NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Activated, "buff.lifecycle.active");
             BindSkillRuntime(runtime, request);
             if (applied || runtime.TagRequirements == null)
             {
@@ -242,6 +241,14 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (applied && !EnsureContinuousRuntime(runtime, buff, request.SourceActorId, context.TargetActorId, context.DurationSeconds, context.Requirements))
             {
+                if (isReplace)
+                {
+                    _ctx?.CancelAndEnd(runtime);
+                    ReleaseSkillRuntime(runtime);
+                    NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Failed, "buff.lifecycle.activateFailed");
+                    runtimeState.ClearRuntimeBindings();
+                }
+
                 return Reject($"continuous runtime activation failed for existing buff. target={context.TargetActorId} buffId={buff.Id} source={request.SourceActorId} sourceContextId={runtime.SourceContextId}.");
             }
 
@@ -258,27 +265,32 @@ namespace AbilityKit.Demo.Moba.Services
             return true;
         }
 
-        private bool ApplyNew(global::ActorEntity target, List<BuffRuntime> list, BuffOperationContext context)
+        private bool ApplyNew(global::ActorEntity target, List<BuffRuntime> list, ref BuffOperationContext context)
         {
-            if (context == null) return Reject("apply new context is null.");
             var buff = context.Buff;
             var request = context.ApplyRequest;
             if (buff == null) return Reject("new buff config is null.");
-            if (request == null) return Reject("new buff apply request is null.");
 
             var runtime = _stacking.CreateNewRuntime(buff, request.SourceActorId, context.DurationSeconds);
+            runtime.SourceContextId = request.SourceContextId;
             context.Runtime = runtime;
             _ctx?.EnsureBuffContext(runtime, buff.Id, request.SourceActorId, context.TargetActorId, request.Origin);
+            NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Activated, "buff.lifecycle.active");
             BindSkillRuntime(runtime, request);
             context.RuntimeView.SetTagRequirements(context.Requirements);
             if (!EnsureContinuousRuntime(runtime, buff, request.SourceActorId, context.TargetActorId, context.DurationSeconds, context.Requirements))
             {
+                var failedSourceContextId = runtime.SourceContextId;
                 _ctx?.CancelAndEnd(runtime);
                 ReleaseSkillRuntime(runtime);
-                return Reject($"continuous runtime activation failed for new buff. target={context.TargetActorId} buffId={buff.Id} source={request.SourceActorId} sourceContextId={runtime.SourceContextId}.");
+                NotifyLifecycle(runtime, MobaRuntimeLifecycleEventKind.Failed, "buff.lifecycle.activateFailed");
+                new BuffRuntimeView(runtime).ClearRuntimeBindings();
+                BuffRepository.ReleaseRuntime(runtime);
+                return Reject($"continuous runtime activation failed for new buff. target={context.TargetActorId} buffId={buff.Id} source={request.SourceActorId} sourceContextId={failedSourceContextId}.");
             }
 
             list.Add(runtime);
+            BuffRepository.RegisterRuntime(list, runtime);
  
             UpsertOngoingTriggerPlans(target, runtime.SourceContextId, buff);
             _events?.PublishApplyOrRefresh(buff, request.SourceActorId, context.TargetActorId, context.DurationSeconds, runtime);
@@ -320,10 +332,9 @@ namespace AbilityKit.Demo.Moba.Services
             _presentationCues?.Ended(buff, sourceActorId, targetActorId, runtime, reason);
         }
 
-        private bool BindSkillRuntime(BuffRuntime runtime, BuffApplyRequest request)
+        private bool BindSkillRuntime(BuffRuntime runtime, in BuffApplyRequest request)
         {
             if (runtime == null) return false;
-            if (request == null) return false;
             if (!request.SkillRuntimeHandle.IsValid) return true;
             if (runtime.SkillRuntimeRetainHandle.IsValid) return true;
 
@@ -339,6 +350,18 @@ namespace AbilityKit.Demo.Moba.Services
             }
 
             return false;
+        }
+
+        private void NotifyLifecycle(BuffRuntime runtime, MobaRuntimeLifecycleEventKind kind, string reason)
+        {
+            if (runtime == null || _lifecycleHooks == null) return;
+            var source = runtime.ContextSource.IsValid
+                ? runtime.ContextSource
+                : MobaPersistentContextSourceSnapshotFactory.TryCapture(runtime, out var snapshot) && snapshot.TryGetContextSource(out var snapshotSource)
+                    ? snapshotSource
+                    : default;
+            var lifecycleEvent = new MobaRuntimeLifecycleEvent(kind, runtime, in source, reason);
+            _lifecycleHooks.Notify(in lifecycleEvent);
         }
 
         private void ReleaseSkillRuntime(BuffRuntime runtime)
@@ -361,95 +384,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private bool EnsureContinuousRuntime(BuffRuntime runtime, BuffMO buff, int sourceActorId, int targetActorId, float remainingSeconds, ContinuousTagRequirements requirements)
         {
-            if (runtime == null) return false;
-            if (buff == null) return false;
-
-            if (runtime.Continuous == null || runtime.Continuous.IsTerminated)
-            {
-                runtime.Continuous = new BuffContinuousRuntime(buff, sourceActorId, targetActorId, remainingSeconds, requirements);
-            }
-
-            var wasActive = runtime.Continuous.IsActive;
-            runtime.Continuous.BindRuntime(runtime);
-            runtime.Continuous.BindSourceContext(runtime.SourceContextId);
-            runtime.Continuous.Refresh(sourceActorId, remainingSeconds, runtime.StackCount, buff.MaxStacks, requirements);
-            runtime.Continuous.IntervalRemainingSeconds = runtime.IntervalRemainingSeconds;
- 
-            var activated = false;
-            if (_continuous == null)
-            {
-                activated = false;
-            }
-            else if (wasActive)
-            {
-                activated = true;
-                if (_continuous is MobaContinuousManager mobaContinuous)
-                {
-                    mobaContinuous.Reproject(runtime.Continuous);
-                }
-            }
-            else
-            {
-                activated = _continuous.TryActivate(runtime.Continuous);
-            }
-
-            return activated;
-        }
-
-        private void EndContinuous(BuffRuntime runtime, ContinuousEndReason reason)
-        {
-            var continuous = runtime?.Continuous;
-            if (continuous == null) return;
-
-            _continuous?.TryEnd(continuous, reason);
-        }
-
-        private void CleanupContinuousBindings(global::ActorEntity target, int targetActorId, BuffRuntime runtime, bool applyRemovalTags)
-        {
-            if (runtime == null) return;
-
-            var continuous = runtime.Continuous;
-            if (continuous != null)
-            {
-                if (!continuous.IsTerminated)
-                {
-                    EndContinuous(runtime, ContinuousEndReason.CleanedUp);
-                }
-
-                if (ReferenceEquals(continuous.Runtime, runtime))
-                {
-                    continuous.BindRuntime(null);
-                }
-            }
-
-            runtime.Continuous = null;
-            runtime.TagRequirements = null;
-
-            if (applyRemovalTags && targetActorId > 0)
-            {
-                _tags?.MarkDirty(targetActorId);
-            }
-        }
-
-        private static ContinuousEndReason ToContinuousEndReason(TraceLifecycleReason reason)
-        {
-            switch (reason)
-            {
-                case TraceLifecycleReason.Expired:
-                case TraceLifecycleReason.Completed:
-                    return ContinuousEndReason.Completed;
-                case TraceLifecycleReason.Dispelled:
-                case TraceLifecycleReason.Interrupted:
-                case TraceLifecycleReason.Cancelled:
-                case TraceLifecycleReason.Dead:
-                case TraceLifecycleReason.Replaced:
-                case TraceLifecycleReason.Overridden:
-                case TraceLifecycleReason.Failed:
-                    return ContinuousEndReason.Interrupted;
-                case TraceLifecycleReason.None:
-                default:
-                    return ContinuousEndReason.CleanedUp;
-            }
+            return _continuousBindings != null && _continuousBindings.EnsureActive(runtime, buff, sourceActorId, targetActorId, remainingSeconds, requirements);
         }
 
         private void CleanupOwnerBindings(global::ActorEntity target, int targetActorId, long ownerKey)
@@ -474,7 +409,7 @@ namespace AbilityKit.Demo.Moba.Services
             return reason == TraceLifecycleReason.None ? TraceLifecycleReason.Dispelled : reason;
         }
 
-        private static void UpsertOngoingTriggerPlans(global::ActorEntity e, long ownerKey, BuffMO buff)
+        private void UpsertOngoingTriggerPlans(global::ActorEntity e, long ownerKey, BuffMO buff)
         {
             if (e == null) return;
             if (ownerKey == 0) return;
@@ -486,39 +421,47 @@ namespace AbilityKit.Demo.Moba.Services
                 return;
             }
 
-            var ids = new int[buff.TriggerIds.Count];
-            for (int i = 0; i < buff.TriggerIds.Count; i++) ids[i] = buff.TriggerIds[i];
-
-            var oldList = e.hasOngoingTriggerPlans ? e.ongoingTriggerPlans.Active : null;
-            var newList = oldList != null && oldList.Count > 0 ? new List<OngoingTriggerPlanEntry>(oldList.Count + 1) : new List<OngoingTriggerPlanEntry>(1);
-            var replaced = false;
-
-            if (oldList != null)
+            var ids = GetOrCreateTriggerIds(buff);
+            var list = e.hasOngoingTriggerPlans ? e.ongoingTriggerPlans.Active : null;
+            if (list == null)
             {
-                for (int i = 0; i < oldList.Count; i++)
-                {
-                    var it = oldList[i];
-                    if (it == null) continue;
-                    if (it.OwnerKey == ownerKey)
-                    {
-                        newList.Add(new OngoingTriggerPlanEntry { OwnerKey = ownerKey, TriggerIds = ids });
-                        replaced = true;
-                    }
-                    else
-                    {
-                        newList.Add(new OngoingTriggerPlanEntry { OwnerKey = it.OwnerKey, TriggerIds = it.TriggerIds });
-                    }
-                }
+                list = new List<OngoingTriggerPlanEntry>(1);
+            }
+
+            var replaced = false;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var it = list[i];
+                if (it == null) continue;
+                if (it.OwnerKey != ownerKey) continue;
+
+                it.TriggerIds = ids;
+                replaced = true;
+                break;
             }
 
             if (!replaced)
             {
-                newList.Add(new OngoingTriggerPlanEntry { OwnerKey = ownerKey, TriggerIds = ids });
+                list.Add(new OngoingTriggerPlanEntry { OwnerKey = ownerKey, TriggerIds = ids });
             }
 
             var rev = e.hasOngoingTriggerPlans ? e.ongoingTriggerPlans.Revision + 1 : 1;
-            if (e.hasOngoingTriggerPlans) e.ReplaceOngoingTriggerPlans(newList, rev);
-            else e.AddOngoingTriggerPlans(newList, rev);
+            if (e.hasOngoingTriggerPlans) e.ReplaceOngoingTriggerPlans(list, rev);
+            else e.AddOngoingTriggerPlans(list, rev);
+        }
+
+        private int[] GetOrCreateTriggerIds(BuffMO buff)
+        {
+            if (buff == null || buff.TriggerIds == null || buff.TriggerIds.Count == 0) return Array.Empty<int>();
+            if (_triggerIdsByBuffId.TryGetValue(buff.Id, out var ids) && ids != null && ids.Length == buff.TriggerIds.Count)
+            {
+                return ids;
+            }
+
+            ids = new int[buff.TriggerIds.Count];
+            for (int i = 0; i < buff.TriggerIds.Count; i++) ids[i] = buff.TriggerIds[i];
+            _triggerIdsByBuffId[buff.Id] = ids;
+            return ids;
         }
 
         private static void RemoveOngoingTriggerPlansEntry(global::ActorEntity e, long ownerKey)
@@ -527,30 +470,25 @@ namespace AbilityKit.Demo.Moba.Services
             if (ownerKey == 0) return;
             if (!e.hasOngoingTriggerPlans) return;
 
-            var oldList = e.ongoingTriggerPlans.Active;
-            if (oldList == null || oldList.Count == 0) return;
+            var list = e.ongoingTriggerPlans.Active;
+            if (list == null || list.Count == 0) return;
 
-            var newList = new List<OngoingTriggerPlanEntry>(oldList.Count);
             var removedAny = false;
-
-            for (int i = 0; i < oldList.Count; i++)
+            for (int i = list.Count - 1; i >= 0; i--)
             {
-                var it = oldList[i];
-                if (it == null) continue;
-                if (it.OwnerKey == ownerKey)
+                var it = list[i];
+                if (it == null || it.OwnerKey == ownerKey)
                 {
+                    list.RemoveAt(i);
                     removedAny = true;
-                    continue;
                 }
-
-                newList.Add(new OngoingTriggerPlanEntry { OwnerKey = it.OwnerKey, TriggerIds = it.TriggerIds });
             }
 
             if (!removedAny) return;
 
             var rev = e.ongoingTriggerPlans.Revision + 1;
-            if (newList.Count == 0) e.RemoveOngoingTriggerPlans();
-            else e.ReplaceOngoingTriggerPlans(newList, rev);
+            if (list.Count == 0) e.RemoveOngoingTriggerPlans();
+            else e.ReplaceOngoingTriggerPlans(list, rev);
         }
 
         private static void RemoveEffectListeners(global::ActorEntity e, long ownerKey)
@@ -600,10 +538,14 @@ namespace AbilityKit.Demo.Moba.Services
             var stageEffects = new BuffStageEffectExecutor(effects);
             var stacking = new BuffStackingPolicyApplier();
             var presentationCues = new MobaBuffPresentationCueReporter(configs, cueSnapshots);
+            var continuousBindings = new BuffContinuousBindingService(continuous, tags);
+
+            var lifecycleHooks = MobaRuntimeLifecycleHookFactory.CreateDefault(trace);
 
             return new BuffLifecycleExecutor(
                 configs,
                 actors,
+                lifecycleHooks,
                 tags,
                 tagTemplates,
                 repo,
@@ -611,7 +553,7 @@ namespace AbilityKit.Demo.Moba.Services
                 events,
                 stageEffects,
                 stacking,
-                continuous,
+                continuousBindings,
                 skillRuntimes,
                 presentationCues);
         }

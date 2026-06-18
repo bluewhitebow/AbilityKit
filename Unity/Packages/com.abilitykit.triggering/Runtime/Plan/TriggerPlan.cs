@@ -7,6 +7,54 @@ using AbilityKit.Triggering.Variables.Numeric;
 
 namespace AbilityKit.Triggering.Runtime.Plan
 {
+    public readonly struct ActionArgumentsPlan
+    {
+        public readonly byte Arity;
+        public readonly NumericValueRef Arg0;
+        public readonly NumericValueRef Arg1;
+        public readonly Dictionary<string, ActionArgValue> NamedArgs;
+
+        public bool HasNamedArgs => NamedArgs != null && NamedArgs.Count > 0;
+
+        public ActionArgumentsPlan(byte arity, NumericValueRef arg0, NumericValueRef arg1, Dictionary<string, ActionArgValue> namedArgs)
+        {
+            Arity = arity;
+            Arg0 = arg0;
+            Arg1 = arg1;
+            NamedArgs = namedArgs;
+        }
+    }
+
+    public readonly struct ActionSchedulePlan
+    {
+        public readonly Config.EActionScheduleMode Mode;
+        public readonly float Param;
+        public readonly int MaxExecutions;
+        public readonly bool CanBeInterrupted;
+
+        public ActionSchedulePlan(Config.EActionScheduleMode mode, float param, int maxExecutions, bool canBeInterrupted)
+        {
+            Mode = mode;
+            Param = param;
+            MaxExecutions = maxExecutions;
+            CanBeInterrupted = canBeInterrupted;
+        }
+    }
+
+    public readonly struct ActionExecutionPlan
+    {
+        public readonly Config.EActionExecutionPolicy Policy;
+        public readonly int RetryMaxRetries;
+        public readonly float RetryDelayMs;
+
+        public ActionExecutionPlan(Config.EActionExecutionPolicy policy, int retryMaxRetries = 3, float retryDelayMs = 0f)
+        {
+            Policy = policy;
+            RetryMaxRetries = retryMaxRetries;
+            RetryDelayMs = retryDelayMs;
+        }
+    }
+
     /// <summary>
     /// Action 调用计划（参数化动作描述）
     /// </summary>
@@ -199,7 +247,13 @@ namespace AbilityKit.Triggering.Runtime.Plan
         /// <summary>
         /// 是否使用了具名参数模式
         /// </summary>
-        public bool HasNamedArgs => Args != null && Args.Count > 0;
+        public bool HasNamedArgs => Arguments.HasNamedArgs;
+
+        public ActionArgumentsPlan Arguments => new ActionArgumentsPlan(Arity, Arg0, Arg1, Args);
+
+        public ActionSchedulePlan Schedule => new ActionSchedulePlan(ScheduleMode, ScheduleParam, MaxExecutions, CanBeInterrupted);
+
+        public ActionExecutionPlan Execution => new ActionExecutionPlan(ExecutionPolicy, RetryMaxRetries, RetryDelayMs);
 
         /// <summary>
         /// 完整构造函数（用于扩展方法创建修改后的副本）

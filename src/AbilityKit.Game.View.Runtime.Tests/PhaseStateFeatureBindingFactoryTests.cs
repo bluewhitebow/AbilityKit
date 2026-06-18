@@ -28,7 +28,8 @@ public sealed class PhaseStateFeatureBindingFactoryTests
 
         Assert.Equal("Battle.Prepare", binding.Name);
         Assert.True(binding.ClearBeforeEnter);
-        Assert.Same(spec.FeatureIds, binding.FeatureIds);
+        Assert.True(spec.IsFrozen);
+        Assert.Equal(spec.FeatureIds, binding.FeatureIds);
         Assert.Equal(2, installed);
         Assert.Equal(new[] { "clear:3", "attach:session:3", "attach:context:3" }, events);
     }
@@ -126,6 +127,50 @@ public sealed class PhaseStateFeatureBindingFactoryTests
             "attach:hud:5",
             "after-hook:5:1",
             "switch:battle.advance_connect:5:1"
+        }, events);
+    }
+
+    [Fact]
+    public void Create_FreezesSpecAndRejectsLaterMutation()
+    {
+        var events = new List<string>();
+        var ctx = new TestContext(13);
+        var spec = new PhaseStateFeatureSpec("Battle.Sealed")
+            .AddFeature("hud")
+            .AddEnterBeforeAction("before.seal")
+            .AddEnterAfterAction("after.seal")
+            .AddExitAction("exit.seal")
+            .AddSwitchFlow("switch.seal");
+        var plan = new PhaseFeaturePlan<TestContext, IPhaseFeature<TestContext>>()
+            .Add("hud", (in TestContext c) => new TestFeature("hud", c.Value, events));
+
+        var binding = PhaseStateFeatureBindingFactory.Create<TestContext, IPhaseFeature<TestContext>>(
+            spec,
+            feature => feature.OnAttach(in ctx),
+            plan,
+            enterBeforeAction: (in TestContext c, string actionId) => events.Add($"before-action:{actionId}:{c.Value}"),
+            enterAfterAction: (in TestContext c, string actionId, int count) => events.Add($"after-action:{actionId}:{c.Value}:{count}"),
+            exitAction: (in TestContext c, string actionId) => events.Add($"exit-action:{actionId}:{c.Value}"),
+            switchFlowAction: (in TestContext c, string switchFlowId, int count) => events.Add($"switch:{switchFlowId}:{c.Value}:{count}"));
+
+        Assert.True(spec.IsFrozen);
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddFeature("late.feature"));
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddEnterBeforeAction("late.before"));
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddEnterAfterAction("late.after"));
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddExitAction("late.exit"));
+        Assert.Throws<System.InvalidOperationException>(() => spec.AddSwitchFlow("late.switch"));
+
+        var installed = binding.Enter(in ctx);
+        binding.Exit(in ctx);
+
+        Assert.Equal(1, installed);
+        Assert.Equal(new[]
+        {
+            "before-action:before.seal:13",
+            "attach:hud:13",
+            "after-action:after.seal:13:1",
+            "switch:switch.seal:13:1",
+            "exit-action:exit.seal:13"
         }, events);
     }
 

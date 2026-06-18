@@ -84,10 +84,9 @@ namespace AbilityKit.Network.Runtime.Sync
             ServerValidationPolicy.LagCompensatedHitValidation);
 
         /// <summary>
-        /// Resolves the canonical profile for a legacy compatibility model. The mapping is now owned
-        /// by <see cref="NetworkSyncProfileRegistry"/> (audit migration step 6 enum convergence), so
-        /// the model→profile relationship lives in exactly one place instead of being duplicated here
-        /// as a hand-written switch. This method is retained as the established call site.
+        /// 为旧兼容模型解析规范 profile。映射现在由 <see cref="NetworkSyncProfileRegistry"/> 统一持有
+        /// （审计迁移步骤 6 的枚举收敛），因此 model→profile 关系只存在于一个位置，而不是在这里再复制一份
+        /// 手写 switch。该方法作为既有调用点保留。
         /// </summary>
         public static NetworkSyncProfile FromCompatibilityModel(NetworkSyncModel compatibilityModel)
         {

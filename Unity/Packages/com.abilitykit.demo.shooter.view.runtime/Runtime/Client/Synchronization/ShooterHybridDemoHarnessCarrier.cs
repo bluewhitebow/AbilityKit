@@ -11,10 +11,10 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Thin adapter that lets the framework demo harness drive a Shooter hybrid sync scenario.
-    /// Hybrid sync means "local entities use PredictRollback, remote entities use AuthoritativeInterpolation".
-    /// The carrier now requires the dedicated Hybrid controller so the acceptance matrix represents the
-    /// real local-predict/remote-interpolate path instead of a degraded predict-rollback fallback.
+    /// 让框架 DemoHarness 驱动 Shooter 混合同步场景的轻量适配器。
+    /// 混合同步表示“本地实体使用 PredictRollback，远端实体使用 AuthoritativeInterpolation”。
+    /// 该 carrier 现在要求专用 Hybrid 控制器，确保验收矩阵覆盖真实的本地预测/远端插值路径，
+    /// 而不是退化后的预测回滚兜底路径。
     /// </summary>
     public sealed class ShooterHybridDemoHarnessCarrier : ISyncDemoCarrier, ISyncDemoCarrierCapabilities
     {
@@ -52,24 +52,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         public SyncDemoCapabilityResult Supports(in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile)
         {
-            if (profile.ClientPlayback == ClientPlaybackPolicy.HybridLocalPredictRemoteInterpolate)
-            {
-                return SyncModel == NetworkSyncModel.HybridHeroPrediction
-                    ? SyncDemoCapabilityResult.Supported
-                    : SyncDemoCapabilityResult.Unsupported("Shooter hybrid carrier requires a HybridHeroPrediction controller.");
-            }
-
-            // Also accept pure PredictRollback profiles (for interop testing).
-            if (profile.ClientPlayback == ClientPlaybackPolicy.PredictRollback)
-            {
-                if (!profile.Snapshot.HasFlag(SnapshotPolicy.FullSnapshot) && !profile.Snapshot.HasFlag(SnapshotPolicy.AuthorityOverride))
-                {
-                    return SyncDemoCapabilityResult.Unsupported("Shooter hybrid carrier requires full or authority override snapshots for rollback entities.");
-                }
-                return SyncDemoCapabilityResult.Supported;
-            }
-
-            return SyncDemoCapabilityResult.Unsupported("Shooter hybrid carrier supports hybrid or predict-rollback playback only.");
+            return ShooterDemoHarnessCarrierProfileRules.SupportsHybrid(in profile, in networkProfile, SyncModel);
         }
 
         public DemoHarnessStepTelemetry Step(in DemoHarnessStepContext context)
@@ -92,24 +75,7 @@ namespace AbilityKit.Demo.Shooter.View
 
         private SyncHealthEvent[]? CollectFastReconnectHealthEvents()
         {
-            if (_strategy is not IShooterClientSyncController controller)
-            {
-                return null;
-            }
-
-            var events = controller.LastFastReconnectHealthEvents;
-            if (events == null || events.Count == 0)
-            {
-                return null;
-            }
-
-            var buffer = new SyncHealthEvent[events.Count];
-            for (var i = 0; i < events.Count; i++)
-            {
-                buffer[i] = events[i];
-            }
-
-            return buffer;
+            return ShooterDemoHarnessCarrierProfileRules.CollectFastReconnectHealthEvents(_strategy);
         }
     }
 }

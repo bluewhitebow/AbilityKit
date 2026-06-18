@@ -19,6 +19,16 @@ public interface IBattleLogicHostGrain : IGrainWithStringKey
     Task<BattleInputSubmitResult> SubmitInputAsync(ulong worldId, int frame, BattleInputItem input);
 
     /// <summary>
+    /// 将玩家增量加入正在运行的战斗世界。
+    /// </summary>
+    Task<BattlePlayerJoinResult> JoinPlayerAsync(BattlePlayerJoinRequest request);
+
+    /// <summary>
+    /// 为正在运行的战斗玩家挂载服务器侧战斗 AI。
+    /// </summary>
+    Task<BattleBotAiMountResult> MountBotAiAsync(BattleBotAiMountRequest request);
+
+    /// <summary>
     /// 获取当前帧
     /// </summary>
     Task<int> GetCurrentFrameAsync();
@@ -106,6 +116,34 @@ public class PlayerInitInfo
     [Id(10)] public List<int>? SkillIds { get; set; }
 }
 
+[GenerateSerializer]
+public sealed record BattlePlayerJoinRequest(
+    [property: Id(0)] ulong WorldId,
+    [property: Id(1)] PlayerInitInfo Player,
+    [property: Id(2)] bool IsBot = false);
+
+[GenerateSerializer]
+public sealed record BattlePlayerJoinResult(
+    [property: Id(0)] bool Accepted,
+    [property: Id(1)] uint PlayerId,
+    [property: Id(2)] int CurrentFrame,
+    [property: Id(3)] string Status,
+    [property: Id(4)] string Message);
+
+[GenerateSerializer]
+public sealed record BattleBotAiMountRequest(
+    [property: Id(0)] ulong WorldId,
+    [property: Id(1)] uint PlayerId,
+    [property: Id(2)] string? ProfileId = null);
+
+[GenerateSerializer]
+public sealed record BattleBotAiMountResult(
+    [property: Id(0)] bool Accepted,
+    [property: Id(1)] uint PlayerId,
+    [property: Id(2)] int CurrentFrame,
+    [property: Id(3)] string Status,
+    [property: Id(4)] string Message);
+ 
 /// <summary>
 /// 战斗输入项
 /// </summary>

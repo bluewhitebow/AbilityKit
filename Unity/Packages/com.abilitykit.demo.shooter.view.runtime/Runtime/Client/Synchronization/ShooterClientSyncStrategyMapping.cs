@@ -5,14 +5,13 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Maps Shooter's demo-specific sync diagnostics onto the gameplay-agnostic framework
-    /// contracts (<see cref="SyncTickResult"/> / <see cref="SyncReconciliationReport"/>) so the
-    /// Shooter controllers can satisfy <see cref="IClientSyncStrategy{TInput, TSample}"/> without
-    /// changing their existing demo-facing surface.
+    /// 将 Shooter 示例特定的同步诊断映射到玩法无关的框架契约
+    /// （<see cref="SyncTickResult"/> / <see cref="SyncReconciliationReport"/>），让 Shooter 控制器无需改变
+    /// 现有面向示例的表面接口，就能满足 <see cref="IClientSyncStrategy{TInput, TSample}"/>。
     ///
-    /// This is the thin adapter seam from migration step 3: the demo keeps its rich
+    /// 这是迁移步骤 3 的轻量适配接缝：示例保留更丰富的
     /// <see cref="ShooterClientFrameTickResult"/> / <see cref="ShooterClientReconciliationResult"/>
-    /// types, and these projections expose the subset the framework needs.
+    /// 类型，而这些投影只暴露框架需要的子集。
     /// </summary>
     internal static class ShooterClientSyncStrategyMapping
     {
@@ -23,8 +22,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public static SyncReconciliationReason ToReason(ShooterClientResyncReason reason)
         {
-            // The framework enum was modelled directly on Shooter's reasons, so the numeric values
-            // line up one-to-one; map explicitly to stay robust against future divergence.
+            // 框架枚举直接按 Shooter 的原因建模，因此数值当前是一一对应的；这里仍显式映射，
+            // 以便未来两侧发生差异时保持稳健。
             switch (reason)
             {
                 case ShooterClientResyncReason.ImportFailed: return SyncReconciliationReason.ImportFailed;
@@ -55,9 +54,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// Builds a framework reconciliation report from a controller's current diagnostic state.
-        /// Uses the controller's last resync metadata for the divergence frames/hashes and its last
-        /// reconciliation result for the replay tick count.
+        /// 基于控制器当前诊断状态构建框架校正报告。
+        /// 分歧帧/哈希来自控制器最近一次重同步元数据，重放 tick 数来自最近一次校正结果。
         /// </summary>
         public static SyncReconciliationReport ToReconciliationReport(IShooterClientSyncController controller)
         {

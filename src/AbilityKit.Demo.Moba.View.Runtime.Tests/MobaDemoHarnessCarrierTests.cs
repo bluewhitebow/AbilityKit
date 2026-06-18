@@ -54,7 +54,7 @@ public sealed class MobaDemoHarnessCarrierTests
 
         Assert.Equal(SyncDemoCapabilityStatus.Supported, supported.Status);
         Assert.Equal(SyncDemoCapabilityStatus.Unsupported, unsupported.Status);
-        Assert.Contains("authoritative interpolation", unsupported.Reason);
+        Assert.Equal(MobaDemoHarnessCarrier.AuthoritativeInterpolationRequiredReason, unsupported.Reason);
     }
 
     [Fact]
@@ -77,7 +77,11 @@ public sealed class MobaDemoHarnessCarrierTests
 
         Assert.Equal(DemoHarnessRunStatus.Degraded, result.Status);
         Assert.True(result.Completed);
-        Assert.Contains("AOI", result.Reason);
+        Assert.Equal(MobaDemoHarnessCarrier.MassBattleLodDegradedReason, result.Reason);
+        Assert.Contains("DistanceAoi", result.Reason);
+        Assert.Contains("PriorityBudget", result.Reason);
+        Assert.Contains("LodFrequency", result.Reason);
+        Assert.Contains("RequestAoiSlice", result.Reason);
         Assert.Equal(1, result.Metrics.StepsRun);
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Ability.Host.Extensions.Moba.Runtime;
 using AbilityKit.Ability.World.Abstractions;
 using AbilityKit.Demo.Moba.Services;
@@ -17,6 +18,13 @@ namespace AbilityKit.Demo.Moba.Session
     /// </summary>
     public sealed class MobaTransformSnapshotDispatcher
     {
+        private static readonly ObjectPool<List<WorldStateSnapshot>> s_snapshotListPool = Pools.GetPool(
+            createFunc: () => new List<WorldStateSnapshot>(8),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
+
         private readonly IWorld _world;
 
         /// <summary>
@@ -40,35 +48,42 @@ namespace AbilityKit.Demo.Moba.Session
                 throw new InvalidOperationException("MobaTransformSnapshotDispatcher requires IMobaBattleRuntimePort.");
             }
 
-            var snapshots = new List<WorldStateSnapshot>(8);
-            var count = runtime.CollectSnapshots(frame, snapshots);
-            if (count <= 0)
+            var snapshots = s_snapshotListPool.Get();
+            try
             {
-                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.Validation, nameof(MobaTransformSnapshotDispatcher), $"No snapshots available. frame={frame.Value}");
-                return;
-            }
+                var count = runtime.CollectSnapshots(frame, snapshots);
+                if (count <= 0)
+                {
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.Validation, nameof(MobaTransformSnapshotDispatcher), $"No snapshots available. frame={frame.Value}");
+                    return;
+                }
 
-            WorldStateSnapshot transformSnapshot = default;
-            var found = false;
-            for (int i = 0; i < snapshots.Count; i++)
+                WorldStateSnapshot transformSnapshot = default;
+                var found = false;
+                for (int i = 0; i < snapshots.Count; i++)
+                {
+                    var snapshot = snapshots[i];
+                    if (snapshot.OpCode != AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.ActorTransform) continue;
+
+                    transformSnapshot = snapshot;
+                    found = true;
+                    break;
+                }
+
+                if (!found)
+                {
+                    MobaRuntimeLog.Warning(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.Validation, nameof(MobaTransformSnapshotDispatcher), $"ActorTransform snapshot not available. frame={frame.Value} snapshotCount={snapshots.Count}");
+                    return;
+                }
+
+                MobaActorTransformSnapshotEntry[] entries = MobaActorTransformSnapshotCodec.Deserialize(transformSnapshot.Payload);
+                callback?.Invoke(frame.Value, entries);
+                MobaRuntimeLog.Trace(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaTransformSnapshotDispatcher), $"Transform snapshot: {entries?.Length ?? 0} entities");
+            }
+            finally
             {
-                var snapshot = snapshots[i];
-                if (snapshot.OpCode != AbilityKit.Protocol.Moba.MobaOpCodes.Snapshot.ActorTransform) continue;
-
-                transformSnapshot = snapshot;
-                found = true;
-                break;
+                s_snapshotListPool.Release(snapshots);
             }
-
-            if (!found)
-            {
-                MobaRuntimeLog.Warning(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.Validation, nameof(MobaTransformSnapshotDispatcher), $"ActorTransform snapshot not available. frame={frame.Value} snapshotCount={snapshots.Count}");
-                return;
-            }
-
-            MobaActorTransformSnapshotEntry[] entries = MobaActorTransformSnapshotCodec.Deserialize(transformSnapshot.Payload);
-            callback?.Invoke(frame.Value, entries);
-            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Snapshot, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaTransformSnapshotDispatcher), $"Transform snapshot: {entries?.Length ?? 0} entities");
         }
     }
 }

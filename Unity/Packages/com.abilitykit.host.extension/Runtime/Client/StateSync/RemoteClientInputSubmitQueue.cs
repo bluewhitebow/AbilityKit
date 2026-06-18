@@ -122,8 +122,19 @@ namespace AbilityKit.Ability.Host.Extensions.Client.StateSync
         private void Start(TLocalSubmitResult local)
         {
             _lastError = null;
-            _pending = _submitAsync(local, _timeout);
-            _submittedCount++;
+            try
+            {
+                _pending = _submitAsync(local, _timeout);
+                _submittedCount++;
+            }
+            catch (Exception ex)
+            {
+                _pending = null;
+                _lastError = ex;
+                _failedCount++;
+                return;
+            }
+
             CompleteIfFinished();
         }
     }

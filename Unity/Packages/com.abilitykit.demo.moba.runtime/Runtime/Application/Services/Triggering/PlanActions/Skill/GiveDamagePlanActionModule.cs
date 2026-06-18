@@ -40,15 +40,22 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             }
 
             var attackerActorId = effectInput.CasterActorId;
-            var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.GiveDamage, targets))
+            var targets = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                return;
-            }
+                if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.GiveDamage, targets))
+                {
+                    return;
+                }
 
-            for (int i = 0; i < targets.Count; i++)
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    ExecuteDamage(combat, args, effectInput, ctx, attackerActorId, targets[i]);
+                }
+            }
+            finally
             {
-                ExecuteDamage(combat, args, effectInput, ctx, attackerActorId, targets[i]);
+                PooledMobaPlanActionLists.Release(targets);
             }
         }
 

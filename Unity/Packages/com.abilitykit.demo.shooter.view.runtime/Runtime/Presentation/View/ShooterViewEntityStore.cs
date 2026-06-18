@@ -29,6 +29,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public int BulletCount => CountEntities(ShooterViewEntityKind.Bullet);
 
+        public int EnemyCount => CountEntities(ShooterViewEntityKind.Enemy);
+
         public void Clear()
         {
             _entities.Clear();

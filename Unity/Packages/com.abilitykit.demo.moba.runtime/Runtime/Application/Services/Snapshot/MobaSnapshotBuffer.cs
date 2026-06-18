@@ -44,6 +44,26 @@ namespace AbilityKit.Demo.Moba.Services
             _items.Sort(comparison);
         }
 
+        public int CopyTo(IList<T> destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+
+            for (int i = 0; i < _items.Count; i++)
+            {
+                destination.Add(_items[i]);
+            }
+
+            return _items.Count;
+        }
+
+        public int DrainTo(IList<T> destination)
+        {
+            var count = CopyTo(destination);
+            _items.Clear();
+            TrimIfNeeded();
+            return count;
+        }
+
         public T[] ToArrayAndTrim()
         {
             T[] array = _items.Count == 0 ? Array.Empty<T>() : _items.ToArray();

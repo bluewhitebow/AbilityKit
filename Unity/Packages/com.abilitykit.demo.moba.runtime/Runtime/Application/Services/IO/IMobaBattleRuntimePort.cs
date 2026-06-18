@@ -52,6 +52,9 @@ namespace AbilityKit.Demo.Moba.Services
             return _input.Submit(frame, inputs);
         }
 
+        /// <summary>
+        /// 兼容单快照门面，生产同步循环请使用 <see cref="CollectSnapshots"/>。
+        /// </summary>
         public bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot)
         {
             if (_output == null)
@@ -62,6 +65,9 @@ namespace AbilityKit.Demo.Moba.Services
             return _output.TryGetSnapshot(frame, out snapshot);
         }
 
+        /// <summary>
+        /// 批量快照门面，转发到输出端口并复用调用方缓冲区。
+        /// </summary>
         public int CollectSnapshots(FrameIndex frame, IList<WorldStateSnapshot> snapshots, int maxSnapshots = 32)
         {
             if (_output == null)
@@ -77,9 +83,38 @@ namespace AbilityKit.Demo.Moba.Services
             return _output.CollectSnapshots(frame, snapshots, maxSnapshots);
         }
 
+        /// <summary>
+        /// 兼容数组读取门面，生产诊断采样请使用 <see cref="FillDiagnosticEntityStates"/>。
+        /// </summary>
+        public MobaDiagnosticEntityState[] GetDiagnosticEntityStates()
+        {
+            return _stateReadModel?.GetDiagnosticEntityStates() ?? Array.Empty<MobaDiagnosticEntityState>();
+        }
+
+        /// <summary>
+        /// 填充诊断状态到调用方缓冲区，避免数组分配。
+        /// </summary>
+        public int FillDiagnosticEntityStates(IList<MobaDiagnosticEntityState> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            return _stateReadModel?.FillDiagnosticEntityStates(buffer) ?? 0;
+        }
+
+        /// <summary>
+        /// 兼容数组读取门面，生产状态采样请使用 <see cref="FillAllEntityStates"/>。
+        /// </summary>
         public LogicWorldEntityState[] GetAllEntityStates()
         {
             return _stateReadModel?.GetAllEntityStates() ?? Array.Empty<LogicWorldEntityState>();
+        }
+
+        /// <summary>
+        /// 填充逻辑世界状态到调用方缓冲区，作为高频状态读取推荐入口。
+        /// </summary>
+        public int FillAllEntityStates(IList<LogicWorldEntityState> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            return _stateReadModel?.FillAllEntityStates(buffer) ?? 0;
         }
 
         public void Dispose()

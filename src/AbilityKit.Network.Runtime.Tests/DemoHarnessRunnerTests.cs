@@ -443,6 +443,77 @@ public sealed class DemoHarnessRunnerTests
     }
 
     [Fact]
+    public void CarrierSelectorSelectsFirstRunnableCarrierByCapabilities()
+    {
+        var rejected = new CapabilityCarrier(
+            "Rejected",
+            NetworkSyncModel.PredictRollback,
+            SyncDemoCapabilityResult.Unsupported("Rejected for this profile."));
+        var selected = new CapabilityCarrier(
+            "Selected",
+            NetworkSyncModel.PredictRollback,
+            SyncDemoCapabilityResult.Degraded("Runs with reduced diagnostics."));
+        var fallback = new ScriptedCarrier("Fallback", NetworkSyncModel.AuthoritativeInterpolation);
+
+        var found = DemoHarnessCarrierSelector.TrySelectFirst(
+            new ISyncDemoCarrier?[] { null, rejected, selected, fallback },
+            NetworkSyncProfiles.AuthoritativeInterpolation,
+            NetworkConditionProfile.Mobile4G,
+            out var carrier);
+
+        Assert.True(found);
+        Assert.Same(selected, carrier);
+        Assert.Equal(NetworkSyncModel.AuthoritativeInterpolation, rejected.LastProfile.CompatibilityModel);
+        Assert.Equal(NetworkConditionProfile.Mobile4G, selected.LastNetworkProfile);
+    }
+
+    [Fact]
+    public void CarrierSelectorFallsBackToCompatibilityModelAndThrowsWhenMissing()
+    {
+        var rollback = new ScriptedCarrier("Rollback", NetworkSyncModel.PredictRollback);
+        var interpolation = new ScriptedCarrier("Interpolation", NetworkSyncModel.AuthoritativeInterpolation);
+
+        var selected = DemoHarnessCarrierSelector.SelectFirstOrThrow(
+            new ISyncDemoCarrier?[] { null, rollback, interpolation },
+            NetworkSyncProfiles.AuthoritativeInterpolation,
+            NetworkConditionProfile.Lan,
+            "test carrier");
+
+        Assert.Same(interpolation, selected);
+        Assert.False(DemoHarnessCarrierSelector.TrySelectFirst(
+            new ISyncDemoCarrier?[] { null, rollback },
+            NetworkSyncProfiles.AuthoritativeInterpolation,
+            NetworkConditionProfile.Lan,
+            out _));
+        Assert.Throws<NotSupportedException>(() => DemoHarnessCarrierSelector.SelectFirstOrThrow(
+            new ISyncDemoCarrier?[] { rollback },
+            NetworkSyncProfiles.AuthoritativeInterpolation,
+            NetworkConditionProfile.Lan,
+            "test carrier"));
+    }
+
+    [Fact]
+    public void CarrierSelectorRejectsInvalidInputs()
+    {
+        var carrier = new ScriptedCarrier("Rollback", NetworkSyncModel.PredictRollback);
+
+        Assert.Throws<ArgumentNullException>(() => DemoHarnessCarrierSelector.CanRun(
+            null!,
+            NetworkSyncProfiles.PredictRollback,
+            NetworkConditionProfile.Lan));
+        Assert.Throws<ArgumentNullException>(() => DemoHarnessCarrierSelector.TrySelectFirst(
+            null!,
+            NetworkSyncProfiles.PredictRollback,
+            NetworkConditionProfile.Lan,
+            out _));
+        Assert.Throws<ArgumentException>(() => DemoHarnessCarrierSelector.SelectFirstOrThrow(
+            new[] { carrier },
+            NetworkSyncProfiles.PredictRollback,
+            NetworkConditionProfile.Lan,
+            string.Empty));
+    }
+
+    [Fact]
     public void ScenarioMatrixRejectsNullInputs()
     {
         Assert.Throws<ArgumentNullException>(() => DemoHarnessScenarioMatrix.Build(

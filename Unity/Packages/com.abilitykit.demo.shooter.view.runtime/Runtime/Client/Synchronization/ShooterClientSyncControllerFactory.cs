@@ -4,21 +4,21 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Network.Runtime;
+using AbilityKit.Network.Runtime.Sync;
 
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Creates the <see cref="IShooterClientSyncController"/> matching a requested
-    /// <see cref="NetworkSyncModel"/>. This is the single entry point where the Shooter
-    /// session chooses its synchronization strategy. New models (authoritative interpolation,
-    /// batch state sync, etc.) plug in here without touching the session facade.
+    /// 创建与请求的 <see cref="NetworkSyncModel"/> 匹配的 <see cref="IShooterClientSyncController"/>。
+    /// 这是 Shooter 会话选择同步策略的唯一入口。新模型（权威插值、批量状态同步等）
+    /// 只需接入这里，不需要改动会话门面。
     /// </summary>
     public static class ShooterClientSyncControllerFactory
     {
         public const NetworkSyncModel DefaultSyncModel = NetworkSyncModel.PredictRollback;
 
-        private static readonly object SyncRoot = new();
-        private static Dictionary<NetworkSyncModel, ShooterClientSyncControllerBuilder> _builders = CreateDefaultBuilders();
+        private static readonly NetworkSyncProfileControllerRegistry<IShooterClientSyncController, ShooterClientSyncControllerFactoryContext> Registry =
+            new NetworkSyncProfileControllerRegistry<IShooterClientSyncController, ShooterClientSyncControllerFactoryContext>(CreateDefaultBuilders());
 
         public delegate IShooterClientSyncController ShooterClientSyncControllerBuilder(
             in ShooterClientSyncControllerFactoryContext context);
@@ -27,24 +27,21 @@ namespace AbilityKit.Demo.Shooter.View
             NetworkSyncModel syncModel,
             ShooterClientSyncControllerBuilder builder)
         {
+            Register(NetworkSyncProfileRegistry.Resolve(syncModel), builder);
+        }
+
+        public static void Register(
+            in NetworkSyncProfile syncProfile,
+            ShooterClientSyncControllerBuilder builder)
+        {
             if (builder == null) throw new ArgumentNullException(nameof(builder));
 
-            lock (SyncRoot)
-            {
-                var builders = new Dictionary<NetworkSyncModel, ShooterClientSyncControllerBuilder>(_builders)
-                {
-                    [syncModel] = builder
-                };
-                _builders = builders;
-            }
+            Registry.Register(syncProfile, (in ShooterClientSyncControllerFactoryContext context) => builder(in context));
         }
 
         public static void ResetToDefaults()
         {
-            lock (SyncRoot)
-            {
-                _builders = CreateDefaultBuilders();
-            }
+            Registry.ResetToDefaults();
         }
 
         public static IShooterClientSyncController Create(
@@ -59,11 +56,9 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// Creates a sync controller, optionally supplying an
-        /// <see cref="InterpolationConfig"/> for the
-        /// <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> model. The config is ignored by
-        /// models that do not interpolate (e.g. predict rollback); when omitted the interpolation model
-        /// falls back to <see cref="InterpolationConfig.Default"/>.
+        /// 创建同步控制器，并可选为 <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> 模型提供
+        /// <see cref="InterpolationConfig"/>。该配置会被不做插值的模型（例如预测回滚）忽略；
+        /// 省略时插值模型会回退到 <see cref="InterpolationConfig.Default"/>。
         /// </summary>
         public static IShooterClientSyncController Create(
             NetworkSyncModel syncModel,
@@ -74,34 +69,47 @@ namespace AbilityKit.Demo.Shooter.View
             IShooterRoomGatewayClient? gateway,
             InterpolationConfig? interpolationConfig)
         {
-            if (runtime == null) throw new ArgumentNullException(nameof(runtime));
-            if (presentation == null) throw new ArgumentNullException(nameof(presentation));
-
-            var builders = _builders;
-            if (!builders.TryGetValue(syncModel, out var builder))
-            {
-                throw new NotSupportedException(
-                    $"Shooter client sync model '{syncModel}' is not implemented yet.");
-            }
-
-            var context = new ShooterClientSyncControllerFactoryContext(
+            return Create(
+                NetworkSyncProfileRegistry.Resolve(syncModel),
                 runtime,
                 presentation,
                 tickRate,
                 decoder,
                 gateway,
                 interpolationConfig);
-            return builder(in context);
         }
 
-        private static Dictionary<NetworkSyncModel, ShooterClientSyncControllerBuilder> CreateDefaultBuilders()
+        public static IShooterClientSyncController Create(
+            in NetworkSyncProfile syncProfile,
+            IShooterBattleRuntimePort runtime,
+            ShooterPresentationFacade presentation,
+            int tickRate,
+            ShooterGatewaySnapshotDecoder? decoder,
+            IShooterRoomGatewayClient? gateway,
+            InterpolationConfig? interpolationConfig = null)
         {
-            var builders = new Dictionary<NetworkSyncModel, ShooterClientSyncControllerBuilder>
+            if (runtime == null) throw new ArgumentNullException(nameof(runtime));
+            if (presentation == null) throw new ArgumentNullException(nameof(presentation));
+
+            var context = new ShooterClientSyncControllerFactoryContext(
+                syncProfile,
+                runtime,
+                presentation,
+                tickRate,
+                decoder,
+                gateway,
+                interpolationConfig);
+            return Registry.Create(syncProfile, in context, "Shooter client sync controller");
+        }
+
+        private static IReadOnlyDictionary<NetworkSyncProfile, NetworkSyncProfileControllerBuilder<IShooterClientSyncController, ShooterClientSyncControllerFactoryContext>> CreateDefaultBuilders()
+        {
+            var builders = new Dictionary<NetworkSyncProfile, NetworkSyncProfileControllerBuilder<IShooterClientSyncController, ShooterClientSyncControllerFactoryContext>>
             {
-                [NetworkSyncModel.Unspecified] = CreatePredictRollbackController,
-                [NetworkSyncModel.PredictRollback] = CreatePredictRollbackController,
-                [NetworkSyncModel.AuthoritativeInterpolation] = CreateAuthoritativeInterpolationController,
-                [NetworkSyncModel.HybridHeroPrediction] = CreateHybridHeroPredictionController
+                [NetworkSyncProfiles.Unspecified] = CreatePredictRollbackController,
+                [NetworkSyncProfiles.PredictRollback] = CreatePredictRollbackController,
+                [NetworkSyncProfiles.AuthoritativeInterpolation] = CreateAuthoritativeInterpolationController,
+                [NetworkSyncProfiles.HybridHeroPrediction] = CreateHybridHeroPredictionController
             };
             return builders;
         }
@@ -145,6 +153,7 @@ namespace AbilityKit.Demo.Shooter.View
     public readonly struct ShooterClientSyncControllerFactoryContext
     {
         public ShooterClientSyncControllerFactoryContext(
+            NetworkSyncProfile syncProfile,
             IShooterBattleRuntimePort runtime,
             ShooterPresentationFacade presentation,
             int tickRate,
@@ -152,6 +161,7 @@ namespace AbilityKit.Demo.Shooter.View
             IShooterRoomGatewayClient? gateway,
             InterpolationConfig? interpolationConfig)
         {
+            SyncProfile = syncProfile;
             Runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             Presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
             TickRate = tickRate;
@@ -159,6 +169,10 @@ namespace AbilityKit.Demo.Shooter.View
             Gateway = gateway;
             InterpolationConfig = interpolationConfig;
         }
+
+        public NetworkSyncProfile SyncProfile { get; }
+
+        public NetworkSyncModel SyncModel => SyncProfile.CompatibilityModel;
 
         public IShooterBattleRuntimePort Runtime { get; }
 

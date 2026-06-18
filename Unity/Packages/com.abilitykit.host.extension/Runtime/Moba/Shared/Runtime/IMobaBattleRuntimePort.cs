@@ -142,6 +142,61 @@ namespace AbilityKit.Ability.Host.Extensions.Moba.Runtime
         }
     }
 
+    public struct MobaDiagnosticEntityState
+    {
+        public int EntityId;
+        public float X;
+        public float Y;
+        public float Z;
+        public float Rotation;
+        public float VelocityX;
+        public float VelocityZ;
+        public float Hp;
+        public float HpMax;
+        public int TeamId;
+        public bool IsDead;
+        public bool HasAttributeGroup;
+        public bool HasResourceContainer;
+        public bool HasSkillLoadout;
+        public int ActiveSkillCount;
+
+        public MobaDiagnosticEntityState(int entityId)
+        {
+            EntityId = entityId;
+            X = Y = Z = 0f;
+            Rotation = 0f;
+            VelocityX = VelocityZ = 0f;
+            Hp = HpMax = 0f;
+            TeamId = 0;
+            IsDead = true;
+            HasAttributeGroup = false;
+            HasResourceContainer = false;
+            HasSkillLoadout = false;
+            ActiveSkillCount = 0;
+        }
+
+        public static MobaDiagnosticEntityState FromLogicState(in LogicWorldEntityState state)
+        {
+            return new MobaDiagnosticEntityState(state.EntityId)
+            {
+                X = state.X,
+                Y = state.Y,
+                Z = state.Z,
+                Rotation = state.Rotation,
+                VelocityX = state.VelocityX,
+                VelocityZ = state.VelocityZ,
+                Hp = state.Hp,
+                HpMax = state.HpMax,
+                TeamId = state.TeamId,
+                IsDead = state.IsDead,
+                HasAttributeGroup = state.HasAttributeGroup,
+                HasResourceContainer = state.HasResourceContainer,
+                HasSkillLoadout = state.HasSkillLoadout,
+                ActiveSkillCount = state.ActiveSkillCount,
+            };
+        }
+    }
+
     [Flags]
     public enum MobaBattleRuntimeCapability
     {
@@ -214,10 +269,34 @@ namespace AbilityKit.Ability.Host.Extensions.Moba.Runtime
 
         MobaInputSubmitResult Submit(FrameIndex frame, IReadOnlyList<PlayerInputCommand> inputs);
 
+        /// <summary>
+        /// 兼容单快照读取入口；生产同步循环应优先使用 <see cref="CollectSnapshots"/> 以完整收集同帧多路输出。
+        /// </summary>
         bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot);
 
+        /// <summary>
+        /// 批量快照收集入口，供帧同步、服务器驱动和 View Adapter 高频路径复用外部缓冲区。
+        /// </summary>
         int CollectSnapshots(FrameIndex frame, IList<WorldStateSnapshot> snapshots, int maxSnapshots = 32);
 
+        /// <summary>
+        /// 兼容数组读取入口；高频诊断采样应优先使用 <see cref="FillDiagnosticEntityStates"/>。
+        /// </summary>
+        MobaDiagnosticEntityState[] GetDiagnosticEntityStates();
+
+        /// <summary>
+        /// 填充调用方提供的缓冲区，避免诊断状态采样产生数组分配。
+        /// </summary>
+        int FillDiagnosticEntityStates(IList<MobaDiagnosticEntityState> buffer);
+
+        /// <summary>
+        /// 兼容数组读取入口；高频状态采样应优先使用 <see cref="FillAllEntityStates"/>。
+        /// </summary>
         LogicWorldEntityState[] GetAllEntityStates();
+
+        /// <summary>
+        /// 填充调用方提供的缓冲区，作为逻辑世界状态读取的生产推荐路径。
+        /// </summary>
+        int FillAllEntityStates(IList<LogicWorldEntityState> buffer);
     }
 }

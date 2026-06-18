@@ -43,7 +43,7 @@ public sealed class CreateRoomHandler : GatewayRequestHandlerBase
                 accountId,
                 req.Region,
                 req.ServerId,
-                string.IsNullOrWhiteSpace(req.RoomType) ? "battle" : req.RoomType,
+                string.IsNullOrWhiteSpace(req.RoomType) ? GameplayRoomTypes.Default : req.RoomType,
                 req.Title ?? string.Empty,
                 req.IsPublic,
                 req.MaxPlayers,
@@ -68,9 +68,9 @@ public sealed class CreateRoomHandler : GatewayRequestHandlerBase
             var responsePayload = WireRoomGatewayBinary.Serialize(in wire);
             return GatewayResponse.Ok(request.Seq, responsePayload.ToArray());
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            return GatewayResponse.Error(request.Seq, GatewayStatusCode.InternalError);
+            return RoomGatewayErrorMapper.ToResponse(request.Seq, exception);
         }
     }
 }

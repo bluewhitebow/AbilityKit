@@ -22,7 +22,8 @@ public sealed record RoomSummary(
 public sealed record RoomMemberState(
     [property: Id(0)] bool IsOnline,
     [property: Id(1)] long LastSeenTicks,
-    [property: Id(2)] long OfflineSinceTicks);
+    [property: Id(2)] long OfflineSinceTicks,
+    [property: Id(3)] bool IsBot = false);
 
 [GenerateSerializer]
 public sealed record CreateRoomRequest(
@@ -153,6 +154,11 @@ public sealed record RestoreRoomResponse(
 public sealed record RoomReadyRequest(
     [property: Id(0)] string AccountId,
     [property: Id(1)] bool Ready);
+
+[GenerateSerializer]
+public sealed record JoinRoomMemberRequest(
+    [property: Id(0)] string AccountId,
+    [property: Id(1)] bool IsBot = false);
 
 [GenerateSerializer]
 public sealed record RoomPickHeroRequest(

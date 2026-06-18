@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AbilityKit.Trace;
 
@@ -18,7 +19,7 @@ namespace AbilityKit.Trace.Editor.Windows
 
     /// <summary>
     /// 默认的溯源注册表提供者
-    /// 通过反射自动查找所有 TraceTreeRegistry 实例
+    /// 优先使用运行时注册目录，未注册时兼容反射查找 Instance/Singleton
     /// </summary>
     public sealed class DefaultTraceRegistryProvider : ITraceRegistryProvider
     {
@@ -39,9 +40,13 @@ namespace AbilityKit.Trace.Editor.Windows
         public IEnumerable<TraceTreeRegistryBase> GetRegistries()
         {
             var result = new List<TraceTreeRegistryBase>();
+            AddUnique(result, TraceRegistryDirectory.Registries);
+            if (result.Count > 0)
+                return result;
+
             var baseType = typeof(TraceTreeRegistryBase);
 
-            var assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             foreach (var assembly in assemblies)
             {
                 try
@@ -59,7 +64,7 @@ namespace AbilityKit.Trace.Editor.Windows
                                 var value = instanceProp.GetValue(null);
                                 if (value is TraceTreeRegistryBase registry)
                                 {
-                                    result.Add(registry);
+                                    AddUnique(result, registry);
                                     continue;
                                 }
                             }
@@ -72,7 +77,7 @@ namespace AbilityKit.Trace.Editor.Windows
                                 var value = singletonProp.GetValue(null);
                                 if (value is TraceTreeRegistryBase registry)
                                 {
-                                    result.Add(registry);
+                                    AddUnique(result, registry);
                                 }
                             }
                         }
@@ -85,6 +90,19 @@ namespace AbilityKit.Trace.Editor.Windows
             }
 
             return result;
+        }
+
+        private static void AddUnique(List<TraceTreeRegistryBase> result, IEnumerable<TraceTreeRegistryBase> registries)
+        {
+            if (registries == null) return;
+            foreach (var registry in registries)
+                AddUnique(result, registry);
+        }
+
+        private static void AddUnique(List<TraceTreeRegistryBase> result, TraceTreeRegistryBase registry)
+        {
+            if (registry != null && !result.Contains(registry))
+                result.Add(registry);
         }
 
         private DefaultTraceRegistryProvider() { }

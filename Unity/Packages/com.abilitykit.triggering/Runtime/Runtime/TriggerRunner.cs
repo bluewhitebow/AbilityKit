@@ -80,11 +80,11 @@ namespace AbilityKit.Triggering.Runtime
                 triggers = new List<Entry<TArgs>>(4);
                 list.Add(key, triggers);
                 EnsureSubscribed(key, list);
-                _lifecycle.OnRegistered(key, trigger, phase, priority, _registrationOrder);
             }
 
             var entry = new Entry<TArgs>(phase, priority, _registrationOrder++, trigger);
             InsertSorted(triggers, entry);
+            _lifecycle.OnRegistered(key, trigger, phase, priority, entry.Order);
             var subscription = GetSubscription<TArgs>(key);
             return new Registration<TArgs>(triggers, entry, this, key, subscription);
         }

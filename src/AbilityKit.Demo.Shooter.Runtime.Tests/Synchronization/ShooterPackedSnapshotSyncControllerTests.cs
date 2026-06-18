@@ -64,7 +64,27 @@ public sealed class ShooterPackedSnapshotSyncControllerTests
         Assert.Equal(packed.Frame, presentation.ViewModel.Frame);
         Assert.Equal(2, presentation.ViewModel.Current.EntityChanges.Count(change => change.Kind == ShooterViewEntityKind.Player));
         Assert.Single(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Bullet);
+        Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Kind == ShooterViewEntityKind.Enemy);
         Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 1)));
         Assert.Contains(presentation.ViewModel.Current.EntityChanges, change => change.Key.Equals(new ShooterViewEntityKey(ShooterViewEntityKind.Player, 2)));
+
+        var imported = target.ExportPackedSnapshot(777ul, isFullSnapshot: true, authorityOverride: true);
+        Assert.NotNull(FindPackedChunk(imported, ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Enemy));
+        Assert.NotNull(FindPackedChunk(imported, ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Enemy));
+        Assert.NotNull(FindPackedChunk(imported, ShooterPackedComponentKinds.Health, ShooterPackedEntityKinds.Enemy));
+    }
+
+    private static ShooterPackedComponentChunk? FindPackedChunk(in ShooterPackedSnapshotPayload packed, int componentKind, int entityKind)
+    {
+        for (int i = 0; i < packed.ComponentChunks.Length; i++)
+        {
+            var chunk = packed.ComponentChunks[i];
+            if (chunk.ComponentKind == componentKind && chunk.EntityKind == entityKind)
+            {
+                return chunk;
+            }
+        }
+
+        return null;
     }
 }

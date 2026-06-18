@@ -192,6 +192,18 @@ public sealed class ShooterWorldModuleTests
         Assert.True(updatedPlayer.X > 0f);
         Assert.True(svelto.EntitiesDB.Exists<ShooterSveltoProjectileComponent>(1u, ShooterSveltoGroups.Projectiles));
 
+        var packedSnapshot = runtime.ExportPackedSnapshot(77ul, isFullSnapshot: true);
+        Assert.True(packedSnapshot.EntityCount >= 3);
+        var enemyLifecycleChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Enemy);
+        var enemyTransformChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Enemy);
+        var enemyHealthChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.Health, ShooterPackedEntityKinds.Enemy);
+        Assert.NotNull(enemyLifecycleChunk);
+        Assert.NotNull(enemyTransformChunk);
+        Assert.NotNull(enemyHealthChunk);
+        Assert.True(enemyLifecycleChunk.Value.Count > 0);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyTransformChunk.Value.Count);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyHealthChunk.Value.Count);
+
         var emptySnapshot = new ShooterPackedSnapshotPayload(
             ShooterPackedSnapshotCodec.CurrentVersion,
             77ul,
@@ -206,6 +218,52 @@ public sealed class ShooterWorldModuleTests
         Assert.True(runtime.ImportPackedSnapshot(in emptySnapshot));
         Assert.Equal(0, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
         Assert.Equal(0, svelto.EntitiesDB.Count<ShooterSveltoProjectileComponent>(ShooterSveltoGroups.Projectiles));
+    }
+
+    [Fact]
+    public void RuntimeSpawnsWaveEnemiesAndEnemiesAttackPlayers()
+    {
+        var container = new WorldContainerBuilder()
+            .AddModule(new ShooterWorldModule())
+            .Build();
+
+        var runtime = container.Resolve<IShooterBattleRuntimePort>();
+        var entities = container.Resolve<IShooterEntityManager>();
+        var svelto = container.Resolve<ISveltoWorldContext>();
+        var start = new ShooterStartGamePayload(
+            "wave-enemies",
+            30,
+            4,
+            new[]
+            {
+                new ShooterStartPlayer(1, "P1", 0f, 0f),
+                new ShooterStartPlayer(2, "P2", 2f, 0f),
+                new ShooterStartPlayer(3, "P3", 4f, 0f),
+                new ShooterStartPlayer(4, "P4", 6f, 0f)
+            });
+
+        Assert.True(runtime.StartGame(in start));
+        for (int frame = 0; frame < 12; frame++)
+        {
+            Assert.True(runtime.Tick(1f / 30f));
+        }
+
+        Assert.True(svelto.EntitiesDB.Count<ShooterSveltoHealthComponent>(ShooterSveltoGroups.GameplayTargets) > 0);
+        Assert.True(AnyPlayerDamaged(entities));
+
+        var snapshot = runtime.GetSnapshot();
+        Assert.Contains(snapshot.Events, static evt => evt.EventType == (int)ShooterEventType.Hit && evt.SourcePlayerId < 0);
+
+        var packedSnapshot = runtime.ExportPackedSnapshot(77ul, isFullSnapshot: true);
+        var enemyLifecycleChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Enemy);
+        var enemyTransformChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Enemy);
+        var enemyHealthChunk = FindPackedChunk(packedSnapshot, ShooterPackedComponentKinds.Health, ShooterPackedEntityKinds.Enemy);
+        Assert.NotNull(enemyLifecycleChunk);
+        Assert.NotNull(enemyTransformChunk);
+        Assert.NotNull(enemyHealthChunk);
+        Assert.True(enemyLifecycleChunk.Value.Count > 0);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyTransformChunk.Value.Count);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyHealthChunk.Value.Count);
     }
 
     [Fact]
@@ -265,5 +323,32 @@ public sealed class ShooterWorldModuleTests
         Assert.Equal(1, svelto.EntitiesDB.Count<ShooterSveltoPlayerComponent>(ShooterSveltoGroups.Players));
         Assert.True(host.DestroyBattleWorld("host-world-1"));
         Assert.False(host.TryGetBattleWorld("host-world-1", out _));
+    }
+
+    private static ShooterPackedComponentChunk? FindPackedChunk(in ShooterPackedSnapshotPayload snapshot, int componentKind, int entityKind)
+    {
+        for (int i = 0; i < snapshot.ComponentChunks.Length; i++)
+        {
+            var chunk = snapshot.ComponentChunks[i];
+            if (chunk.ComponentKind == componentKind && chunk.EntityKind == entityKind)
+            {
+                return chunk;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool AnyPlayerDamaged(IShooterEntityManager entities)
+    {
+        foreach (var playerId in entities.PlayerIds)
+        {
+            if (entities.TryGetPlayer(playerId, out var player) && player.Hp < ShooterGameplay.DefaultPlayerHp)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

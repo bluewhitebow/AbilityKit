@@ -1,7 +1,9 @@
-using AbilityKit.Demo.Shooter;
+﻿using AbilityKit.Demo.Shooter;
+using AbilityKit.Network.Runtime.Conditioning;
 using AbilityKit.Orleans.Contracts.Battle;
 using AbilityKit.Orleans.Grains.Battle;
 using AbilityKit.Orleans.Grains.Battle.Gameplay;
+using AbilityKit.Orleans.Grains.Gameplays.Shooter.Battle;
 using AbilityKit.Protocol.Shooter;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -13,7 +15,7 @@ public sealed class ShooterBattleRuntimeAdapterTests
     [Fact]
     public void SessionStartTickAndSnapshotPush_UsesShooterRuntimeWorldBoundary()
     {
-        using var worldManager = new ServerMobaWorldManager(NullLogger.Instance);
+        using var worldManager = new ServerBattleWorldManager(NullLogger.Instance);
         var adapter = new ShooterBattleRuntimeAdapter(worldManager);
         using var session = adapter.CreateSession("shooter-battle-adapter-test");
         var initParams = CreateInitParams();
@@ -72,8 +74,107 @@ public sealed class ShooterBattleRuntimeAdapterTests
         var packed = ShooterPackedSnapshotCodec.Deserialize(push.Payload!);
         Assert.Equal(initParams.WorldId, packed.WorldId);
         Assert.Equal(push.Frame, packed.Frame);
-        Assert.Equal(3, packed.EntityCount);
+        Assert.Equal(4, packed.EntityCount);
         Assert.NotEqual(0u, packed.StateHash);
+        AssertPackedEnemiesVisible(packed);
+    }
+
+    [Fact]
+    public void CreateStateSyncPush_WhenPureStateEnabled_EmitsPureStateFullAndDeltaPayloads()
+    {
+        using var worldManager = new ServerBattleWorldManager(NullLogger.Instance);
+        var adapter = new ShooterBattleRuntimeAdapter(
+            worldManager,
+            ShooterStateSyncPushOptions.PureState(NetworkConditionProfile.Lan));
+        using var session = adapter.CreateSession("shooter-pure-state-adapter-test");
+        var initParams = CreateInitParams();
+        var start = session.Start(initParams);
+        Assert.True(start.Succeeded, start.Error);
+        Assert.True(session.Tick(frame: 1, tickRate: 30, deltaTime: 1f / 30f));
+
+        var full = session.CreateStateSyncPush(initParams.WorldId, frame: 1, isFullSnapshot: true);
+        var fullPayload = ShooterPureStateSyncCodec.Deserialize(full.Payload!);
+        Assert.Equal(ShooterOpCodes.Snapshot.PureState, full.PayloadOpCode);
+        Assert.True(full.IsFullSnapshot);
+        Assert.Equal(ShooterPureStateSnapshotKinds.FullBaseline, fullPayload.SnapshotKind);
+        Assert.Equal(initParams.WorldId, fullPayload.WorldId);
+        Assert.Equal(full.Frame, fullPayload.Frame);
+        Assert.Equal(ShooterPureStateSyncSettings.Default.ActiveSyncBudget, fullPayload.Settings.ActiveSyncBudget);
+        Assert.NotEqual(0u, fullPayload.StateHash);
+
+        session.SubmitInputs(
+            1,
+            new[]
+            {
+                new BattleInputItem
+                {
+                    PlayerId = 1,
+                    OpCode = ShooterOpCodes.Input.PlayerCommand,
+                    Payload = ShooterInputCodec.Serialize(new[]
+                    {
+                        new ShooterPlayerCommand(1, 1f, 0f, 1f, 0f, false)
+                    })
+                }
+            });
+        Assert.True(session.Tick(frame: 2, tickRate: 30, deltaTime: 1f / 30f));
+
+        var delta = session.CreateStateSyncPush(initParams.WorldId, frame: 2, isFullSnapshot: false);
+        var deltaPayload = ShooterPureStateSyncCodec.Deserialize(delta.Payload!);
+        Assert.Equal(ShooterOpCodes.Snapshot.PureStateDelta, delta.PayloadOpCode);
+        Assert.False(delta.IsFullSnapshot);
+        Assert.Equal(ShooterPureStateSnapshotKinds.Delta, deltaPayload.SnapshotKind);
+        Assert.Equal(fullPayload.Frame, deltaPayload.BaselineFrame);
+        Assert.Equal(fullPayload.StateHash, deltaPayload.BaselineHash);
+    }
+
+    [Fact]
+    public void CreateStateSyncPush_WhenPureStateUsesLimitedBandwidth_ReducesActiveBudget()
+    {
+        using var worldManager = new ServerBattleWorldManager(NullLogger.Instance);
+        var adapter = new ShooterBattleRuntimeAdapter(
+            worldManager,
+            ShooterStateSyncPushOptions.PureState(NetworkConditionProfile.LimitedBandwidth));
+        using var session = adapter.CreateSession("shooter-pure-state-budget-test");
+        var initParams = CreateInitParams();
+        var start = session.Start(initParams);
+        Assert.True(start.Succeeded, start.Error);
+        Assert.True(session.Tick(frame: 1, tickRate: 30, deltaTime: 1f / 30f));
+
+        var push = session.CreateStateSyncPush(initParams.WorldId, frame: 1, isFullSnapshot: true);
+        var payload = ShooterPureStateSyncCodec.Deserialize(push.Payload!);
+
+        Assert.Equal(ShooterOpCodes.Snapshot.PureState, push.PayloadOpCode);
+        Assert.Equal(128, payload.Settings.ActiveSyncBudget);
+        Assert.Equal(4, payload.Settings.DeltaIntervalFrames);
+        Assert.Equal(30, payload.Settings.LowFrequencyIntervalFrames);
+        Assert.Equal(6, payload.Settings.InterpolationDelayFrames);
+    }
+
+    private static void AssertPackedEnemiesVisible(in ShooterPackedSnapshotPayload packed)
+    {
+        var enemyLifecycleChunk = FindPackedChunk(packed, ShooterPackedComponentKinds.EntityLifecycle, ShooterPackedEntityKinds.Enemy);
+        var enemyTransformChunk = FindPackedChunk(packed, ShooterPackedComponentKinds.Transform, ShooterPackedEntityKinds.Enemy);
+        var enemyHealthChunk = FindPackedChunk(packed, ShooterPackedComponentKinds.Health, ShooterPackedEntityKinds.Enemy);
+        Assert.NotNull(enemyLifecycleChunk);
+        Assert.NotNull(enemyTransformChunk);
+        Assert.NotNull(enemyHealthChunk);
+        Assert.True(enemyLifecycleChunk.Value.Count > 0);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyTransformChunk.Value.Count);
+        Assert.Equal(enemyLifecycleChunk.Value.Count, enemyHealthChunk.Value.Count);
+    }
+
+    private static ShooterPackedComponentChunk? FindPackedChunk(in ShooterPackedSnapshotPayload packed, int componentKind, int entityKind)
+    {
+        for (int i = 0; i < packed.ComponentChunks.Length; i++)
+        {
+            var chunk = packed.ComponentChunks[i];
+            if (chunk.ComponentKind == componentKind && chunk.EntityKind == entityKind)
+            {
+                return chunk;
+            }
+        }
+
+        return null;
     }
 
     private static BattleInitParams CreateInitParams()
@@ -106,3 +207,4 @@ public sealed class ShooterBattleRuntimeAdapterTests
         };
     }
 }
+

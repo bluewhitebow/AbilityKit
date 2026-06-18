@@ -1,0 +1,721 @@
+using System;
+using System.Collections.Generic;
+using AbilityKit.Protocol.Shooter;
+using Newtonsoft.Json;
+using UnityHFSM;
+using UnityHFSM.Extension;
+
+namespace AbilityKit.Demo.Shooter.Runtime
+{
+    internal sealed class ShooterBotAiSystem : IShooterBotAiPort
+    {
+        private readonly ShooterBattleState _state;
+        private readonly IShooterEntityManager _entities;
+        private readonly Dictionary<int, ShooterBotAiController> _controllers = new Dictionary<int, ShooterBotAiController>();
+
+        public ShooterBotAiSystem(ShooterBattleState state, IShooterEntityManager entities)
+        {
+            _state = state ?? throw new ArgumentNullException(nameof(state));
+            _entities = entities ?? throw new ArgumentNullException(nameof(entities));
+        }
+
+        public int BotAiCount => _controllers.Count;
+
+        public bool MountBotAi(in ShooterBotAiMountOptions options)
+        {
+            if (options.PlayerId <= 0 || !_entities.HasPlayer(options.PlayerId) || options.Profile == ShooterBotAiProfile.None)
+            {
+                return false;
+            }
+
+            var config = ShooterBotAiProfileCatalog.Resolve(options.ProfileId);
+            _controllers[options.PlayerId] = ShooterBotAiController.Create(options.PlayerId, _state, _entities, config);
+            return true;
+        }
+
+        public bool UnmountBotAi(int playerId)
+        {
+            return _controllers.Remove(playerId);
+        }
+
+        public void ClearBotAi()
+        {
+            _controllers.Clear();
+        }
+
+        public void Tick(float deltaTime)
+        {
+            if (_controllers.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var kv in _controllers)
+            {
+                var controller = kv.Value;
+                if (!_entities.TryGetPlayer(controller.PlayerId, out var player) || !player.Alive)
+                {
+                    _state.LatestCommands.Remove(controller.PlayerId);
+                    continue;
+                }
+
+                controller.Tick(deltaTime);
+                _state.LatestCommands[controller.PlayerId] = controller.Command;
+            }
+        }
+    }
+
+    internal sealed class ShooterBotAiController : IActionTimeSource
+    {
+        private readonly ShooterBattleState _state;
+        private readonly IShooterEntityManager _entities;
+        private readonly ShooterBotAiConfig _config;
+        private readonly StateMachine<string> _fsm;
+        private float _deltaTime;
+        private ShooterBotAiBlackboard _blackboard;
+
+        private ShooterBotAiController(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterBotAiConfig config)
+        {
+            PlayerId = playerId;
+            _state = state;
+            _entities = entities;
+            _config = config;
+            _blackboard = new ShooterBotAiBlackboard(playerId, config);
+            _fsm = ShooterBotAiRuntimeBuilder.Build(this, _blackboard, config);
+        }
+
+        public int PlayerId { get; }
+
+        public ShooterPlayerCommand Command => _blackboard.Command;
+
+        public float DeltaTime => _deltaTime;
+
+        public float UnscaledDeltaTime => _deltaTime;
+
+        public static ShooterBotAiController Create(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterBotAiConfig config)
+        {
+            return new ShooterBotAiController(playerId, state, entities, config ?? ShooterBotAiProfileCatalog.SimpleBattle);
+        }
+
+        public void Tick(float deltaTime)
+        {
+            _deltaTime = deltaTime;
+            RefreshBlackboard();
+            _fsm.OnLogic();
+        }
+
+        private void RefreshBlackboard()
+        {
+            _blackboard.Frame = _state.CurrentFrame;
+            _blackboard.TargetPlayerId = 0;
+            _blackboard.TargetDistance = float.MaxValue;
+            _blackboard.HasTarget = false;
+            _blackboard.InAttackRange = false;
+
+            if (!_entities.TryGetPlayer(PlayerId, out var self))
+            {
+                return;
+            }
+
+            _blackboard.SelfX = self.X;
+            _blackboard.SelfY = self.Y;
+
+            foreach (var id in _entities.PlayerIds)
+            {
+                if (id == PlayerId || !_entities.TryGetPlayer(id, out var candidate) || !candidate.Alive)
+                {
+                    continue;
+                }
+
+                var dx = candidate.X - self.X;
+                var dy = candidate.Y - self.Y;
+                var distanceSq = dx * dx + dy * dy;
+                if (distanceSq >= _blackboard.TargetDistance * _blackboard.TargetDistance)
+                {
+                    continue;
+                }
+
+                _blackboard.HasTarget = true;
+                _blackboard.TargetPlayerId = candidate.PlayerId;
+                _blackboard.TargetX = candidate.X;
+                _blackboard.TargetY = candidate.Y;
+                _blackboard.TargetDistance = MathF.Sqrt(distanceSq);
+            }
+
+            _blackboard.InAttackRange = _blackboard.HasTarget && _blackboard.TargetDistance <= _config.AttackRange;
+        }
+    }
+
+    internal static class ShooterBotAiRuntimeBuilder
+    {
+        public static StateMachine<string> Build(IActionTimeSource timeSource, ShooterBotAiBlackboard blackboard, ShooterBotAiConfig config)
+        {
+            var fsm = new StateMachine<string>(needsExitTime: false);
+            var stateIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < config.States.Count; i++)
+            {
+                var state = config.States[i];
+                stateIds.Add(state.Id);
+                fsm.AddState(state.Id, CreateState(timeSource, blackboard, state));
+            }
+
+            for (int i = 0; i < config.Transitions.Count; i++)
+            {
+                var transition = config.Transitions[i];
+                if (!stateIds.Contains(transition.From) || !stateIds.Contains(transition.To))
+                {
+                    continue;
+                }
+
+                fsm.AddTransition(new Transition<string>(transition.From, transition.To, t => EvaluateCondition(blackboard, transition.Condition)));
+            }
+
+            fsm.SetStartState(config.StartState);
+            fsm.Init();
+            return fsm;
+        }
+
+        private static CompositeActionState<string, string> CreateState(IActionTimeSource timeSource, ShooterBotAiBlackboard blackboard, ShooterBotAiStateConfig state)
+        {
+            var sequence = new SequenceBehaviour();
+            for (int i = 0; i < state.Actions.Count; i++)
+            {
+                sequence.Add(CreateAction(blackboard, state.Actions[i]));
+            }
+
+            if (state.Interval > 0f)
+            {
+                sequence.Add(new DelayBehaviour(state.Interval));
+            }
+
+            return new CompositeActionState<string>(needsExitTime: false)
+                .SetTimeSource(timeSource)
+                .SetLoop(true)
+                .SetRoot(sequence);
+        }
+
+        private static IActionBehaviour CreateAction(ShooterBotAiBlackboard blackboard, ShooterBotAiActionConfig action)
+        {
+            switch (action.Type)
+            {
+                case ShooterBotAiActionTypes.Wander:
+                    return new ShooterBotWanderBehaviour(blackboard, action);
+                case ShooterBotAiActionTypes.ChaseTarget:
+                    return new ShooterBotChaseBehaviour(blackboard, action);
+                case ShooterBotAiActionTypes.AttackTarget:
+                    return new ShooterBotAttackBehaviour(blackboard, action);
+                default:
+                    return new ShooterBotIdleBehaviour(blackboard);
+            }
+        }
+
+        private static bool EvaluateCondition(ShooterBotAiBlackboard blackboard, string condition)
+        {
+            switch (condition)
+            {
+                case ShooterBotAiConditions.HasTarget:
+                    return blackboard.HasTarget;
+                case ShooterBotAiConditions.NoTarget:
+                    return !blackboard.HasTarget;
+                case ShooterBotAiConditions.InAttackRange:
+                    return blackboard.InAttackRange;
+                case ShooterBotAiConditions.OutOfAttackRange:
+                    return blackboard.HasTarget && !blackboard.InAttackRange;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    internal sealed class ShooterBotAiBlackboard
+    {
+        public ShooterBotAiBlackboard(int playerId, ShooterBotAiConfig config)
+        {
+            PlayerId = playerId;
+            Config = config;
+            Command = new ShooterPlayerCommand(playerId, 0f, 0f, 1f, 0f, false);
+        }
+
+        public int PlayerId { get; }
+
+        public ShooterBotAiConfig Config { get; }
+
+        public int Frame { get; set; }
+
+        public float SelfX { get; set; }
+
+        public float SelfY { get; set; }
+
+        public bool HasTarget { get; set; }
+
+        public bool InAttackRange { get; set; }
+
+        public int TargetPlayerId { get; set; }
+
+        public float TargetX { get; set; }
+
+        public float TargetY { get; set; }
+
+        public float TargetDistance { get; set; }
+
+        public ShooterPlayerCommand Command { get; set; }
+    }
+
+    internal sealed class ShooterBotIdleBehaviour : IActionBehaviour
+    {
+        private readonly ShooterBotAiBlackboard _blackboard;
+
+        public ShooterBotIdleBehaviour(ShooterBotAiBlackboard blackboard)
+        {
+            _blackboard = blackboard;
+        }
+
+        public void Reset()
+        {
+        }
+
+        public ActionBehaviourStatus Tick(in ActionBehaviourContext ctx)
+        {
+            _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, 0f, 0f, 1f, 0f, false);
+            return ActionBehaviourStatus.Running;
+        }
+    }
+
+    internal sealed class ShooterBotWanderBehaviour : IActionBehaviour
+    {
+        private readonly ShooterBotAiBlackboard _blackboard;
+        private readonly ShooterBotAiActionConfig _action;
+
+        public ShooterBotWanderBehaviour(ShooterBotAiBlackboard blackboard, ShooterBotAiActionConfig action)
+        {
+            _blackboard = blackboard;
+            _action = action;
+        }
+
+        public void Reset()
+        {
+        }
+
+        public ActionBehaviourStatus Tick(in ActionBehaviourContext ctx)
+        {
+            var phase = (_blackboard.Frame + _blackboard.PlayerId * _action.PhaseOffset) * _action.PhaseScale;
+            var moveX = MathF.Cos(phase) * _action.MoveScale;
+            var moveY = MathF.Sin(phase) * _action.MoveScale;
+            _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, moveX, moveY, moveX, moveY, false);
+            return ActionBehaviourStatus.Running;
+        }
+    }
+
+    internal sealed class ShooterBotChaseBehaviour : IActionBehaviour
+    {
+        private readonly ShooterBotAiBlackboard _blackboard;
+        private readonly ShooterBotAiActionConfig _action;
+
+        public ShooterBotChaseBehaviour(ShooterBotAiBlackboard blackboard, ShooterBotAiActionConfig action)
+        {
+            _blackboard = blackboard;
+            _action = action;
+        }
+
+        public void Reset()
+        {
+        }
+
+        public ActionBehaviourStatus Tick(in ActionBehaviourContext ctx)
+        {
+            if (!_blackboard.HasTarget)
+            {
+                _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, 0f, 0f, 1f, 0f, false);
+                return ActionBehaviourStatus.Failure;
+            }
+
+            var dx = _blackboard.TargetX - _blackboard.SelfX;
+            var dy = _blackboard.TargetY - _blackboard.SelfY;
+            ShooterBotAiMath.Normalize(ref dx, ref dy);
+            _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, dx * _action.MoveScale, dy * _action.MoveScale, dx, dy, false);
+            return ActionBehaviourStatus.Running;
+        }
+    }
+
+    internal sealed class ShooterBotAttackBehaviour : IActionBehaviour
+    {
+        private readonly ShooterBotAiBlackboard _blackboard;
+        private readonly ShooterBotAiActionConfig _action;
+
+        public ShooterBotAttackBehaviour(ShooterBotAiBlackboard blackboard, ShooterBotAiActionConfig action)
+        {
+            _blackboard = blackboard;
+            _action = action;
+        }
+
+        public void Reset()
+        {
+        }
+
+        public ActionBehaviourStatus Tick(in ActionBehaviourContext ctx)
+        {
+            if (!_blackboard.HasTarget)
+            {
+                _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, 0f, 0f, 1f, 0f, false);
+                return ActionBehaviourStatus.Failure;
+            }
+
+            var aimX = _blackboard.TargetX - _blackboard.SelfX;
+            var aimY = _blackboard.TargetY - _blackboard.SelfY;
+            ShooterBotAiMath.Normalize(ref aimX, ref aimY);
+            var strafePhase = (_blackboard.Frame + _blackboard.PlayerId * _action.PhaseOffset) * _action.PhaseScale;
+            var moveX = -aimY * MathF.Cos(strafePhase) * _action.StrafeScale;
+            var moveY = aimX * MathF.Cos(strafePhase) * _action.StrafeScale;
+            var fireInterval = _action.FireInterval < 1 ? 1 : _action.FireInterval;
+            var fire = _blackboard.Frame % fireInterval == _blackboard.PlayerId % fireInterval;
+            _blackboard.Command = new ShooterPlayerCommand(_blackboard.PlayerId, moveX, moveY, aimX, aimY, fire);
+            return ActionBehaviourStatus.Running;
+        }
+    }
+
+    internal static class ShooterBotAiMath
+    {
+        public static void Normalize(ref float x, ref float y)
+        {
+            var lengthSq = x * x + y * y;
+            if (lengthSq <= 0.000001f)
+            {
+                x = 1f;
+                y = 0f;
+                return;
+            }
+
+            var inv = 1f / MathF.Sqrt(lengthSq);
+            x *= inv;
+            y *= inv;
+        }
+    }
+
+    internal sealed class ShooterBotAiConfig
+    {
+        public ShooterBotAiConfig(string id, string startState, float attackRange, IReadOnlyList<ShooterBotAiStateConfig> states, IReadOnlyList<ShooterBotAiTransitionConfig> transitions)
+        {
+            Id = string.IsNullOrWhiteSpace(id) ? ShooterBotAiProfileIds.SimpleBattle : id;
+            StartState = string.IsNullOrWhiteSpace(startState) ? ShooterBotAiStateIds.Wander : startState;
+            AttackRange = attackRange <= 0f ? 5.5f : attackRange;
+            States = states == null || states.Count == 0 ? ShooterBotAiDefaults.CreateStates() : states;
+            Transitions = transitions == null || transitions.Count == 0 ? ShooterBotAiDefaults.CreateTransitions() : transitions;
+        }
+
+        public string Id { get; }
+
+        public string StartState { get; }
+
+        public float AttackRange { get; }
+
+        public IReadOnlyList<ShooterBotAiStateConfig> States { get; }
+
+        public IReadOnlyList<ShooterBotAiTransitionConfig> Transitions { get; }
+    }
+
+    internal sealed class ShooterBotAiStateConfig
+    {
+        public ShooterBotAiStateConfig(string id, float interval, IReadOnlyList<ShooterBotAiActionConfig> actions)
+        {
+            Id = string.IsNullOrWhiteSpace(id) ? ShooterBotAiStateIds.Wander : id;
+            Interval = interval < 0f ? 0f : interval;
+            Actions = actions == null || actions.Count == 0
+                ? new[] { ShooterBotAiActionConfig.Idle() }
+                : actions;
+        }
+
+        public string Id { get; }
+
+        public float Interval { get; }
+
+        public IReadOnlyList<ShooterBotAiActionConfig> Actions { get; }
+    }
+
+    internal sealed class ShooterBotAiActionConfig
+    {
+        public ShooterBotAiActionConfig(string type, float moveScale, float strafeScale, float phaseScale, int phaseOffset, int fireInterval)
+        {
+            Type = string.IsNullOrWhiteSpace(type) ? ShooterBotAiActionTypes.Idle : type;
+            MoveScale = moveScale;
+            StrafeScale = strafeScale;
+            PhaseScale = phaseScale <= 0f ? 0.05f : phaseScale;
+            PhaseOffset = phaseOffset == 0 ? 1 : phaseOffset;
+            FireInterval = fireInterval < 1 ? 1 : fireInterval;
+        }
+
+        public string Type { get; }
+
+        public float MoveScale { get; }
+
+        public float StrafeScale { get; }
+
+        public float PhaseScale { get; }
+
+        public int PhaseOffset { get; }
+
+        public int FireInterval { get; }
+
+        public static ShooterBotAiActionConfig Idle()
+        {
+            return new ShooterBotAiActionConfig(ShooterBotAiActionTypes.Idle, 0f, 0f, 0.05f, 1, 1);
+        }
+    }
+
+    internal sealed class ShooterBotAiTransitionConfig
+    {
+        public ShooterBotAiTransitionConfig(string from, string to, string condition)
+        {
+            From = from ?? string.Empty;
+            To = to ?? string.Empty;
+            Condition = condition ?? string.Empty;
+        }
+
+        public string From { get; }
+
+        public string To { get; }
+
+        public string Condition { get; }
+    }
+
+    internal static class ShooterBotAiProfileCatalog
+    {
+        public static ShooterBotAiConfig SimpleBattle { get; } = ShooterBotAiJsonParser.Parse(ShooterBotAiJsonCatalog.SimpleBattleJson);
+
+        public static ShooterBotAiConfig Resolve(string profileId)
+        {
+            if (string.IsNullOrWhiteSpace(profileId) || string.Equals(profileId, ShooterBotAiProfileIds.SimpleBattle, StringComparison.OrdinalIgnoreCase))
+            {
+                return SimpleBattle;
+            }
+
+            return SimpleBattle;
+        }
+    }
+
+    internal static class ShooterBotAiJsonParser
+    {
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
+        {
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+            NullValueHandling = NullValueHandling.Ignore
+        };
+
+        public static ShooterBotAiConfig Parse(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw new ArgumentException("Shooter bot AI json is required.", nameof(json));
+            }
+
+            var dto = JsonConvert.DeserializeObject<ShooterBotAiConfigDto>(json, JsonSettings)
+                ?? throw new InvalidOperationException("Shooter bot AI json cannot be parsed.");
+            return dto.ToConfig();
+        }
+    }
+
+    internal sealed class ShooterBotAiConfigDto
+    {
+        [JsonProperty("id")]
+        public string? Id { get; set; }
+
+        [JsonProperty("startState")]
+        public string? StartState { get; set; }
+
+        [JsonProperty("attackRange")]
+        public float AttackRange { get; set; }
+
+        [JsonProperty("states")]
+        public List<ShooterBotAiStateConfigDto>? States { get; set; }
+
+        [JsonProperty("transitions")]
+        public List<ShooterBotAiTransitionConfigDto>? Transitions { get; set; }
+
+        public ShooterBotAiConfig ToConfig()
+        {
+            var states = new List<ShooterBotAiStateConfig>();
+            if (States != null)
+            {
+                for (int i = 0; i < States.Count; i++)
+                {
+                    states.Add(States[i].ToConfig());
+                }
+            }
+
+            var transitions = new List<ShooterBotAiTransitionConfig>();
+            if (Transitions != null)
+            {
+                for (int i = 0; i < Transitions.Count; i++)
+                {
+                    transitions.Add(Transitions[i].ToConfig());
+                }
+            }
+
+            return new ShooterBotAiConfig(Id ?? string.Empty, StartState ?? string.Empty, AttackRange, states, transitions);
+        }
+    }
+
+    internal sealed class ShooterBotAiStateConfigDto
+    {
+        [JsonProperty("id")]
+        public string? Id { get; set; }
+
+        [JsonProperty("interval")]
+        public float Interval { get; set; }
+
+        [JsonProperty("actions")]
+        public List<ShooterBotAiActionConfigDto>? Actions { get; set; }
+
+        public ShooterBotAiStateConfig ToConfig()
+        {
+            var actions = new List<ShooterBotAiActionConfig>();
+            if (Actions != null)
+            {
+                for (int i = 0; i < Actions.Count; i++)
+                {
+                    actions.Add(Actions[i].ToConfig());
+                }
+            }
+
+            return new ShooterBotAiStateConfig(Id ?? string.Empty, Interval, actions);
+        }
+    }
+
+    internal sealed class ShooterBotAiActionConfigDto
+    {
+        [JsonProperty("type")]
+        public string? Type { get; set; }
+
+        [JsonProperty("moveScale")]
+        public float MoveScale { get; set; }
+
+        [JsonProperty("strafeScale")]
+        public float StrafeScale { get; set; }
+
+        [JsonProperty("phaseScale")]
+        public float PhaseScale { get; set; }
+
+        [JsonProperty("phaseOffset")]
+        public int PhaseOffset { get; set; }
+
+        [JsonProperty("fireInterval")]
+        public int FireInterval { get; set; }
+
+        public ShooterBotAiActionConfig ToConfig()
+        {
+            return new ShooterBotAiActionConfig(Type ?? string.Empty, MoveScale, StrafeScale, PhaseScale, PhaseOffset, FireInterval);
+        }
+    }
+
+    internal sealed class ShooterBotAiTransitionConfigDto
+    {
+        [JsonProperty("from")]
+        public string? From { get; set; }
+
+        [JsonProperty("to")]
+        public string? To { get; set; }
+
+        [JsonProperty("condition")]
+        public string? Condition { get; set; }
+
+        public ShooterBotAiTransitionConfig ToConfig()
+        {
+            return new ShooterBotAiTransitionConfig(From ?? string.Empty, To ?? string.Empty, Condition ?? string.Empty);
+        }
+    }
+
+    internal static class ShooterBotAiJsonCatalog
+    {
+        public const string SimpleBattleJson = @"
+{
+  ""id"": ""simple-battle"",
+  ""startState"": ""Wander"",
+  ""attackRange"": 5.5,
+  ""states"": [
+    {
+      ""id"": ""Wander"",
+      ""interval"": 0.2,
+      ""actions"": [
+        { ""type"": ""wander"", ""moveScale"": 0.55, ""phaseScale"": 0.035, ""phaseOffset"": 31 }
+      ]
+    },
+    {
+      ""id"": ""Chase"",
+      ""interval"": 0.05,
+      ""actions"": [
+        { ""type"": ""chaseTarget"", ""moveScale"": 0.8 }
+      ]
+    },
+    {
+      ""id"": ""Attack"",
+      ""interval"": 0.05,
+      ""actions"": [
+        { ""type"": ""attackTarget"", ""strafeScale"": 0.35, ""phaseScale"": 0.08, ""phaseOffset"": 11, ""fireInterval"": 10 }
+      ]
+    }
+  ],
+  ""transitions"": [
+    { ""from"": ""Wander"", ""to"": ""Chase"", ""condition"": ""outOfAttackRange"" },
+    { ""from"": ""Wander"", ""to"": ""Attack"", ""condition"": ""inAttackRange"" },
+    { ""from"": ""Chase"", ""to"": ""Wander"", ""condition"": ""noTarget"" },
+    { ""from"": ""Chase"", ""to"": ""Attack"", ""condition"": ""inAttackRange"" },
+    { ""from"": ""Attack"", ""to"": ""Wander"", ""condition"": ""noTarget"" },
+    { ""from"": ""Attack"", ""to"": ""Chase"", ""condition"": ""outOfAttackRange"" }
+  ]
+}";
+    }
+
+    internal static class ShooterBotAiDefaults
+    {
+        public static IReadOnlyList<ShooterBotAiStateConfig> CreateStates()
+        {
+            return new[]
+            {
+                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Wander, 0.2f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.Wander, 0.55f, 0f, 0.035f, 31, 1) }),
+                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Chase, 0.05f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.ChaseTarget, 0.8f, 0f, 0.05f, 1, 1) }),
+                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Attack, 0.05f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.AttackTarget, 0f, 0.35f, 0.08f, 11, 10) })
+            };
+        }
+
+        public static IReadOnlyList<ShooterBotAiTransitionConfig> CreateTransitions()
+        {
+            return new[]
+            {
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Wander, ShooterBotAiStateIds.Chase, ShooterBotAiConditions.OutOfAttackRange),
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Wander, ShooterBotAiStateIds.Attack, ShooterBotAiConditions.InAttackRange),
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Chase, ShooterBotAiStateIds.Wander, ShooterBotAiConditions.NoTarget),
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Chase, ShooterBotAiStateIds.Attack, ShooterBotAiConditions.InAttackRange),
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Attack, ShooterBotAiStateIds.Wander, ShooterBotAiConditions.NoTarget),
+                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Attack, ShooterBotAiStateIds.Chase, ShooterBotAiConditions.OutOfAttackRange)
+            };
+        }
+    }
+
+    internal static class ShooterBotAiProfileIds
+    {
+        public const string SimpleBattle = "simple-battle";
+    }
+
+    internal static class ShooterBotAiStateIds
+    {
+        public const string Wander = "Wander";
+        public const string Chase = "Chase";
+        public const string Attack = "Attack";
+    }
+
+    internal static class ShooterBotAiActionTypes
+    {
+        public const string Idle = "idle";
+        public const string Wander = "wander";
+        public const string ChaseTarget = "chaseTarget";
+        public const string AttackTarget = "attackTarget";
+    }
+
+    internal static class ShooterBotAiConditions
+    {
+        public const string HasTarget = "hasTarget";
+        public const string NoTarget = "noTarget";
+        public const string InAttackRange = "inAttackRange";
+        public const string OutOfAttackRange = "outOfAttackRange";
+    }
+}

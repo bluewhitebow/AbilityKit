@@ -23,28 +23,35 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
-            var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveShield, targets))
+            var targets = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                return;
-            }
-
-            var removed = 0;
-            for (var i = 0; i < targets.Count; i++)
-            {
-                var targetActorId = targets[i];
-                if (targetActorId <= 0) continue;
-
-                if (args.InstanceId > 0)
+                if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveShield, targets))
                 {
-                    if (shields.RemoveShield(targetActorId, args.InstanceId)) removed++;
-                    continue;
+                    return;
                 }
 
-                removed += shields.RemoveShields(targetActorId, args.ShieldId, args.SourceActorId, args.RemoveAll);
-            }
+                var removed = 0;
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var targetActorId = targets[i];
+                    if (targetActorId <= 0) continue;
 
-            LogApplied(ctx, $"shieldId={args.ShieldId} instance={args.InstanceId} source={args.SourceActorId} targets={targets.Count} removed={removed}");
+                    if (args.InstanceId > 0)
+                    {
+                        if (shields.RemoveShield(targetActorId, args.InstanceId)) removed++;
+                        continue;
+                    }
+
+                    removed += shields.RemoveShields(targetActorId, args.ShieldId, args.SourceActorId, args.RemoveAll);
+                }
+
+                LogApplied(ctx, $"shieldId={args.ShieldId} instance={args.InstanceId} source={args.SourceActorId} targets={targets.Count} removed={removed}");
+            }
+            finally
+            {
+                PooledMobaPlanActionLists.Release(targets);
+            }
         }
     }
 }

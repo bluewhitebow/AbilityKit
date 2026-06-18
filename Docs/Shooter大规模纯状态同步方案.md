@@ -11,12 +11,14 @@
 
 ## 现状判断
 
-当前 Shooter 不是纯状态同步，而是混合模式：
+当前 Shooter 不是单一纯状态同步，而是多同步能力展柜：
 
 - 一条是输入帧同步/局部预测链路。
 - 一条是权威状态快照同步链路。
 - `StateSyncPush`、`WireStateSyncSnapshotPush`、`SubscribeStateSync` 已经具备状态同步基础。
-- 但当实体数量上升到上万后，继续依赖高频预测与回滚会失去稳定性。
+- runtime 侧已经提供 `ShooterPureStateSnapshotExporter` / `IShooterPureStateSnapshotPort`，可从 Svelto 战斗状态导出 `FullBaseline`、`Delta`、`LowFrequency` 形态的纯状态 payload。
+- 当前 exporter 已按 `ShooterPureStateSyncSettings.MaxEntityCount`、`ActiveSyncBudget`、`LowFrequencyIntervalFrames` 做基础预算、优先级和低频标记。
+- 但当实体数量上升到上万后，仍不能依赖高频预测与回滚；后续重点应继续补 AOI、客户端插值消费和服务端推送预算。
 
 ## 推荐架构
 
@@ -119,7 +121,7 @@
 
 ### 3. 统一快照导入语义
 
-当前 packed 快照导入更偏“覆盖式导入”。如果未来要支持真正的差值同步，需要明确：
+当前 pure-state runtime exporter 已经能导出 baseline/delta/low-frequency payload，但客户端消费和 import 语义仍需要继续正式化。当前 packed 快照导入更偏“覆盖式导入”。如果未来要支持真正的差值同步，需要明确：
 
 - 全量快照：重建基线。
 - 差值快照：基于最近基线增量应用。
@@ -135,10 +137,25 @@
 
 ## 推荐落地顺序
 
-1. 先保留并正式化权威状态同步通道。
-2. 再加入实体分层和兴趣管理。
-3. 然后实现全量/差值/低频三档快照。
-4. 最后把客户端预测限制在少量关键实体上。
+1. 先保留并正式化权威状态同步通道。✅ runtime exporter/port 已完成骨架。
+2. 再加入实体分层和兴趣管理。🟡 已有 `KeyInteraction` / `Combat` 分层和预算优先级，AOI 仍待补。
+3. 然后实现全量/差值/低频三档快照。🟡 已有 `FullBaseline` / `Delta` / `LowFrequency` 输出，字段级 diff 与生命周期 diff 仍待补。
+4. 最后把客户端预测限制在少量关键实体上。🟡 协议已有 `PredictedLocal` flag，客户端消费策略仍待接入。
+
+## 当前已落地的 runtime 语义
+
+- 玩家实体映射为 `ShooterPackedEntityKinds.Player` + `ShooterPureStateEntityLayers.KeyInteraction`，在预算内优先输出。
+- 投射物映射为 `ShooterPackedEntityKinds.Projectile` + `ShooterPureStateEntityLayers.Combat`，受 `ActiveSyncBudget` 裁剪。
+- 全量基线使用 `FullBaseline` + `Spawn`，delta 使用 `Delta` + `Update`。
+- 当 frame 命中 `LowFrequencyIntervalFrames` 时，delta payload 升级为 `LowFrequency`，低频实体带 `ShooterPureStateEntityFlags.LowFrequency`。
+- `VisibilityHints` 与输出实体一一对应，先作为后续 AOI/客户端兴趣管理消费入口。
+
+## 下一阶段缺口
+
+- 基于客户端视点或兴趣区块生成 AOI slice，而不是只按全局预算裁剪。
+- 基于 baseline cache 计算字段级 diff、spawn/despawn/owner/visibility lifecycle diff。
+- 在远程服务器推送链路选择 pure-state payload opCode，并按网络条件调整预算。
+- 客户端实现插值 buffer、延迟播放、低频补间和关键本地实体预测标记消费。
 
 ## 结论
 

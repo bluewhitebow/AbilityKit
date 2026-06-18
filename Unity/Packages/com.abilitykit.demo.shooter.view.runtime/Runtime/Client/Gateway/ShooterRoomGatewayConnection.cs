@@ -13,6 +13,7 @@ namespace AbilityKit.Demo.Shooter.View
         private readonly IConnection _connection;
         private readonly RequestClient _requestClient;
         private ShooterClientSession? _session;
+        private ShooterClientBattleHandle? _battle;
         private bool _disposed;
 
         public ShooterRoomGatewayConnection(IConnection connection)
@@ -35,6 +36,13 @@ namespace AbilityKit.Demo.Shooter.View
         public void AttachSession(ShooterClientSession session)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _battle = null;
+        }
+
+        public void AttachBattle(ShooterClientBattleHandle battle)
+        {
+            _battle = battle ?? throw new ArgumentNullException(nameof(battle));
+            _session = battle.Session;
         }
 
         public Task<ArraySegment<byte>> SendRequestAsync(uint opCode, ArraySegment<byte> payload, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -57,6 +65,29 @@ namespace AbilityKit.Demo.Shooter.View
 
             LastPushResult = result;
             SnapshotPushDispatched?.Invoke(opCode, payload, result);
+            RequestFullSnapshotResyncIfNeededAsync();
+        }
+
+        private void RequestFullSnapshotResyncIfNeededAsync()
+        {
+            var battle = _battle;
+            if (battle == null)
+            {
+                return;
+            }
+
+            _ = RequestFullSnapshotResyncIfNeededAsync(battle);
+        }
+
+        private async Task RequestFullSnapshotResyncIfNeededAsync(ShooterClientBattleHandle battle)
+        {
+            try
+            {
+                await battle.RequestFullSnapshotResyncIfNeededAsync().ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
 
         private void ThrowIfDisposed()

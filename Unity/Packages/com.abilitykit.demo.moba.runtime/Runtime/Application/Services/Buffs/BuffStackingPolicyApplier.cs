@@ -38,15 +38,13 @@ namespace AbilityKit.Demo.Moba.Services
 
         public BuffRuntime CreateNewRuntime(BuffMO buff, int sourceActorId, float durationSeconds)
         {
-            var rt = new BuffRuntime
-            {
-                BuffId = buff.Id,
-                Remaining = durationSeconds,
-                IntervalRemainingSeconds = 0,
-                SourceId = sourceActorId,
-                StackCount = 0,
-                SourceContextId = 0,
-            };
+            var rt = BuffRepository.RentRuntime();
+            rt.BuffId = buff.Id;
+            rt.Remaining = durationSeconds;
+            rt.IntervalRemainingSeconds = 0;
+            rt.SourceId = sourceActorId;
+            rt.StackCount = 0;
+            rt.SourceContextId = 0;
 
             AddStack(rt, buff.MaxStacks);
             ResetInterval(rt, buff);

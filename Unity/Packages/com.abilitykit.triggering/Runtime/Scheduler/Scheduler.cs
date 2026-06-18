@@ -7,8 +7,10 @@ namespace AbilityKit.Triggering.Runtime.Scheduler
     /// 旧版通用调度器实现。
     /// 主动调度模式：通过回调执行行为，支持周期性、延迟、持续执行。
     ///
-    /// 【兼容层】保留给依赖 Runtime/Scheduler 的旧代码；新触发器 Action 调度优先使用 Runtime/ActionScheduler，通用业务调度优先使用 Runtime/Schedule。
+    /// 【兼容层】保留给依赖 Runtime/Scheduler 的旧代码；新触发器 Action 调度优先使用 Runtime.ActionScheduler，
+    /// 规则调度优先使用 Runtime.RuleScheduler。
     /// </summary>
+    [Obsolete("Runtime/Scheduler is a legacy compatibility layer. Use Runtime.ActionScheduler for TriggerPlan action scheduling or Runtime.RuleScheduler for formal rule scheduling.")]
     public sealed class Scheduler : IScheduler
     {
         private readonly Action<object> _actionCallback;

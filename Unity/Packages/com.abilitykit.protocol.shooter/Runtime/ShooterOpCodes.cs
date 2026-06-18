@@ -15,6 +15,8 @@ namespace AbilityKit.Protocol.Shooter
             public const int PackedState = 5204;
             public const int PackedStateDelta = 5205;
             public const int StateHash = 5206;
+            public const int PureState = 5207;
+            public const int PureStateDelta = 5208;
         }
     }
 }

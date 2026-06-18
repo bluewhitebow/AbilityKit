@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AbilityKit.Ability.Host.Extensions.Client.StateSync;
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Demo.Shooter.View.Hosting;
+using AbilityKit.Network.Runtime.Sync;
 using AbilityKit.Protocol.Shooter;
 using UnityEngine;
 using UnityEngine.LowLevel;
@@ -14,10 +15,10 @@ using UnityEngine.PlayerLoop;
 namespace AbilityKit.Demo.Shooter.View.PlayMode
 {
     /// <summary>
-    /// Unity Play-mode host for the remote Shooter state-sync demo.
+    /// 远程 Shooter 状态同步演示的 Unity Play-mode host。
     /// <para>
-    /// Framework packages provide world/session/state-sync primitives. This type keeps the sample-specific Unity
-    /// PlayerLoop, reconnect flow, input pump and GameObject rendering composition in the Shooter example layer.
+    /// 框架包提供世界、会话与状态同步原语；该类型把示例特定的 Unity PlayerLoop、重连流程、输入泵和
+    /// GameObject 渲染组合保留在 Shooter 示例层。
     /// </para>
     /// </summary>
     public static class ShooterRemoteStateSyncPlayModeHost
@@ -36,6 +37,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         private static Exception? _lastError;
         private static long _stepCount;
         private static long _renderCount;
+        private static SyncClock? _localClock;
+        private static SyncTimeAnchor _lastLocalTimeAnchor;
 
         public static event Action? StateChanged;
 
@@ -64,6 +67,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         public static long GatewayInputResyncRequestedCount => _gatewayInputQueue?.ResyncRequestedCount ?? 0L;
         public static long StepCount => _stepCount;
         public static long RenderCount => _renderCount;
+        public static SyncTimeAnchor LastLocalTimeAnchor => _lastLocalTimeAnchor;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
@@ -104,6 +108,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 _lastTickResult = default;
                 _stepCount = 0;
                 _renderCount = 0;
+                _localClock = new SyncClock(1d / _options.SessionOptions.TickRate, timelineTicksPerStep: 1L);
+                _lastLocalTimeAnchor = default;
                 _lastError = null;
                 return state.Launch;
             }
@@ -155,6 +161,11 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             }
         }
 
+        public static void RebuildViews()
+        {
+            ViewSink.RebuildAll();
+        }
+
         private static void Install()
         {
             InstallPlayerLoop();
@@ -204,6 +215,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
             _gatewayInputQueue?.CompleteIfFinished();
 
+            _lastLocalTimeAnchor = (_localClock ??= new SyncClock(1d / _options.SessionOptions.TickRate, timelineTicksPerStep: 1L)).Advance();
             var input = InputSource.ReadInput(_options.SessionOptions.ControlledPlayerId);
             _lastInput = input;
             _stepCount++;
@@ -232,7 +244,15 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 null,
                 state.Launch.GatewayConnection.LastPushResult,
                 default,
-                null);
+                _lastLocalTimeAnchor,
+                null,
+                null,
+                state.Launch.Session.Presentation.NeedsPureStateFullBaselineResync,
+                state.Launch.Session.Presentation.LastPureStateResyncReason,
+                state.Launch.Session.Presentation.LastPureStateAppliedFrame,
+                state.Launch.Session.Presentation.LastPureStateAppliedStateHash,
+                state.Launch.Session.Presentation.LastPureStateResyncFrame,
+                state.Launch.Session.Presentation.LastPureStateResyncStateHash);
             ViewSink.Render(in frame);
             _renderCount++;
         }
@@ -249,6 +269,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _lastTickResult = default;
             _stepCount = 0;
             _renderCount = 0;
+            _localClock = null;
+            _lastLocalTimeAnchor = default;
             _isStarting = false;
         }
 

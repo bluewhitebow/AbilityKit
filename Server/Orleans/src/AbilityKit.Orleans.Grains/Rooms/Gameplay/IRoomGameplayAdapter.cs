@@ -15,11 +15,13 @@ internal interface IRoomGameplayAdapter
 
     void SetReady(object state, RoomReadyRequest request);
 
-    void PickHero(object state, RoomPickHeroRequest request);
+    void SubmitCommand(object state, RoomGameplayCommandRequest request);
 
     bool CanStart(object state);
 
     List<RoomPlayerSnapshot> BuildPlayerSnapshots(object state);
 
     BattleInitParams BuildBattleInitParams(object state, RoomSummary summary, StartRoomBattleRequest request);
+
+    PlayerInitInfo? BuildLateJoinPlayer(object state, RoomSummary summary, string accountId);
 }

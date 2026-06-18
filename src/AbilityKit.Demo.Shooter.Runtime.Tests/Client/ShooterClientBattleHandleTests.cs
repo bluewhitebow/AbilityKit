@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
@@ -150,6 +151,111 @@ public sealed class ShooterClientBattleHandleTests
     }
 
     [Fact]
+    public async Task ClientBattleHandleRequestsFullStateSyncWhenPureStateDeltaNeedsBaseline()
+    {
+        var source = new ShooterBattleRuntimePort();
+        var sourceStart = new ShooterStartGamePayload(
+            "battle-handle-pure-state-source",
+            30,
+            4908,
+            new[]
+            {
+                new ShooterStartPlayer(11, "P11", 0f, 0f),
+                new ShooterStartPlayer(12, "P12", 5f, 0f)
+            });
+        Assert.True(source.StartGame(in sourceStart));
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(9009ul, isFullBaseline: false, baselineFrame: 99, baselineHash: 123u);
+        var presentation = new ShooterPresentationFacade();
+        var session = new ShooterClientSession(new ShooterBattleRuntimePort(), presentation, tickRate: 30);
+        Assert.True(session.StartGame(in sourceStart));
+        var roomClient = new ScriptedShooterRoomClient();
+        var anchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 0, 1d / 30d);
+        var flow = new ShooterRoomGatewayFlowResult(
+            "session-token",
+            "room-9",
+            1009ul,
+            "battle-9",
+            9009ul,
+            11u,
+            in anchor,
+            223456L,
+            ShooterRoomGatewayEntryKind.TeamLobby,
+            canStart: true,
+            started: true,
+            subscribed: true,
+            "ready");
+        var handle = new ShooterClientBattleHandle(session, flow, roomClient);
+
+        var applyResult = session.ApplyGatewayPush(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreatePureStateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+        var requestResult = await handle.RequestFullSnapshotResyncIfNeededAsync();
+
+        Assert.Equal(ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded, applyResult);
+        Assert.False(session.NeedsFullSnapshotResync);
+        Assert.True(presentation.NeedsPureStateFullBaselineResync);
+        Assert.True(requestResult.Accepted);
+        Assert.Equal("session-token", roomClient.LastFullStateSyncRequest.SessionToken);
+        Assert.Equal("battle-9", roomClient.LastFullStateSyncRequest.BattleId);
+        Assert.Equal("room-9", roomClient.LastFullStateSyncRequest.RoomId);
+        Assert.Equal(9009ul, roomClient.LastFullStateSyncRequest.WorldId);
+        Assert.Equal(0, roomClient.LastFullStateSyncRequest.ClientFrame);
+        Assert.Equal(delta.Frame, roomClient.LastFullStateSyncRequest.LastAuthoritativeFrame);
+        Assert.Equal(0u, roomClient.LastFullStateSyncRequest.ClientStateHash);
+        Assert.Equal(delta.StateHash, roomClient.LastFullStateSyncRequest.AuthoritativeStateHash);
+        Assert.Equal("PureStateMissingBaseline", roomClient.LastFullStateSyncRequest.Reason);
+        Assert.Contains("request-full-state:room-9:battle-9:PureStateMissingBaseline", roomClient.Calls);
+    }
+
+    [Fact]
+    public async Task ClientBattleHandleApplyGatewayPushAndRequestsFullStateSyncWhenPureStateDeltaNeedsBaseline()
+    {
+        var source = new ShooterBattleRuntimePort();
+        var sourceStart = new ShooterStartGamePayload(
+            "battle-handle-pure-state-source-apply",
+            30,
+            4909,
+            new[]
+            {
+                new ShooterStartPlayer(11, "P11", 0f, 0f),
+                new ShooterStartPlayer(12, "P12", 5f, 0f)
+            });
+        Assert.True(source.StartGame(in sourceStart));
+        Assert.True(source.Tick(1f / 30f));
+        var delta = source.ExportPureStateSnapshot(9010ul, isFullBaseline: false, baselineFrame: 99, baselineHash: 123u);
+        var presentation = new ShooterPresentationFacade();
+        var session = new ShooterClientSession(new ShooterBattleRuntimePort(), presentation, tickRate: 30);
+        Assert.True(session.StartGame(in sourceStart));
+        var roomClient = new ScriptedShooterRoomClient();
+        var anchor = new ShooterGatewayWorldStartAnchor(123456L, 10000000L, 0, 1d / 30d);
+        var flow = new ShooterRoomGatewayFlowResult(
+            "session-token",
+            "room-9",
+            1009ul,
+            "battle-9",
+            9010ul,
+            11u,
+            in anchor,
+            223456L,
+            ShooterRoomGatewayEntryKind.TeamLobby,
+            canStart: true,
+            started: true,
+            subscribed: true,
+            "ready");
+        var handle = new ShooterClientBattleHandle(session, flow, roomClient);
+
+        var result = await handle.ApplyGatewayPushAndRequestFullSnapshotResyncIfNeededAsync(
+            RoomGatewayOpCodes.DeltaSnapshotPushed,
+            CreatePureStateGatewayPayload(in delta, ShooterOpCodes.Snapshot.PureStateDelta, isFullSnapshot: false));
+
+        Assert.Equal(ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded, result);
+        Assert.True(presentation.NeedsPureStateFullBaselineResync);
+        Assert.Equal("PureStateMissingBaseline", roomClient.LastFullStateSyncRequest.Reason);
+        Assert.Equal(1, roomClient.Calls.Count(call => call.StartsWith("request-full-state:")));
+    }
+
+    [Fact]
     public async Task ClientBattleHandleDoesNotRepeatSameFullStateSyncRequestWhileWaitingForSnapshot()
     {
         var runtime = new ShooterBattleRuntimePort();
@@ -202,5 +308,21 @@ public sealed class ShooterClientBattleHandleTests
         Assert.False(repeated.Accepted);
         Assert.Equal("not requested", repeated.Message);
         Assert.Equal(1, roomClient.Calls.Count(call => call.StartsWith("request-full-state:")));
+    }
+
+    private static ArraySegment<byte> CreatePureStateGatewayPayload(in ShooterPureStateSnapshotPayload pureState, int payloadOpCode, bool isFullSnapshot)
+    {
+        var wire = new WireStateSyncSnapshotPush
+        {
+            WorldId = pureState.WorldId,
+            Frame = pureState.Frame,
+            Timestamp = 456.5,
+            IsFullSnapshot = isFullSnapshot,
+            Actors = null,
+            PayloadOpCode = payloadOpCode,
+            Payload = ShooterPureStateSyncCodec.Serialize(in pureState),
+            ServerTicks = pureState.ServerTick
+        };
+        return WireRoomGatewayBinary.Serialize(in wire);
     }
 }

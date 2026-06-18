@@ -70,14 +70,20 @@ public sealed class RoomGrain : Grain, IRoomGrain
             summary.Tags == null ? null : new Dictionary<string, string>(summary.Tags)));
     }
 
-    public async Task<JoinRoomResponse> JoinAsync(string accountId)
+    public Task<JoinRoomResponse> JoinAsync(string accountId)
     {
+        return JoinMemberAsync(new JoinRoomMemberRequest(accountId));
+    }
+
+    public async Task<JoinRoomResponse> JoinMemberAsync(JoinRoomMemberRequest request)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
         var summary = RequireSummary();
         var gameplay = RequireGameplay();
         var gameplayState = RequireGameplayState();
-        EnsureAccountId(accountId);
+        EnsureAccountId(request.AccountId);
 
-        var alreadyMember = _members.Contains(accountId);
+        var alreadyMember = _members.Contains(request.AccountId);
         if (_closed && !string.IsNullOrEmpty(_battleId))
         {
             if (!alreadyMember)
@@ -87,8 +93,10 @@ public sealed class RoomGrain : Grain, IRoomGrain
                     throw new InvalidOperationException("Room is full.");
                 }
 
-                _members.Add(accountId);
-                TouchMember(accountId, isOnline: true);
+                _members.Add(request.AccountId);
+                TouchMember(request.AccountId, isOnline: true, isBot: request.IsBot);
+                gameplay.Join(gameplayState, summary, _members, request.AccountId);
+                await JoinRunningBattleAsync(gameplay, gameplayState, summary, request);
                 await NotifyRoomChangedAsync();
             }
 
@@ -99,7 +107,7 @@ public sealed class RoomGrain : Grain, IRoomGrain
         EnsureOpen();
         if (alreadyMember)
         {
-            TouchMember(accountId, isOnline: true);
+            TouchMember(request.AccountId, isOnline: true, isBot: request.IsBot);
             return new JoinRoomResponse(await GetSnapshotAsync(), RoomJoinKind.Reconnect, DateTime.UtcNow.Ticks);
         }
 
@@ -108,9 +116,9 @@ public sealed class RoomGrain : Grain, IRoomGrain
             throw new InvalidOperationException("Room is full.");
         }
 
-        _members.Add(accountId);
-        TouchMember(accountId, isOnline: true);
-        gameplay.Join(gameplayState, summary, _members, accountId);
+        _members.Add(request.AccountId);
+        TouchMember(request.AccountId, isOnline: true, isBot: request.IsBot);
+        gameplay.Join(gameplayState, summary, _members, request.AccountId);
         await NotifyRoomChangedAsync();
         return new JoinRoomResponse(await GetSnapshotAsync(), RoomJoinKind.TeamLobby, DateTime.UtcNow.Ticks);
     }
@@ -182,7 +190,7 @@ public sealed class RoomGrain : Grain, IRoomGrain
         return Task.CompletedTask;
     }
 
-    public Task PickHeroAsync(RoomPickHeroRequest request)
+    public Task SubmitGameplayCommandAsync(RoomGameplayCommandRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         RequireSummary();
@@ -192,7 +200,7 @@ public sealed class RoomGrain : Grain, IRoomGrain
         EnsureMember(request.AccountId);
 
         TouchMember(request.AccountId, isOnline: true);
-        gameplay.PickHero(gameplayState, request);
+        gameplay.SubmitCommand(gameplayState, request);
         return Task.CompletedTask;
     }
 
@@ -313,6 +321,34 @@ public sealed class RoomGrain : Grain, IRoomGrain
         }
     }
 
+    private async Task JoinRunningBattleAsync(
+        IRoomGameplayAdapter gameplay,
+        object gameplayState,
+        RoomSummary summary,
+        JoinRoomMemberRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(_battleId))
+        {
+            return;
+        }
+
+        var player = gameplay.BuildLateJoinPlayer(gameplayState, summary, request.AccountId);
+        if (player is null)
+        {
+            return;
+        }
+
+        var battleGrain = GrainFactory.GetGrain<IBattleLogicHostGrain>(_battleId);
+        var joinResult = await battleGrain.JoinPlayerAsync(new BattlePlayerJoinRequest(_worldId, player, request.IsBot));
+        if (!joinResult.Accepted)
+        {
+            _members.Remove(request.AccountId);
+            _memberStates.Remove(request.AccountId);
+            gameplay.Leave(gameplayState, request.AccountId);
+            throw new InvalidOperationException($"Battle late join rejected. Status={joinResult.Status}, Message={joinResult.Message}");
+        }
+    }
+
     private async Task NotifyRoomChangedAsync()
     {
         var summary = RequireSummary();
@@ -339,19 +375,22 @@ public sealed class RoomGrain : Grain, IRoomGrain
         await directory.RemoveRoomAsync(summary.RoomId);
     }
 
-    private void TouchMember(string accountId, bool isOnline)
+    private void TouchMember(string accountId, bool isOnline, bool? isBot = null)
     {
         var now = DateTime.UtcNow.Ticks;
+        _memberStates.TryGetValue(accountId, out var previousState);
         _memberStates[accountId] = new RoomMemberState(
             isOnline,
             now,
-            isOnline ? 0L : now);
+            isOnline ? 0L : now,
+            isBot ?? previousState?.IsBot ?? false);
     }
 
     private void MarkOffline(string accountId)
     {
         var now = DateTime.UtcNow.Ticks;
-        _memberStates[accountId] = new RoomMemberState(false, now, now);
+        _memberStates.TryGetValue(accountId, out var previousState);
+        _memberStates[accountId] = new RoomMemberState(false, now, now, previousState?.IsBot ?? false);
     }
 
     private Dictionary<string, RoomMemberState>? CloneMemberStates()

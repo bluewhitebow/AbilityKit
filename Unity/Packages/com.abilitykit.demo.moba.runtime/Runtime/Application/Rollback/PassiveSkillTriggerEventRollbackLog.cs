@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.FrameSync.Rollback;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Core.Serialization;
 using AbilityKit.Demo.Moba.Systems;
 
@@ -10,6 +11,20 @@ namespace AbilityKit.Demo.Moba.Rollback
     public sealed class PassiveSkillTriggerEventRollbackLog : IRollbackStateProvider
     {
         public const int DefaultKey = 10020;
+
+        private static readonly ObjectPool<FrameEvents> s_frameEventsPool = Pools.GetPool(
+            createFunc: () => new FrameEvents(),
+            onRelease: events => events.Clear(),
+            defaultCapacity: 32,
+            maxSize: 512,
+            collectionCheck: false);
+
+        private static readonly ObjectPool<List<int>> s_intListPool = Pools.GetPool(
+            createFunc: () => new List<int>(128),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
 
         private readonly Dictionary<int, FrameEvents> _eventsByFrame = new Dictionary<int, FrameEvents>(256);
 
@@ -20,7 +35,7 @@ namespace AbilityKit.Demo.Moba.Rollback
             var f = frame.Value;
             if (!_eventsByFrame.TryGetValue(f, out var fe))
             {
-                fe = new FrameEvents();
+                fe = s_frameEventsPool.Get();
                 _eventsByFrame[f] = fe;
             }
 
@@ -38,18 +53,23 @@ namespace AbilityKit.Demo.Moba.Rollback
             var cutoff = frame.Value;
             if (_eventsByFrame.Count == 0) return;
 
-            s_tmpKeys.Clear();
-            foreach (var kv in _eventsByFrame)
+            var tmpKeys = s_intListPool.Get();
+            try
             {
-                if (kv.Key > cutoff) s_tmpKeys.Add(kv.Key);
-            }
+                foreach (var kv in _eventsByFrame)
+                {
+                    if (kv.Key > cutoff) tmpKeys.Add(kv.Key);
+                }
 
-            for (int i = 0; i < s_tmpKeys.Count; i++)
+                for (int i = 0; i < tmpKeys.Count; i++)
+                {
+                    RemoveFrameEvents(tmpKeys[i]);
+                }
+            }
+            finally
             {
-                _eventsByFrame.Remove(s_tmpKeys[i]);
+                s_intListPool.Release(tmpKeys);
             }
-
-            s_tmpKeys.Clear();
         }
 
         public byte[] Export(FrameIndex frame)
@@ -69,30 +89,44 @@ namespace AbilityKit.Demo.Moba.Rollback
 
             if (payload == null || payload.Length == 0)
             {
-                _eventsByFrame.Remove(frame.Value);
+                RemoveFrameEvents(frame.Value);
                 return;
             }
 
             var p = BinaryObjectCodec.Decode<Payload>(payload);
             if (p.Events == null || p.Events.Length == 0)
             {
-                _eventsByFrame.Remove(frame.Value);
+                RemoveFrameEvents(frame.Value);
                 return;
             }
 
-            var fe = new FrameEvents();
+            RemoveFrameEvents(frame.Value);
+
+            var fe = s_frameEventsPool.Get();
             fe.Sequence = p.LastSequence;
             fe.Events.AddRange(p.Events);
             _eventsByFrame[frame.Value] = fe;
+        }
+
+        private void RemoveFrameEvents(int frame)
+        {
+            if (!_eventsByFrame.TryGetValue(frame, out var fe)) return;
+
+            _eventsByFrame.Remove(frame);
+            s_frameEventsPool.Release(fe);
         }
 
         private sealed class FrameEvents
         {
             public int Sequence;
             public readonly List<Entry> Events = new List<Entry>(8);
-        }
 
-        private static readonly List<int> s_tmpKeys = new List<int>(128);
+            public void Clear()
+            {
+                Sequence = 0;
+                Events.Clear();
+            }
+        }
 
         public readonly struct Payload
         {

@@ -1,9 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using AbilityKit.Ability.FrameSync;
+using AbilityKit.Ability.Host;
+using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.Demo.Moba.Config.BattleDemo;
+using AbilityKit.Demo.Moba.Config.Core;
+using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Diagnostics;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -17,6 +23,7 @@ namespace AbilityKit.Demo.Moba.Services
         void Gauge(string gaugeName, long value);
         void Sample(string sampleName, double value);
         void Warning(string key, string message, int maxCount = MobaBattleDiagnosticsDefaults.DefaultWarningLimit);
+        void Warning(string key, Func<string> messageFactory, int maxCount = MobaBattleDiagnosticsDefaults.DefaultWarningLimit);
         void Exception(string key, Exception exception, string context, int maxCount = MobaBattleDiagnosticsDefaults.DefaultExceptionLimit);
     }
 
@@ -43,6 +50,14 @@ namespace AbilityKit.Demo.Moba.Services
         public const string EffectsStep = "moba.effects.step";
         public const string SkillPipelineStep = "moba.skill.pipeline.step";
         public const string SkillRunnerStep = "moba.skill.runner.step";
+        public const string TraceRoots = "moba.trace.roots";
+        public const string TraceActiveRoots = "moba.trace.active.roots";
+        public const string TraceRetainedRoots = "moba.trace.retained.roots";
+        public const string TraceRetainedEndedRoots = "moba.trace.retained.ended.roots";
+        public const string TraceStaleRetainedRoots = "moba.trace.retained.stale.roots";
+        public const string SkillRuntimeActive = "moba.skill.runtime.active";
+        public const string SkillRuntimeWaitingChildren = "moba.skill.runtime.waiting.children";
+        public const string SkillRuntimePendingChildren = "moba.skill.runtime.pending.children";
     }
 
     public readonly struct MobaBattleDiagnosticScope : IDisposable
@@ -65,6 +80,60 @@ namespace AbilityKit.Demo.Moba.Services
         public void Dispose()
         {
             _diagnostics?.RecordDuration(_metricName, _startTimestamp, _warnThresholdMs, _context);
+        }
+    }
+
+    public static class MobaDependencyResolveDiagnostics
+    {
+        public static void LogSkillExecutionDependencies(IWorldResolver services, string owner)
+        {
+            if (services == null)
+            {
+                MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, owner, "Cannot log skill execution dependency diagnostics because resolver is null.");
+                return;
+            }
+
+            if (services is IWorldServiceContainer container)
+            {
+                MobaRuntimeLog.Error(
+                    MobaRuntimeLogModule.Input,
+                    MobaRuntimeLogPurpose.Validation,
+                    owner,
+                    $"Registered: SkillExecutor={container.IsRegistered(typeof(SkillExecutor))}, IFrameTime={container.IsRegistered(typeof(IFrameTime))}, IUnitResolver={container.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={container.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={container.IsRegistered(typeof(IWorldClock))}, IEventBus={container.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
+
+                LogTryResolveFailure<IWorldClock>(services, owner, "IWorldClock");
+                LogTryResolveFailure<IFrameTime>(services, owner, "IFrameTime");
+                LogTryResolveFailure<AbilityKit.Triggering.Eventing.IEventBus>(services, owner, "IEventBus");
+                LogTryResolveFailure<AbilityKit.Ability.Share.ECS.IUnitResolver>(services, owner, "IUnitResolver");
+                LogTryResolveFailure<MobaSkillLoadoutService>(services, owner, nameof(MobaSkillLoadoutService));
+                LogTryResolveFailure<MobaActorLookupService>(services, owner, nameof(MobaActorLookupService));
+                LogTryResolveFailure<IMobaSkillPipelineLibrary>(services, owner, nameof(IMobaSkillPipelineLibrary));
+            }
+
+            LogResolveException<IMobaSkillPipelineLibrary>(services, owner, nameof(IMobaSkillPipelineLibrary));
+            LogResolveException<MobaConfigDatabase>(services, owner, nameof(MobaConfigDatabase));
+            LogResolveException<MobaEffectExecutionService>(services, owner, nameof(MobaEffectExecutionService));
+            LogResolveException<AbilityKit.Triggering.Eventing.IEventBus>(services, owner, "IEventBus");
+        }
+
+        private static void LogTryResolveFailure<T>(IWorldResolver services, string owner, string name) where T : class
+        {
+            if (services.TryResolve(typeof(T), out _) == false)
+            {
+                MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, owner, $"Resolve check failed: {name}");
+            }
+        }
+
+        private static void LogResolveException<T>(IWorldResolver services, string owner, string name) where T : class
+        {
+            try
+            {
+                services.Resolve<T>();
+            }
+            catch (Exception ex)
+            {
+                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, owner, $"{name} resolve failed.");
+            }
         }
     }
 
@@ -99,10 +168,13 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (warnThresholdMs > 0d && elapsedMs >= warnThresholdMs)
             {
-                var suffix = string.IsNullOrEmpty(context) ? string.Empty : " " + context;
                 Warning(
                     "slow:" + metricName,
-                    $"[MobaDiagnostics] Slow path {metricName} elapsed={elapsedMs:0.###}ms threshold={warnThresholdMs:0.###}ms.{suffix}",
+                    () =>
+                    {
+                        var suffix = string.IsNullOrEmpty(context) ? string.Empty : " " + context;
+                        return $"[MobaDiagnostics] Slow path {metricName} elapsed={elapsedMs:0.###}ms threshold={warnThresholdMs:0.###}ms.{suffix}";
+                    },
                     maxCount: MobaBattleDiagnosticsDefaults.DefaultWarningLimit);
             }
         }
@@ -130,6 +202,21 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (string.IsNullOrEmpty(message)) return;
             if (!ShouldLog(key, maxCount, out var suppressedAtLimit)) return;
+
+            AbilityKit.Core.Logging.Log.Warning(message);
+            if (suppressedAtLimit)
+            {
+                AbilityKit.Core.Logging.Log.Warning($"[MobaDiagnostics] Further diagnostics suppressed for key={key}.");
+            }
+        }
+
+        public void Warning(string key, Func<string> messageFactory, int maxCount = MobaBattleDiagnosticsDefaults.DefaultWarningLimit)
+        {
+            if (messageFactory == null) return;
+            if (!ShouldLog(key, maxCount, out var suppressedAtLimit)) return;
+
+            var message = messageFactory();
+            if (string.IsNullOrEmpty(message)) return;
 
             AbilityKit.Core.Logging.Log.Warning(message);
             if (suppressedAtLimit)

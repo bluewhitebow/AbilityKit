@@ -16,18 +16,23 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
         public override StartCooldownArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx)
         {
+            return ParseArgs(namedArgs, ctx, default(TriggerActionParseContext));
+        }
+
+        public override StartCooldownArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext)
+        {
             var skillId = ReadInt(namedArgs, ctx, 0, "skill_id", "skillid");
             var skillSlot = ReadInt(namedArgs, ctx, 0, "skill_slot", "skillslot", "slot");
             var cooldownMs = ReadInt(namedArgs, ctx, 0, "cooldown_ms", "cooldownms", "duration_ms", "durationms");
 
             if (skillId <= 0)
             {
-                skillId = ReadCurrentPayloadInt(ctx, SkillRulePayloadFields.SkillId, SkillRulePayloadFields.FieldId);
+                skillId = ReadCurrentPayloadInt(ctx, in parseContext, SkillRulePayloadFields.SkillId, SkillRulePayloadFields.FieldId);
             }
 
             if (skillSlot <= 0)
             {
-                skillSlot = ReadCurrentPayloadInt(ctx, SkillRulePayloadFields.SkillSlot, SkillRulePayloadFields.FieldId);
+                skillSlot = ReadCurrentPayloadInt(ctx, in parseContext, SkillRulePayloadFields.SkillSlot, SkillRulePayloadFields.FieldId);
             }
 
             return new StartCooldownArgs(skillId, skillSlot, cooldownMs);

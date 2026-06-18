@@ -105,8 +105,12 @@ namespace AbilityKit.Demo.Moba.Services
             var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(args.EventId);
             var key = new EventKey<BuffEventArgs>(eid);
             _eventBus.Publish(key, in args);
-            object boxed = args;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (_eventBus.HasSubscribers(objectKey))
+            {
+                object boxed = args;
+                _eventBus.Publish(objectKey, in boxed);
+            }
         }
     }
 }

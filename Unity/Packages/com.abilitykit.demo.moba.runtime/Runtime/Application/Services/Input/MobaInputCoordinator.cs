@@ -2,12 +2,9 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
-using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
-using AbilityKit.Demo.Moba.Config.BattleDemo;
-using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Demo.Moba.Services.LogicWorld;
 using AbilityKit.Protocol.Moba.StateSync;
@@ -41,8 +38,10 @@ namespace AbilityKit.Demo.Moba.Services
 
         protected override void OnServicesReady(IWorldResolver services)
         {
-            if (_skills != null) return;
             if (services == null) return;
+
+            _handlers.BindHandlers(services);
+            if (_skills != null) return;
 
             ResolveSkillExecutor(services);
         }
@@ -70,40 +69,7 @@ namespace AbilityKit.Demo.Moba.Services
             catch (Exception ex)
             {
                 MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, nameof(MobaInputCoordinator), "Failed to resolve SkillExecutor.");
-                LogResolveDiagnostics(services);
-            }
-        }
-
-        private static void LogResolveDiagnostics(IWorldResolver services)
-        {
-            if (services is IWorldServiceContainer c)
-            {
-                MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), $"Registered: SkillExecutor={c.IsRegistered(typeof(SkillExecutor))}, IFrameTime={c.IsRegistered(typeof(IFrameTime))}, IUnitResolver={c.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={c.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={c.IsRegistered(typeof(IWorldClock))}, IEventBus={c.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
-
-                if (services.TryResolve(typeof(IWorldClock), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IWorldClock");
-                if (services.TryResolve(typeof(IFrameTime), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IFrameTime");
-                if (services.TryResolve(typeof(AbilityKit.Triggering.Eventing.IEventBus), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IEventBus");
-                if (services.TryResolve(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IUnitResolver");
-                if (services.TryResolve(typeof(MobaSkillLoadoutService), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: MobaSkillLoadoutService");
-                if (services.TryResolve(typeof(MobaActorLookupService), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: MobaActorLookupService");
-                if (services.TryResolve(typeof(IMobaSkillPipelineLibrary), out _) == false) MobaRuntimeLog.Error(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Validation, nameof(MobaInputCoordinator), "Resolve check failed: IMobaSkillPipelineLibrary");
-            }
-
-            TryResolveForLog<IMobaSkillPipelineLibrary>(services, "IMobaSkillPipelineLibrary");
-            TryResolveForLog<MobaConfigDatabase>(services, "MobaConfigDatabase");
-            TryResolveForLog<MobaEffectExecutionService>(services, "MobaEffectExecutionService");
-            TryResolveForLog<AbilityKit.Triggering.Eventing.IEventBus>(services, "IEventBus");
-        }
-
-        private static void TryResolveForLog<T>(IWorldResolver services, string name) where T : class
-        {
-            try
-            {
-                services.Resolve<T>();
-            }
-            catch (Exception ex)
-            {
-                MobaRuntimeLog.Exception(ex, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, nameof(MobaInputCoordinator), $"{name} resolve failed.");
+                MobaDependencyResolveDiagnostics.LogSkillExecutionDependencies(services, nameof(MobaInputCoordinator));
             }
         }
 

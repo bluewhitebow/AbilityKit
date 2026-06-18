@@ -93,12 +93,11 @@ namespace AbilityKit.Demo.Moba.Systems.Bootstrap.Flow.Stages
                 throw new InvalidOperationException("PlanTriggeringStage requires IMobaRuntimeValidationRunner.");
             }
 
-            var context = new MobaRuntimeValidationContext(services, nameof(PlanTriggeringStage));
+            var context = new MobaRuntimeValidationContext(
+                services,
+                nameof(PlanTriggeringStage),
+                MobaRuntimeValidationInvocation.Bootstrap);
             var report = runner.ValidateAll(in context);
-            if (services.TryResolve<IMobaRuntimeValidationHistory>(out var history) && history != null && history.TryGetLastReport(out var lastReport))
-            {
-                MobaRuntimeLog.Info(MobaRuntimeLogModule.Bootstrap, MobaRuntimeLogPurpose.Validation, nameof(PlanTriggeringStage), $"Runtime validation history updated. runs={history.RunCount}, stage={history.LastStageName}, {lastReport.FormatSummary()}");
-            }
 
             if (report != null && report.ShouldBlockStartup)
             {

@@ -73,6 +73,10 @@ namespace AbilityKit.Trace
         internal readonly ITraceContextSource _contextSource;
         internal long _nextId;
 
+        private static readonly List<long> EmptyChildrenList = new List<long>();
+
+        public event Action<TraceRegistryEvent> RegistryEvent;
+
         protected TraceTreeRegistryBase(
             ITraceContextSource contextSource,
             ITraceLeafDataStore leafDataStore)
@@ -83,6 +87,7 @@ namespace AbilityKit.Trace
             _contextSource = contextSource ?? SimpleTraceContextSource.Instance;
             _leafDataStore = leafDataStore ?? NullTraceLeafDataStore.Instance;
             _nextId = 1;
+            TraceRegistryDirectory.Register(this);
         }
 
         /// <summary>
@@ -125,10 +130,94 @@ namespace AbilityKit.Trace
         /// </summary>
         public IEnumerable<long> RootIds => _roots.Keys;
 
+        public virtual string GetKindName(int kind) => null;
+
+        public IEnumerable<RootState> GetRootStates(bool activeOnly = false)
+        {
+            foreach (var kvp in _roots)
+            {
+                if (activeOnly && kvp.Value.ActiveCount <= 0)
+                    continue;
+                yield return new RootState(kvp.Key, kvp.Value.ActiveCount, kvp.Value.ExternalRefCount, kvp.Value.LastTouchedFrame);
+            }
+        }
+
+        public IEnumerable<RootState> GetActiveRoots()
+        {
+            foreach (var state in GetRootStates(true))
+                yield return state;
+        }
+
+        public IEnumerable<RootState> GetEndedRoots()
+        {
+            foreach (var kvp in _roots)
+                if (kvp.Value.ActiveCount == 0)
+                    yield return new RootState(kvp.Key, kvp.Value.ActiveCount, kvp.Value.ExternalRefCount, kvp.Value.LastTouchedFrame);
+        }
+
+        public bool TryGetNodeSnapshot(long contextId, out TraceNodeSnapshot snapshot)
+        {
+            if (_contexts.TryGetValue(contextId, out var record))
+            {
+                snapshot = CreateNodeSnapshot(record);
+                return true;
+            }
+
+            snapshot = default;
+            return false;
+        }
+
+        public IEnumerable<TraceNodeSnapshot> GetNodeSnapshotsByRoot(long rootId)
+        {
+            foreach (var kvp in _contexts)
+                if (kvp.Value.RootId == rootId)
+                    yield return CreateNodeSnapshot(kvp.Value);
+        }
+
+        public bool TryGetChildren(long parentId, out IReadOnlyList<long> children)
+        {
+            if (_childrenByParent.TryGetValue(parentId, out var list))
+            {
+                children = list;
+                return true;
+            }
+
+            children = EmptyChildrenList;
+            return false;
+        }
+
+        public bool Contains(long contextId) => _contexts.ContainsKey(contextId);
+
+        public bool IsLeaf(long contextId)
+        {
+            if (!_contexts.ContainsKey(contextId))
+                return false;
+            if (_childrenByParent.TryGetValue(contextId, out var children) && children?.Count > 0)
+                return false;
+            return true;
+        }
+
+        public void SetLeafData(long contextId, object data)
+        {
+            if (!IsLeaf(contextId))
+                throw new InvalidOperationException($"Context {contextId} is not a leaf node.");
+            _leafDataStore.Set(contextId, data);
+        }
+
+        public bool TryGetLeafData(long contextId, out object data)
+        {
+            if (!IsLeaf(contextId)) { data = null; return false; }
+            return _leafDataStore.TryGet(contextId, out data);
+        }
+
         /// <summary>
         /// 释放资源
         /// </summary>
-        public void Dispose() => Clear();
+        public void Dispose()
+        {
+            TraceRegistryDirectory.Unregister(this);
+            Clear();
+        }
 
         /// <summary>
         /// 清理所有数据
@@ -140,6 +229,7 @@ namespace AbilityKit.Trace
             _childrenByParent.Clear();
             _nextId = 1;
             OnClear();
+            Publish(new TraceRegistryEvent(TraceRegistryEventKind.RegistryCleared, 0, 0, 0, 0, GetCurrentFrame()));
         }
 
         /// <summary>
@@ -153,7 +243,10 @@ namespace AbilityKit.Trace
         public void RetainRoot(long rootId)
         {
             if (_roots.TryGetValue(rootId, out var record))
+            {
                 _roots[rootId] = record.WithExternalRefCount(record.ExternalRefCount + 1);
+                Publish(new TraceRegistryEvent(TraceRegistryEventKind.RootRetained, rootId, rootId, 0, 0, GetCurrentFrame()));
+            }
         }
 
         /// <summary>
@@ -162,7 +255,10 @@ namespace AbilityKit.Trace
         public void ReleaseRoot(long rootId)
         {
             if (_roots.TryGetValue(rootId, out var record))
+            {
                 _roots[rootId] = record.WithExternalRefCount(Math.Max(0, record.ExternalRefCount - 1));
+                Publish(new TraceRegistryEvent(TraceRegistryEventKind.RootReleased, rootId, rootId, 0, 0, GetCurrentFrame()));
+            }
         }
 
         /// <summary>
@@ -181,9 +277,12 @@ namespace AbilityKit.Trace
                 endedFrame: GetCurrentFrame(),
                 endReason: reason);
 
+            var frame = GetCurrentFrame();
             if (_roots.TryGetValue(record.RootId, out var rootRec))
                 _roots[record.RootId] = rootRec.WithActiveCount(rootRec.ActiveCount - 1)
-                    .WithLastTouchedFrame(GetCurrentFrame());
+                    .WithLastTouchedFrame(frame);
+
+            Publish(new TraceRegistryEvent(TraceRegistryEventKind.NodeEnded, contextId, record.RootId, record.ParentId, record.Kind, frame, reason));
             return true;
         }
 
@@ -192,9 +291,13 @@ namespace AbilityKit.Trace
         /// </summary>
         public int EndRoot(long rootId, int reason = 0)
         {
-            if (!_contexts.ContainsKey(rootId))
+            if (!_contexts.TryGetValue(rootId, out var record))
                 return 0;
-            return EndSubtree(rootId, reason);
+
+            var count = EndSubtree(rootId, reason);
+            if (count > 0)
+                Publish(new TraceRegistryEvent(TraceRegistryEventKind.RootEnded, rootId, rootId, 0, record.Kind, GetCurrentFrame(), reason));
+            return count;
         }
 
         private int EndSubtree(long contextId, int reason)
@@ -204,6 +307,30 @@ namespace AbilityKit.Trace
                 foreach (var childId in children)
                     count += EndSubtree(childId, reason);
             return count;
+        }
+
+        protected void Publish(in TraceRegistryEvent registryEvent)
+        {
+            RegistryEvent?.Invoke(registryEvent);
+        }
+
+        protected virtual object GetMetadataObject(long rootId) => null;
+
+        private TraceNodeSnapshot CreateNodeSnapshot(in TraceContextRecord record)
+        {
+            var childCount = 0;
+            if (_childrenByParent.TryGetValue(record.ContextId, out var children) && children != null)
+                childCount = children.Count;
+
+            return new TraceNodeSnapshot(
+                contextId: record.ContextId,
+                rootId: record.RootId,
+                parentId: record.ParentId,
+                kind: record.Kind,
+                endedFrame: record.EndedFrame,
+                endReason: record.EndReason,
+                childCount: childCount,
+                metadata: GetMetadataObject(record.RootId));
         }
     }
 
@@ -230,6 +357,11 @@ namespace AbilityKit.Trace
         /// 获取元数据存储
         /// </summary>
         public ITraceMetadataStore<T> MetadataStore => _metadataStore;
+
+        protected override object GetMetadataObject(long rootId)
+        {
+            return _metadataStore.TryGetMetadata(rootId, out var metadata) ? metadata : null;
+        }
 
         /// <summary>
         /// 创建根节点
@@ -262,6 +394,7 @@ namespace AbilityKit.Trace
                 contextId, kind, sourceActorId, targetActorId,
                 originId, originDisplay, targetId, targetDisplay, configId);
             _metadataStore.SetMetadata(contextId, metadata);
+            Publish(new TraceRegistryEvent(TraceRegistryEventKind.RootCreated, contextId, contextId, 0, kind, Frame));
 
             return contextId;
         }
@@ -339,6 +472,7 @@ namespace AbilityKit.Trace
                     .WithLastTouchedFrame(Frame);
             }
 
+            Publish(new TraceRegistryEvent(TraceRegistryEventKind.ChildCreated, contextId, rootId, parentContextId, kind, Frame));
             return contextId;
         }
 
@@ -447,42 +581,6 @@ namespace AbilityKit.Trace
         }
 
         /// <summary>
-        /// 检查节点是否存在
-        /// </summary>
-        public bool Contains(long contextId) => _contexts.ContainsKey(contextId);
-
-        /// <summary>
-        /// 判断指定节点是否为叶子节点
-        /// </summary>
-        public bool IsLeaf(long contextId)
-        {
-            if (!_contexts.ContainsKey(contextId))
-                return false;
-            if (_childrenByParent.TryGetValue(contextId, out var children) && children?.Count > 0)
-                return false;
-            return true;
-        }
-
-        /// <summary>
-        /// 为叶子节点设置附加快照数据
-        /// </summary>
-        public void SetLeafData(long contextId, object data)
-        {
-            if (!IsLeaf(contextId))
-                throw new InvalidOperationException($"Context {contextId} is not a leaf node.");
-            _leafDataStore.Set(contextId, data);
-        }
-
-        /// <summary>
-        /// 尝试获取叶子节点附加快照数据
-        /// </summary>
-        public bool TryGetLeafData(long contextId, out object data)
-        {
-            if (!IsLeaf(contextId)) { data = null; return false; }
-            return _leafDataStore.TryGet(contextId, out data);
-        }
-
-        /// <summary>
         /// 获取根节点状态
         /// </summary>
         public bool TryGetRootState(long rootId, out RootState state)
@@ -495,22 +593,6 @@ namespace AbilityKit.Trace
             state = default;
             return false;
         }
-
-        /// <summary>
-        /// 获取根节点的所有子节点 ID
-        /// </summary>
-        public bool TryGetChildren(long parentId, out IReadOnlyList<long> children)
-        {
-            if (_childrenByParent.TryGetValue(parentId, out var list))
-            {
-                children = list;
-                return true;
-            }
-            children = EmptyChildrenList;
-            return false;
-        }
-
-        private static readonly List<long> EmptyChildrenList = new List<long>();
 
         /// <summary>
         /// 构建从指定节点到根节点的链路
@@ -631,26 +713,7 @@ namespace AbilityKit.Trace
             _childrenByParent.Remove(rootId);
             _metadataStore.Clear(rootId);
             _leafDataStore.Clear(rootId);
-        }
-
-        /// <summary>
-        /// 获取所有活跃根节点
-        /// </summary>
-        public IEnumerable<RootState> GetActiveRoots()
-        {
-            foreach (var kvp in _roots)
-                if (kvp.Value.ActiveCount > 0)
-                    yield return new RootState(kvp.Key, kvp.Value.ActiveCount, kvp.Value.ExternalRefCount, kvp.Value.LastTouchedFrame);
-        }
-
-        /// <summary>
-        /// 获取所有已结束的根节点
-        /// </summary>
-        public IEnumerable<RootState> GetEndedRoots()
-        {
-            foreach (var kvp in _roots)
-                if (kvp.Value.ActiveCount == 0)
-                    yield return new RootState(kvp.Key, kvp.Value.ActiveCount, kvp.Value.ExternalRefCount, kvp.Value.LastTouchedFrame);
+            Publish(new TraceRegistryEvent(TraceRegistryEventKind.RootPurged, rootId, rootId, 0, 0, Frame));
         }
 
         // ========================================================================

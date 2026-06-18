@@ -16,6 +16,11 @@ namespace AbilityKit.Game.Battle.Agent
     public sealed class MobaDemoHarnessCarrier : ISyncDemoCarrier, ISyncDemoCarrierCapabilities
     {
         public const string DefaultCarrierName = "Moba";
+        public const string MassBattleLodDegradedReason = "Moba carrier runs MassBattleLodSync as all-entities authoritative interpolation: missing DistanceAoi, TeamOrFactionAoi, PriorityBudget, LodFrequency, and RequestAoiSlice runtime enforcement.";
+        public const string AuthoritativeInterpolationRequiredReason = "Moba carrier currently supports authoritative interpolation playback only.";
+        public const string StateStreamRequiredReason = "Moba carrier requires a fixed-rate or batch state stream.";
+
+        private const InterestPolicy MassBattleLodRequiredInterest = InterestPolicy.DistanceAoi | InterestPolicy.TeamOrFactionAoi | InterestPolicy.PriorityBudget | InterestPolicy.LodFrequency;
 
         private readonly IClientSyncStrategy<PlayerInputCommand, MobaRemoteSnapshotSample> _strategy;
         private readonly Func<NetworkConditioningStats> _networkStats;
@@ -49,22 +54,30 @@ namespace AbilityKit.Game.Battle.Agent
 
         public SyncDemoCapabilityResult Supports(in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile)
         {
-            if (profile.CompatibilityModel == NetworkSyncModel.MassBattleLodSync)
-            {
-                return SyncDemoCapabilityResult.Degraded("Moba carrier does not yet implement AOI or LOD budgets; running as all-entities authoritative interpolation.");
-            }
-
             if (profile.ClientPlayback != ClientPlaybackPolicy.AuthoritativeInterpolation)
             {
-                return SyncDemoCapabilityResult.Unsupported("Moba carrier currently supports authoritative interpolation playback only.");
+                return SyncDemoCapabilityResult.Unsupported(AuthoritativeInterpolationRequiredReason);
             }
 
             if (!profile.Snapshot.HasFlag(SnapshotPolicy.FixedRateStateStream) && !profile.Snapshot.HasFlag(SnapshotPolicy.BatchSnapshot))
             {
-                return SyncDemoCapabilityResult.Unsupported("Moba carrier requires a fixed-rate or batch state stream.");
+                return SyncDemoCapabilityResult.Unsupported(StateStreamRequiredReason);
+            }
+
+            if (profile.CompatibilityModel == NetworkSyncModel.MassBattleLodSync)
+            {
+                return IsMassBattleLodProfile(in profile)
+                    ? SyncDemoCapabilityResult.Degraded(MassBattleLodDegradedReason)
+                    : SyncDemoCapabilityResult.Unsupported("MassBattleLodSync profile must declare DistanceAoi, TeamOrFactionAoi, PriorityBudget, LodFrequency, and RequestAoiSlice policies.");
             }
 
             return SyncDemoCapabilityResult.Supported;
+        }
+
+        private static bool IsMassBattleLodProfile(in NetworkSyncProfile profile)
+        {
+            return (profile.Interest & MassBattleLodRequiredInterest) == MassBattleLodRequiredInterest &&
+                   profile.Recovery.HasFlag(RecoveryPolicy.RequestAoiSlice);
         }
 
         public DemoHarnessStepTelemetry Step(in DemoHarnessStepContext context)

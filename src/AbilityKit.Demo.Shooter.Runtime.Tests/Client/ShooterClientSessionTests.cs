@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Demo.Shooter.View;
 using AbilityKit.Network.Runtime;
+using AbilityKit.Network.Runtime.Sync;
 using AbilityKit.Protocol.Room;
 using AbilityKit.Protocol.Shooter;
 using Xunit;
@@ -228,6 +229,8 @@ public sealed class ShooterClientSessionTests
         Assert.Equal("Accepted", result.Remote.Status);
         Assert.False(result.Remote.ShouldResync);
         Assert.Equal(123456789L, result.Remote.ServerTicks);
+        Assert.Contains(session.LastFastReconnectHealthEvents, e => e.Kind == SyncHealthEventKind.InputAccepted && e.Frame == 7);
+        Assert.Contains(session.LastFastReconnectHealthEvents, e => e.Kind == SyncHealthEventKind.LagCompensatedValidationAccepted && e.Frame == 7);
         Assert.Equal(RoomGatewayOpCodes.SubmitBattleInput, transport.LastOpCode);
         Assert.True(transport.LastPayload.Count > 0);
         var wire = WireRoomGatewayBinary.Deserialize<WireSubmitBattleInputReq>(transport.LastPayload);
@@ -284,6 +287,8 @@ public sealed class ShooterClientSessionTests
         Assert.Equal("RejectedTooFarFuture", result.Remote.Status);
         Assert.True(result.Remote.ShouldResync);
         Assert.Equal(987654321L, result.Remote.ServerTicks);
+        Assert.Contains(session.LastFastReconnectHealthEvents, e => e.Kind == SyncHealthEventKind.InputRejected && e.Frame == 30);
+        Assert.Contains(session.LastFastReconnectHealthEvents, e => e.Kind == SyncHealthEventKind.LagCompensatedValidationRejected && e.Frame == 30);
         Assert.True(session.NeedsFullSnapshotResync);
         Assert.Equal(ShooterClientRecoveryState.AwaitingFullSnapshot, session.RecoveryState);
         Assert.Equal(ShooterClientResyncReason.ClientHashRejectedByServer, session.LastResyncReason);

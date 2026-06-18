@@ -7,7 +7,7 @@ using AbilityKit.GameplayTags;
 
 namespace AbilityKit.Demo.Moba.Services
 {
-    public sealed class BuffContinuousRuntime : MobaContinuousRuntimeBase, IMobaTickableContinuous, IMobaContinuousIntervalState, IMobaContinuousRuntimeStateSync, IMobaContinuousRuntimeDebugSource, IMobaContextSourceProvider
+    public sealed class BuffContinuousRuntime : MobaContinuousRuntimeBase, IMobaTickableContinuous, IMobaContinuousIntervalState, IMobaContinuousRuntimeStateSync, IMobaContinuousRuntimeDebugSource, IMobaContinuousExecutionContextProvider
     {
         private readonly BuffContinuousConfig _config;
 
@@ -100,6 +100,33 @@ namespace AbilityKit.Demo.Moba.Services
                 handle,
                 source);
             return BuffId > 0 || SourceActorId > 0 || TargetActorId > 0 || sourceContextId != 0 || handle.IsValid;
+        }
+
+        public bool TryGetCombatExecutionContext(out MobaCombatExecutionContext context)
+        {
+            context = default;
+            if (!TryGetContextSource(out var source) || !source.HasExecutionSource)
+            {
+                return false;
+            }
+
+            var combatSource = new MobaCombatContextSource(
+                source.ContextKind != EffectContextKind.Unknown ? source.ContextKind : EffectContextKind.Buff,
+                source.TraceKind != MobaTraceKind.None ? source.TraceKind : MobaTraceKind.BuffTick,
+                source.SourceActorId != 0 ? source.SourceActorId : SourceActorId,
+                source.TargetActorId != 0 ? source.TargetActorId : TargetActorId,
+                source.SourceContextId != 0 ? source.SourceContextId : SourceContextId,
+                source.RootContextId != 0 ? source.RootContextId : source.SourceContextId,
+                source.OwnerContextId != 0 ? source.OwnerContextId : source.SourceContextId,
+                source.ConfigId != 0 ? source.ConfigId : BuffId,
+                source.TriggerId,
+                source.Frame,
+                source.SkillRuntimeHandle,
+                source.RuntimeKind ?? "Buff",
+                source.RuntimeConfigId != 0 ? source.RuntimeConfigId : BuffId,
+                true);
+            context = MobaCombatContextBuilder.FromSource(this, in combatSource);
+            return context.HasExecutionSource;
         }
 
         public bool TryGetContextSource(out MobaContextSourceView source)

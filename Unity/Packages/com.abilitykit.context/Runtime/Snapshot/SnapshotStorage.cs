@@ -10,59 +10,76 @@ namespace AbilityKit.Context
     /// </summary>
     public sealed class SnapshotStorage
     {
-        private readonly Dictionary<long, IContextSnapshot> _snapshots = new();
-        private readonly Dictionary<long, List<long>> _bySource = new();
-        private readonly Dictionary<long, List<long>> _byOwner = new();
+        private sealed class SnapshotRecord
+        {
+            public IContextSnapshot Snapshot;
+            public long Version;
+            public int Frame;
+            public long SavedAtMs;
+            public long SourceEntityId;
+            public long OwnerEntityId;
+        }
 
-        private readonly object _lock = new();
+        private readonly Dictionary<long, SnapshotRecord> _snapshots = new Dictionary<long, SnapshotRecord>();
+        private readonly Dictionary<long, HashSet<long>> _bySource = new Dictionary<long, HashSet<long>>();
+        private readonly Dictionary<long, HashSet<long>> _byOwner = new Dictionary<long, HashSet<long>>();
+        private readonly Dictionary<long, int> _latestFrameByEntity = new Dictionary<long, int>();
+        private readonly Dictionary<long, long> _latestVersionByEntity = new Dictionary<long, long>();
+        private readonly object _lock = new object();
 
-        /// <summary>
-        /// 保存快照
-        /// </summary>
         public void Save(IContextSnapshot snapshot)
         {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+
             lock (_lock)
             {
-                _snapshots[snapshot.EntityId] = snapshot;
+                RemoveIndexes(snapshot.EntityId);
 
-                // 按来源索引
-                if (snapshot is ISourceContext src && src.SourceEntityId > 0)
+                var record = new SnapshotRecord
                 {
-                    if (!_bySource.TryGetValue(src.SourceEntityId, out var sourceList))
-                    {
-                        sourceList = new List<long>();
-                        _bySource[src.SourceEntityId] = sourceList;
-                    }
-                    sourceList.Add(snapshot.EntityId);
-                }
+                    Snapshot = snapshot,
+                    Version = snapshot is IVersionedContextSnapshot versioned ? versioned.Version : GetNextVersion(snapshot.EntityId),
+                    Frame = snapshot is IVersionedContextSnapshot versionedSnapshot ? versionedSnapshot.Frame : 0,
+                    SavedAtMs = TimeUtil.CurrentTimeMs,
+                    SourceEntityId = snapshot is ISourceContext sourceContext ? sourceContext.SourceEntityId : 0,
+                    OwnerEntityId = snapshot is IOwnerContext ownerContext ? ownerContext.OwnerEntityId : 0
+                };
 
-                // 按 Owner 索引
-                if (snapshot is IOwnerContext owner && owner.OwnerEntityId > 0)
-                {
-                    if (!_byOwner.TryGetValue(owner.OwnerEntityId, out var ownerList))
-                    {
-                        ownerList = new List<long>();
-                        _byOwner[owner.OwnerEntityId] = ownerList;
-                    }
-                    ownerList.Add(snapshot.EntityId);
-                }
+                _snapshots[snapshot.EntityId] = record;
+                _latestFrameByEntity[snapshot.EntityId] = record.Frame;
+                _latestVersionByEntity[snapshot.EntityId] = record.Version;
+
+                if (record.SourceEntityId > 0)
+                    AddIndex(_bySource, record.SourceEntityId, snapshot.EntityId);
+
+                if (record.OwnerEntityId > 0)
+                    AddIndex(_byOwner, record.OwnerEntityId, snapshot.EntityId);
             }
         }
 
-        /// <summary>
-        /// 获取快照
-        /// </summary>
-        public IContextSnapshot? Get(long entityId)
+        public IContextSnapshot Get(long entityId)
         {
             lock (_lock)
             {
-                return _snapshots.TryGetValue(entityId, out var snapshot) ? snapshot : null;
+                return _snapshots.TryGetValue(entityId, out var record) ? record.Snapshot : null;
             }
         }
 
-        /// <summary>
-        /// 获取指定来源的快照
-        /// </summary>
+        public bool TryGetRecord(long entityId, out ContextSnapshotRecord record)
+        {
+            lock (_lock)
+            {
+                if (_snapshots.TryGetValue(entityId, out var snapshotRecord))
+                {
+                    record = new ContextSnapshotRecord(snapshotRecord.Snapshot, snapshotRecord.Version, snapshotRecord.Frame, snapshotRecord.SavedAtMs);
+                    return true;
+                }
+            }
+
+            record = default;
+            return false;
+        }
+
         public IEnumerable<IContextSnapshot> GetBySource(long sourceEntityId)
         {
             lock (_lock)
@@ -70,16 +87,10 @@ namespace AbilityKit.Context
                 if (!_bySource.TryGetValue(sourceEntityId, out var ids))
                     return Enumerable.Empty<IContextSnapshot>();
 
-                return ids
-                    .Where(_snapshots.ContainsKey)
-                    .Select(id => _snapshots[id])
-                    .ToList();
+                return ids.Where(id => _snapshots.ContainsKey(id)).Select(id => _snapshots[id].Snapshot).ToList();
             }
         }
 
-        /// <summary>
-        /// 获取指定 Owner 的快照
-        /// </summary>
         public IEnumerable<IContextSnapshot> GetByOwner(long ownerEntityId)
         {
             lock (_lock)
@@ -87,58 +98,34 @@ namespace AbilityKit.Context
                 if (!_byOwner.TryGetValue(ownerEntityId, out var ids))
                     return Enumerable.Empty<IContextSnapshot>();
 
-                return ids
-                    .Where(_snapshots.ContainsKey)
-                    .Select(id => _snapshots[id])
-                    .ToList();
+                return ids.Where(id => _snapshots.ContainsKey(id)).Select(id => _snapshots[id].Snapshot).ToList();
             }
         }
 
-        /// <summary>
-        /// 标记快照对应的实体已销毁
-        /// </summary>
         public void MarkDestroyed(long entityId)
         {
             lock (_lock)
             {
-                if (_snapshots.TryGetValue(entityId, out var snapshot) && snapshot is IDestroyableSnapshot ds)
-                {
-                    ds.MarkDestroyed();
-                }
+                if (_snapshots.TryGetValue(entityId, out var record) && record.Snapshot is IDestroyableSnapshot destroyable)
+                    destroyable.MarkDestroyed();
             }
         }
 
-        /// <summary>
-        /// 移除快照
-        /// </summary>
         public bool Remove(long entityId)
         {
             lock (_lock)
             {
-                if (!_snapshots.TryGetValue(entityId, out var snapshot))
+                if (!_snapshots.TryGetValue(entityId, out var record))
                     return false;
 
+                RemoveIndexes(entityId);
                 _snapshots.Remove(entityId);
-
-                if (snapshot is ISourceContext src && src.SourceEntityId > 0)
-                {
-                    if (_bySource.TryGetValue(src.SourceEntityId, out var sourceList))
-                        sourceList.Remove(entityId);
-                }
-
-                if (snapshot is IOwnerContext owner && owner.OwnerEntityId > 0)
-                {
-                    if (_byOwner.TryGetValue(owner.OwnerEntityId, out var ownerList))
-                        ownerList.Remove(entityId);
-                }
-
+                _latestFrameByEntity.Remove(entityId);
+                _latestVersionByEntity.Remove(entityId);
                 return true;
             }
         }
 
-        /// <summary>
-        /// 清空所有快照
-        /// </summary>
         public void Clear()
         {
             lock (_lock)
@@ -146,43 +133,79 @@ namespace AbilityKit.Context
                 _snapshots.Clear();
                 _bySource.Clear();
                 _byOwner.Clear();
+                _latestFrameByEntity.Clear();
+                _latestVersionByEntity.Clear();
             }
         }
 
-        /// <summary>
-        /// 快照数量
-        /// </summary>
         public int Count
         {
             get
             {
                 lock (_lock)
-                {
                     return _snapshots.Count;
+            }
+        }
+
+        public long GetLatestVersion(long entityId)
+        {
+            lock (_lock)
+                return _latestVersionByEntity.TryGetValue(entityId, out var version) ? version : 0;
+        }
+
+        public int GetLatestFrame(long entityId)
+        {
+            lock (_lock)
+                return _latestFrameByEntity.TryGetValue(entityId, out var frame) ? frame : 0;
+        }
+
+        private long GetNextVersion(long entityId)
+        {
+            return _latestVersionByEntity.TryGetValue(entityId, out var current) ? current + 1 : 1;
+        }
+
+        private static void AddIndex(Dictionary<long, HashSet<long>> index, long key, long entityId)
+        {
+            if (!index.TryGetValue(key, out var ids))
+            {
+                ids = new HashSet<long>();
+                index[key] = ids;
+            }
+
+            ids.Add(entityId);
+        }
+
+        private void RemoveIndexes(long entityId)
+        {
+            if (_snapshots.TryGetValue(entityId, out var existing))
+            {
+                if (existing.SourceEntityId > 0 && _bySource.TryGetValue(existing.SourceEntityId, out var sourceIds))
+                {
+                    sourceIds.Remove(entityId);
+                    if (sourceIds.Count == 0)
+                        _bySource.Remove(existing.SourceEntityId);
+                }
+
+                if (existing.OwnerEntityId > 0 && _byOwner.TryGetValue(existing.OwnerEntityId, out var ownerIds))
+                {
+                    ownerIds.Remove(entityId);
+                    if (ownerIds.Count == 0)
+                        _byOwner.Remove(existing.OwnerEntityId);
                 }
             }
         }
     }
 
-    /// <summary>
-    /// 快照来源接口
-    /// </summary>
     public interface ISourceContext
     {
         long SourceEntityId { get; }
     }
 
-    /// <summary>
-    /// 快照所有者接口
-    /// </summary>
     public interface IOwnerContext
     {
         long OwnerEntityId { get; }
     }
 
-    /// <summary>
-    /// 可销毁快照接口
-    /// </summary>
     public interface IDestroyableSnapshot
     {
         bool IsDestroyed { get; }

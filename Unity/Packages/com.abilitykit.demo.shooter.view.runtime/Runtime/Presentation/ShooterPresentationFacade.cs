@@ -9,6 +9,7 @@ namespace AbilityKit.Demo.Shooter.View
         private readonly ShooterSnapshotViewAdapter _adapter;
         private readonly ShooterSnapshotStream _stream;
         private readonly ShooterReconciliationDiagnosticsStream _diagnosticsStream;
+        private readonly ShooterPureStateSnapshotSyncController _pureStateSync;
         private int _controlledPlayerId;
 
         public ShooterPresentationFacade()
@@ -38,6 +39,7 @@ namespace AbilityKit.Demo.Shooter.View
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             _diagnosticsStream = diagnosticsStream ?? throw new ArgumentNullException(nameof(diagnosticsStream));
+            _pureStateSync = new ShooterPureStateSnapshotSyncController(snapshot => ApplyPureStateSnapshot(in snapshot), _gatewayDecoder);
         }
 
         public ShooterSnapshotViewModel ViewModel => _adapter.ViewModel;
@@ -45,6 +47,18 @@ namespace AbilityKit.Demo.Shooter.View
         public ShooterSnapshotStream Snapshots => _stream;
 
         public ShooterReconciliationDiagnosticsStream ReconciliationDiagnostics => _diagnosticsStream;
+
+        public bool NeedsPureStateFullBaselineResync => _pureStateSync.NeedsFullBaselineResync;
+
+        public ShooterPureStateResyncReason LastPureStateResyncReason => _pureStateSync.LastResyncReason;
+
+        public int LastPureStateAppliedFrame => _pureStateSync.LastAppliedFrame;
+
+        public uint LastPureStateAppliedStateHash => _pureStateSync.LastAppliedStateHash;
+
+        public int LastPureStateResyncFrame => _pureStateSync.LastResyncFrame;
+
+        public uint LastPureStateResyncStateHash => _pureStateSync.LastResyncStateHash;
 
         public int ControlledPlayerId
         {
@@ -65,6 +79,11 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             var snapshot = _gatewayDecoder.Decode(payload);
+            if (snapshot.PureStateSnapshot.HasValue)
+            {
+                return _pureStateSync.ApplyGatewaySnapshot(in snapshot) != ShooterPureStateSnapshotApplyResult.Ignored;
+            }
+
             ApplyGatewaySnapshot(in snapshot);
             return true;
         }
@@ -78,6 +97,17 @@ namespace AbilityKit.Demo.Shooter.View
         public void ApplyInterpolatedGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
         {
             var batch = _adapter.ApplyGatewaySnapshot(in snapshot, _controlledPlayerId);
+            _stream.Publish(in batch);
+        }
+
+        public ShooterPureStateSnapshotApplyResult ApplyPureStateGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
+        {
+            return _pureStateSync.ApplyGatewaySnapshot(in snapshot);
+        }
+
+        public void ApplyPureStateSnapshot(in ShooterPureStateSnapshotPayload snapshot)
+        {
+            var batch = _adapter.ApplyPureStateSnapshot(in snapshot, _controlledPlayerId);
             _stream.Publish(in batch);
         }
 

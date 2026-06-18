@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Components;
-using AbilityKit.Demo.Moba.Util.Generator;
+using AbilityKit.Demo.Moba.Services.EntityConstruction;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Ability.Host;
 using AbilityKit.Core.Logging;

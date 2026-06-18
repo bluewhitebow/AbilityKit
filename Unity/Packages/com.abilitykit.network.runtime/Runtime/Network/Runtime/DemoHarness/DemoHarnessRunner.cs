@@ -8,8 +8,8 @@ using AbilityKit.Network.Runtime.Sync;
 namespace AbilityKit.Network.Runtime.DemoHarness
 {
     /// <summary>
-    /// Gameplay-agnostic adapter used by the sync demo harness to drive one demo carrier.
-    /// Shooter, Moba or any future sample can implement this without leaking gameplay types into the framework.
+    /// 同步 DemoHarness 用来驱动单个示例 carrier 的玩法无关适配器。
+    /// Shooter、Moba 或未来示例都可以实现它，而不需要把具体玩法类型泄漏到框架层。
     /// </summary>
     public interface ISyncDemoCarrier
     {
@@ -59,6 +59,70 @@ namespace AbilityKit.Network.Runtime.DemoHarness
         SyncDemoCapabilityResult Supports(in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile);
     }
 
+    /// <summary>
+    /// DemoHarness 集成可复用的 carrier 能力选择器。
+    /// </summary>
+    public static class DemoHarnessCarrierSelector
+    {
+        public static bool CanRun(
+            ISyncDemoCarrier carrier,
+            in NetworkSyncProfile profile,
+            in NetworkConditionProfile networkProfile)
+        {
+            if (carrier == null) throw new ArgumentNullException(nameof(carrier));
+
+            if (carrier is ISyncDemoCarrierCapabilities capabilities)
+            {
+                return capabilities.Supports(in profile, in networkProfile).CanRun;
+            }
+
+            return carrier.SyncModel == profile.CompatibilityModel;
+        }
+
+        public static bool TrySelectFirst(
+            IEnumerable<ISyncDemoCarrier?> carriers,
+            in NetworkSyncProfile profile,
+            in NetworkConditionProfile networkProfile,
+            out ISyncDemoCarrier carrier)
+        {
+            if (carriers == null) throw new ArgumentNullException(nameof(carriers));
+
+            foreach (var candidate in carriers)
+            {
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (CanRun(candidate, in profile, in networkProfile))
+                {
+                    carrier = candidate;
+                    return true;
+                }
+            }
+
+            carrier = null!;
+            return false;
+        }
+
+        public static ISyncDemoCarrier SelectFirstOrThrow(
+            IEnumerable<ISyncDemoCarrier?> carriers,
+            in NetworkSyncProfile profile,
+            in NetworkConditionProfile networkProfile,
+            string subjectName = "demo harness carrier")
+        {
+            if (string.IsNullOrWhiteSpace(subjectName)) throw new ArgumentException("Subject name is required.", nameof(subjectName));
+
+            if (TrySelectFirst(carriers, in profile, in networkProfile, out var carrier))
+            {
+                return carrier;
+            }
+
+            throw new NotSupportedException(
+                $"No {subjectName} supports sync profile '{profile.CompatibilityModel}' under the requested network profile.");
+        }
+    }
+
     public enum DemoHarnessRunStatus
     {
         Completed = 0,
@@ -68,7 +132,7 @@ namespace AbilityKit.Network.Runtime.DemoHarness
     }
 
     /// <summary>
-    /// Describes one A x B x C demo run: sync model, network profile and carrier.
+    /// 描述一次 A x B x C 演示运行：同步模型、网络档案与 carrier。
     /// </summary>
     public readonly struct DemoHarnessScenario
     {
@@ -200,7 +264,7 @@ namespace AbilityKit.Network.Runtime.DemoHarness
                     for (var networkIndex = 0; networkIndex < networks.Count; networkIndex++)
                     {
                         var network = networks[networkIndex];
-                        if (!CanCarrierRun(carrier, in profile, in network))
+                        if (!DemoHarnessCarrierSelector.CanRun(carrier, in profile, in network))
                         {
                             continue;
                         }
@@ -218,16 +282,6 @@ namespace AbilityKit.Network.Runtime.DemoHarness
             }
 
             return scenarios.AsReadOnly();
-        }
-
-        private static bool CanCarrierRun(ISyncDemoCarrier carrier, in NetworkSyncProfile profile, in NetworkConditionProfile networkProfile)
-        {
-            if (carrier is ISyncDemoCarrierCapabilities capabilities)
-            {
-                return capabilities.Supports(profile, networkProfile).CanRun;
-            }
-
-            return carrier.SyncModel == profile.CompatibilityModel;
         }
 
         private static string FormatName(string namePrefix, string carrierName, in NetworkSyncProfile profile, int networkIndex)

@@ -15,6 +15,11 @@ namespace AbilityKit.Demo.Moba.Services
         bool TryGetContextSource(out MobaContextSourceView source);
     }
 
+    public interface IMobaPersistentContextSourceProvider
+    {
+        bool TryGetPersistentContextSource(out MobaPersistentContextSourceSnapshot snapshot);
+    }
+
     public enum MobaContextSourceBoundary
     {
         Unknown = 0,

@@ -57,10 +57,9 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// Creates a session, optionally supplying an <see cref="InterpolationConfig"/>
-        /// for the <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> model. The config is
-        /// ignored by models that do not interpolate; when omitted the interpolation model falls back
-        /// to <see cref="InterpolationConfig.Default"/>.
+        /// 创建客户端会话，并可选为 <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> 模型提供
+        /// <see cref="InterpolationConfig"/>。该配置会被不做插值的模型忽略；省略时插值模型会回退到
+        /// <see cref="InterpolationConfig.Default"/>。
         /// </summary>
         public ShooterClientSession(
             IShooterBattleRuntimePort runtime,
@@ -118,9 +117,8 @@ namespace AbilityKit.Demo.Shooter.View
         public bool HasGateway => _syncController.HasGateway;
 
         /// <summary>
-        /// Reads interpolation playback health when the active sync model interpolates remote state
-        /// (i.e. <see cref="NetworkSyncModel.AuthoritativeInterpolation"/>). Returns <c>false</c> for
-        /// models that do not interpolate, leaving <paramref name="diagnostics"/> at its default.
+        /// 当当前同步模型会插值远端状态（即 <see cref="NetworkSyncModel.AuthoritativeInterpolation"/>）时，
+        /// 读取插值播放健康状态。对于不做插值的模型返回 <c>false</c>，并保持 <paramref name="diagnostics"/> 为默认值。
         /// </summary>
         public bool TryGetInterpolationDiagnostics(out InterpolationDiagnostics diagnostics)
         {

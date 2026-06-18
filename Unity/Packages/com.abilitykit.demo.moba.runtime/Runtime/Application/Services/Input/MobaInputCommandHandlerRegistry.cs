@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
+using AbilityKit.Ability.World.DI;
 using AbilityKit.Core.Markers;
 
 /// <summary>
@@ -33,8 +34,10 @@ namespace AbilityKit.Demo.Moba.Services
     {
         private readonly Dictionary<int, IMobaInputCommandHandler> _handlers = new Dictionary<int, IMobaInputCommandHandler>();
         private readonly Dictionary<int, MobaInputCommandHandlerDescriptor> _descriptors = new Dictionary<int, MobaInputCommandHandlerDescriptor>();
+        private IWorldResolver _services;
 
         public int HandlerCount => _handlers.Count;
+        public int DescriptorCount => _descriptors.Count;
 
         public MobaInputCommandHandlerRegistry() : base(4)
         {
@@ -64,10 +67,23 @@ namespace AbilityKit.Demo.Moba.Services
         public void Register(int opCode, Type implType)
         {
             if (!TryRegister(key: opCode, implType)) return;
-            IMobaInputCommandHandler handler = Activator.CreateInstance(implType) as IMobaInputCommandHandler;
-            if (handler == null) return;
-            _handlers[opCode] = handler;
+
             _descriptors[opCode] = new MobaInputCommandHandlerDescriptor(opCode, implType);
+            if (_services != null)
+            {
+                TryBindHandler(opCode, implType, allowFallback: true);
+            }
+        }
+
+        public void BindHandlers(IWorldResolver services)
+        {
+            _services = services;
+            if (_services == null) return;
+
+            foreach (KeyValuePair<int, MobaInputCommandHandlerDescriptor> pair in _descriptors)
+            {
+                TryBindHandler(pair.Key, pair.Value.HandlerType, allowFallback: true);
+            }
         }
 
         public bool TryGetHandlerDescriptor(int opCode, out MobaInputCommandHandlerDescriptor descriptor)
@@ -82,23 +98,68 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (!_handlers.TryGetValue(command.OpCode, out IMobaInputCommandHandler handler))
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.MissingHandler,
-                    $"MissingHandler(OpCode={command.OpCode},Registered={_handlers.Count})");
-                return false;
+                if (!_descriptors.TryGetValue(command.OpCode, out MobaInputCommandHandlerDescriptor descriptor) || !TryBindHandler(command.OpCode, descriptor.HandlerType, allowFallback: true))
+                {
+                    result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.MissingHandler);
+                    return false;
+                }
+
+                handler = _handlers[command.OpCode];
             }
 
             bool handled = handler.Handle(context, frame, command, out result);
             if (!handled && string.IsNullOrEmpty(result.Message))
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.HandlerRejected,
-                    $"HandlerRejected({handler.GetType().Name})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.HandlerRejected);
             }
 
             return handled;
+        }
+
+        private bool TryBindHandler(int opCode, Type implType, bool allowFallback)
+        {
+            if (implType == null) return false;
+            if (_handlers.ContainsKey(opCode)) return true;
+
+            if (TryResolveHandler(implType, out IMobaInputCommandHandler resolvedHandler))
+            {
+                _handlers[opCode] = resolvedHandler;
+                return true;
+            }
+
+            if (!allowFallback) return false;
+
+            IMobaInputCommandHandler fallbackHandler = Activator.CreateInstance(implType) as IMobaInputCommandHandler;
+            if (fallbackHandler == null) return false;
+
+            _handlers[opCode] = fallbackHandler;
+            return true;
+        }
+
+        private bool TryResolveHandler(Type implType, out IMobaInputCommandHandler handler)
+        {
+            handler = null;
+            if (_services == null) return false;
+
+            try
+            {
+                if (_services.TryResolve(implType, out object instance) && instance is IMobaInputCommandHandler typedHandler)
+                {
+                    handler = typedHandler;
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MobaRuntimeLog.Exception(
+                    ex,
+                    MobaRuntimeLogModule.Input,
+                    MobaRuntimeLogPurpose.Exception,
+                    nameof(MobaInputCommandHandlerRegistry),
+                    $"Failed to resolve input command handler from world services. type={implType.FullName}");
+            }
+
+            return false;
         }
     }
 }

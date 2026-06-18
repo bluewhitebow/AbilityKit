@@ -12,8 +12,7 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Routes Shooter authoritative snapshot pushes through the shared network middleware pipeline
-    /// before dispatching them to a client sync controller.
+    /// 先通过共享网络中间件管线处理 Shooter 的权威快照推送，然后再分发给客户端同步控制器。
     /// </summary>
     public sealed class ShooterCarrierNetworkLink
     {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 using AbilityKit.Orleans.Grains.Battle;
@@ -10,8 +10,8 @@ using Orleans.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddSingleton<ServerMobaWorldManager>(sp =>
-    new ServerMobaWorldManager(sp.GetRequiredService<ILogger<ServerMobaWorldManager>>()));
+builder.Services.AddSingleton<ServerBattleWorldManager>(sp =>
+    new ServerBattleWorldManager(sp.GetRequiredService<ILogger<ServerBattleWorldManager>>()));
 
 builder.UseOrleans(silo =>
 {
@@ -25,3 +25,4 @@ builder.UseOrleans(silo =>
 
 var host = builder.Build();
 await host.RunAsync();
+

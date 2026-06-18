@@ -7,6 +7,7 @@ using AbilityKit.Triggering.Runtime.Config;
 using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime.Config.Plans;
+using Newtonsoft.Json;
 
 namespace AbilityKit.Triggering.Runtime.Plan.Json
 {
@@ -57,6 +58,18 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
             public List<TriggerPlanDto> Triggers;
 
+            public Dictionary<string, TriggerPlanModuleTemplateDto> Templates;
+
+            public Dictionary<string, TriggerPlanModuleTemplateDto> Modules;
+
+            public List<TriggerPlanModuleInstanceDto> ModuleInstances;
+
+            public List<TriggerPlanModuleInstanceDto> TemplateInstances;
+
+            public Dictionary<string, ExecutionNodeDto> Behaviors;
+
+            public Dictionary<string, ExecutionNodeDto> Nodes;
+
             public Dictionary<int, string> Strings;
         }
 
@@ -90,6 +103,45 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             /// Cue SFX 标识（供工厂实现使用）
             /// </summary>
             public string CueSfxId;
+        }
+
+        [Serializable]
+        internal sealed class TriggerPlanModuleTemplateDto
+        {
+            public string Id;
+            public string TemplateId;
+            public string ModuleId;
+            public string DisplayName;
+            public string Description;
+            public List<TemplateParameterDto> Parameters;
+            public Dictionary<string, NumericValueRefDto> Defaults;
+            public List<TriggerPlanDto> Triggers;
+            public Dictionary<string, ExecutionNodeDto> Behaviors;
+            public Dictionary<string, ExecutionNodeDto> Nodes;
+        }
+
+        [Serializable]
+        internal sealed class TriggerPlanModuleInstanceDto
+        {
+            public string Id;
+            public string InstanceId;
+            public string TemplateId;
+            public string ModuleId;
+            public int TriggerIdOffset;
+            public int TriggerIdBase;
+            public string EventNamePrefix;
+            public string EventNameSuffix;
+            public Dictionary<string, NumericValueRefDto> Bindings;
+        }
+
+        [Serializable]
+        internal sealed class TemplateParameterDto
+        {
+            public string Name;
+            public string Kind;
+            public bool Required;
+            public string Description;
+            public NumericValueRefDto Default;
         }
 
         [Serializable]
@@ -130,6 +182,11 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             /// </summary>
             public Dictionary<string, NumericValueRefDto> Args;
 
+            public string ScheduleMode;
+            public float ScheduleParam;
+            public int MaxExecutions = -1;
+            public bool CanBeInterrupted = true;
+
             public string ExecutionPolicy;
             public int RetryMaxRetries = 3;
             public float RetryDelayMs;
@@ -147,6 +204,11 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
         internal sealed class ExecutionNodeDto
         {
             public string Kind;
+            public string BehaviorRef;
+            public string BehaviorId;
+            public string NodeRef;
+            public string NodeId;
+            public string Ref;
             public ActionCallPlanDto Action;
             public PredicatePlanDto Condition;
             public PredicatePlanDto UntilCondition;
@@ -172,6 +234,18 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             public string DomainId;
             public string Key;
             public string ExprText;
+            public bool Required;
+            public bool HasFallback;
+            public double FallbackValue;
+            public bool HasMin;
+            public double MinValue;
+            public bool HasMax;
+            public double MaxValue;
+            public bool HasScale;
+            public double Scale = 1d;
+            public double Offset;
+            public string Label;
+            public string Scope;
         }
 
 #pragma warning restore 0649
@@ -373,6 +447,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
         internal void LoadFromDto(TriggerPlanDatabaseDto dto)
         {
+            dto = ExpandModuleInstances(dto);
+
             var next = new List<Record>();
             var byTriggerId = new Dictionary<int, TriggerPlan<object>>();
             var executionRootsByTriggerId = new Dictionary<int, ITriggerPlanExecutable>();
@@ -393,7 +469,7 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
 
                     var cue = CueFactory.Create(t.CueKind, t.CueVfxId, t.CueSfxId) ?? NullTriggerCue.Instance;
                     var plan = _converter.Convert(t, cue);
-                    var executionRoot = _converter.ConvertExecutionRoot(t);
+                    var executionRoot = _converter.ConvertExecutionRoot(t, dto);
                     next.Add(new Record(t.TriggerId, t.EventName, eid, NormalizeScope(t.Scope), in plan, executionRoot));
                     byTriggerId[t.TriggerId] = plan;
                     if (executionRoot != null)
@@ -407,6 +483,397 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
             _byTriggerId = byTriggerId;
             _executionRootsByTriggerId = executionRootsByTriggerId;
             _strings = strings;
+        }
+
+        private static TriggerPlanDatabaseDto ExpandModuleInstances(TriggerPlanDatabaseDto dto)
+        {
+            if (dto == null)
+            {
+                return null;
+            }
+
+            var instances = CollectModuleInstances(dto);
+            if (instances.Count == 0)
+            {
+                return dto;
+            }
+
+            var templates = BuildModuleTemplateCatalog(dto);
+            var expanded = CloneDto(dto);
+            expanded.Triggers = expanded.Triggers != null
+                ? new List<TriggerPlanDto>(expanded.Triggers)
+                : new List<TriggerPlanDto>();
+            expanded.Behaviors = expanded.Behaviors != null
+                ? new Dictionary<string, ExecutionNodeDto>(expanded.Behaviors, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, ExecutionNodeDto>(StringComparer.OrdinalIgnoreCase);
+            expanded.Nodes = expanded.Nodes != null
+                ? new Dictionary<string, ExecutionNodeDto>(expanded.Nodes, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, ExecutionNodeDto>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < instances.Count; i++)
+            {
+                ExpandModuleInstance(instances[i], templates, expanded);
+            }
+
+            return expanded;
+        }
+
+        private static List<TriggerPlanModuleInstanceDto> CollectModuleInstances(TriggerPlanDatabaseDto dto)
+        {
+            var instances = new List<TriggerPlanModuleInstanceDto>();
+            if (dto?.ModuleInstances != null)
+            {
+                instances.AddRange(dto.ModuleInstances);
+            }
+
+            if (dto?.TemplateInstances != null)
+            {
+                instances.AddRange(dto.TemplateInstances);
+            }
+
+            return instances;
+        }
+
+        private static Dictionary<string, TriggerPlanModuleTemplateDto> BuildModuleTemplateCatalog(TriggerPlanDatabaseDto dto)
+        {
+            var catalog = new Dictionary<string, TriggerPlanModuleTemplateDto>(StringComparer.OrdinalIgnoreCase);
+            AddModuleTemplates(catalog, dto?.Templates);
+            AddModuleTemplates(catalog, dto?.Modules);
+            return catalog;
+        }
+
+        private static void AddModuleTemplates(
+            Dictionary<string, TriggerPlanModuleTemplateDto> catalog,
+            Dictionary<string, TriggerPlanModuleTemplateDto> templates)
+        {
+            if (catalog == null || templates == null)
+            {
+                return;
+            }
+
+            foreach (var kv in templates)
+            {
+                var template = kv.Value;
+                if (template == null)
+                {
+                    continue;
+                }
+
+                catalog[kv.Key] = template;
+                AddModuleTemplateAlias(catalog, template.Id, template);
+                AddModuleTemplateAlias(catalog, template.TemplateId, template);
+                AddModuleTemplateAlias(catalog, template.ModuleId, template);
+            }
+        }
+
+        private static void AddModuleTemplateAlias(
+            Dictionary<string, TriggerPlanModuleTemplateDto> catalog,
+            string id,
+            TriggerPlanModuleTemplateDto template)
+        {
+            if (!string.IsNullOrEmpty(id))
+            {
+                catalog[id] = template;
+            }
+        }
+
+        private static void ExpandModuleInstance(
+            TriggerPlanModuleInstanceDto instance,
+            Dictionary<string, TriggerPlanModuleTemplateDto> templates,
+            TriggerPlanDatabaseDto target)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            var templateId = !string.IsNullOrEmpty(instance.TemplateId) ? instance.TemplateId : instance.ModuleId;
+            if (string.IsNullOrEmpty(templateId))
+            {
+                throw new InvalidOperationException("Module instance requires TemplateId or ModuleId.");
+            }
+
+            if (templates == null || !templates.TryGetValue(templateId, out var template) || template == null)
+            {
+                throw new InvalidOperationException($"Module template not found: {templateId}");
+            }
+
+            var behaviorIdMap = BuildModuleScopedIdMap(template.Behaviors, instance);
+            var nodeIdMap = BuildModuleScopedIdMap(template.Nodes, instance);
+            MergeTemplateBehaviors(target, template, behaviorIdMap, nodeIdMap);
+            MergeTemplateNodes(target, template, behaviorIdMap, nodeIdMap);
+            if (template.Triggers == null || template.Triggers.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < template.Triggers.Count; i++)
+            {
+                var trigger = CloneTrigger(template.Triggers[i]);
+                if (trigger == null)
+                {
+                    continue;
+                }
+
+                RewriteTriggerExecutionRefs(trigger, behaviorIdMap, nodeIdMap);
+                ApplyModuleInstanceToTrigger(trigger, template, instance);
+                target.Triggers.Add(trigger);
+            }
+        }
+
+        private static Dictionary<string, string> BuildModuleScopedIdMap(
+            Dictionary<string, ExecutionNodeDto> nodes,
+            TriggerPlanModuleInstanceDto instance)
+        {
+            var idMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (nodes == null || nodes.Count == 0)
+            {
+                return idMap;
+            }
+
+            foreach (var kv in nodes)
+            {
+                idMap[kv.Key] = FormatModuleScopedId(kv.Key, instance);
+            }
+
+            return idMap;
+        }
+
+        private static void MergeTemplateBehaviors(
+            TriggerPlanDatabaseDto target,
+            TriggerPlanModuleTemplateDto template,
+            Dictionary<string, string> behaviorIdMap,
+            Dictionary<string, string> nodeIdMap)
+        {
+            if (template.Behaviors == null || template.Behaviors.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var kv in template.Behaviors)
+            {
+                var node = CloneExecutionNode(kv.Value);
+                RewriteExecutionNodeRefs(node, behaviorIdMap, nodeIdMap);
+                target.Behaviors[behaviorIdMap[kv.Key]] = node;
+            }
+        }
+
+        private static void MergeTemplateNodes(
+            TriggerPlanDatabaseDto target,
+            TriggerPlanModuleTemplateDto template,
+            Dictionary<string, string> behaviorIdMap,
+            Dictionary<string, string> nodeIdMap)
+        {
+            if (template.Nodes == null || template.Nodes.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var kv in template.Nodes)
+            {
+                var node = CloneExecutionNode(kv.Value);
+                RewriteExecutionNodeRefs(node, behaviorIdMap, nodeIdMap);
+                target.Nodes[nodeIdMap[kv.Key]] = node;
+            }
+        }
+
+        private static void ApplyModuleInstanceToTrigger(
+            TriggerPlanDto trigger,
+            TriggerPlanModuleTemplateDto template,
+            TriggerPlanModuleInstanceDto instance)
+        {
+            var offset = instance.TriggerIdOffset != 0 ? instance.TriggerIdOffset : instance.TriggerIdBase;
+            if (offset != 0)
+            {
+                trigger.TriggerId += offset;
+            }
+
+            if (!string.IsNullOrEmpty(instance.EventNamePrefix))
+            {
+                trigger.EventName = instance.EventNamePrefix + trigger.EventName;
+                trigger.EventId = 0;
+            }
+
+            if (!string.IsNullOrEmpty(instance.EventNameSuffix))
+            {
+                trigger.EventName += instance.EventNameSuffix;
+                trigger.EventId = 0;
+            }
+
+            trigger.Template = BuildModuleTriggerTemplateBinding(trigger.Template, template, instance);
+        }
+
+        private static TriggerTemplateBindingDto BuildModuleTriggerTemplateBinding(
+            TriggerTemplateBindingDto triggerBinding,
+            TriggerPlanModuleTemplateDto template,
+            TriggerPlanModuleInstanceDto instance)
+        {
+            var bindings = new Dictionary<string, NumericValueRefDto>(StringComparer.OrdinalIgnoreCase);
+            AddTemplateParameterDefaults(bindings, template?.Parameters);
+            AddNumericBindings(bindings, template?.Defaults);
+            AddNumericBindings(bindings, triggerBinding?.Bindings);
+            AddNumericBindings(bindings, instance?.Bindings);
+            ValidateRequiredTemplateParameters(bindings, template?.Parameters);
+
+            return new TriggerTemplateBindingDto
+            {
+                TemplateId = !string.IsNullOrEmpty(instance?.TemplateId)
+                    ? instance.TemplateId
+                    : (!string.IsNullOrEmpty(instance?.ModuleId) ? instance.ModuleId : triggerBinding?.TemplateId),
+                Bindings = bindings
+            };
+        }
+
+        private static void AddTemplateParameterDefaults(
+            Dictionary<string, NumericValueRefDto> bindings,
+            List<TemplateParameterDto> parameters)
+        {
+            if (bindings == null || parameters == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                var parameter = parameters[i];
+                if (parameter == null || string.IsNullOrEmpty(parameter.Name))
+                {
+                    continue;
+                }
+
+                if (parameter.Default != null)
+                {
+                    bindings[parameter.Name] = CloneNumericValueRef(parameter.Default);
+                }
+            }
+        }
+
+        private static void ValidateRequiredTemplateParameters(
+            Dictionary<string, NumericValueRefDto> bindings,
+            List<TemplateParameterDto> parameters)
+        {
+            if (bindings == null || parameters == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                var parameter = parameters[i];
+                if (parameter == null || string.IsNullOrEmpty(parameter.Name) || !parameter.Required)
+                {
+                    continue;
+                }
+
+                if (!bindings.TryGetValue(parameter.Name, out var binding) || binding == null)
+                {
+                    throw new InvalidOperationException($"Required module template parameter has no binding: {parameter.Name}");
+                }
+            }
+        }
+
+        private static void RewriteTriggerExecutionRefs(
+            TriggerPlanDto trigger,
+            Dictionary<string, string> behaviorIdMap,
+            Dictionary<string, string> nodeIdMap)
+        {
+            RewriteExecutionNodeRefs(trigger?.ExecutionRoot, behaviorIdMap, nodeIdMap);
+        }
+
+        private static void RewriteExecutionNodeRefs(
+            ExecutionNodeDto node,
+            Dictionary<string, string> behaviorIdMap,
+            Dictionary<string, string> nodeIdMap)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            RewriteRef(ref node.BehaviorRef, behaviorIdMap);
+            RewriteRef(ref node.BehaviorId, behaviorIdMap);
+            RewriteRef(ref node.NodeRef, nodeIdMap);
+            RewriteRef(ref node.NodeId, nodeIdMap);
+            if (!RewriteRef(ref node.Ref, behaviorIdMap))
+            {
+                RewriteRef(ref node.Ref, nodeIdMap);
+            }
+
+            RewriteExecutionNodeRefs(node.Children, behaviorIdMap, nodeIdMap);
+            RewriteExecutionNodeRefs(node.ElseChildren, behaviorIdMap, nodeIdMap);
+        }
+
+        private static void RewriteExecutionNodeRefs(
+            List<ExecutionNodeDto> nodes,
+            Dictionary<string, string> behaviorIdMap,
+            Dictionary<string, string> nodeIdMap)
+        {
+            if (nodes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                RewriteExecutionNodeRefs(nodes[i], behaviorIdMap, nodeIdMap);
+            }
+        }
+
+        private static bool RewriteRef(ref string id, Dictionary<string, string> idMap)
+        {
+            if (string.IsNullOrEmpty(id) || idMap == null || !idMap.TryGetValue(id, out var scopedId))
+            {
+                return false;
+            }
+
+            id = scopedId;
+            return true;
+        }
+
+        private static void AddNumericBindings(
+            Dictionary<string, NumericValueRefDto> target,
+            Dictionary<string, NumericValueRefDto> source)
+        {
+            if (target == null || source == null)
+            {
+                return;
+            }
+
+            foreach (var kv in source)
+            {
+                target[kv.Key] = CloneNumericValueRef(kv.Value);
+            }
+        }
+
+        private static string FormatModuleScopedId(string id, TriggerPlanModuleInstanceDto instance)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return id;
+            }
+
+            var prefix = !string.IsNullOrEmpty(instance?.InstanceId) ? instance.InstanceId : instance?.Id;
+            return string.IsNullOrEmpty(prefix) ? id : prefix + ":" + id;
+        }
+
+        private static TriggerPlanDatabaseDto CloneDto(TriggerPlanDatabaseDto dto)
+        {
+            return dto == null ? null : JsonConvert.DeserializeObject<TriggerPlanDatabaseDto>(JsonConvert.SerializeObject(dto));
+        }
+
+        private static TriggerPlanDto CloneTrigger(TriggerPlanDto dto)
+        {
+            return dto == null ? null : JsonConvert.DeserializeObject<TriggerPlanDto>(JsonConvert.SerializeObject(dto));
+        }
+
+        private static ExecutionNodeDto CloneExecutionNode(ExecutionNodeDto dto)
+        {
+            return dto == null ? null : JsonConvert.DeserializeObject<ExecutionNodeDto>(JsonConvert.SerializeObject(dto));
+        }
+
+        private static NumericValueRefDto CloneNumericValueRef(NumericValueRefDto dto)
+        {
+            return dto == null ? null : JsonConvert.DeserializeObject<NumericValueRefDto>(JsonConvert.SerializeObject(dto));
         }
 
         private static TriggerPlanScope NormalizeScope(TriggerPlanScope scope)

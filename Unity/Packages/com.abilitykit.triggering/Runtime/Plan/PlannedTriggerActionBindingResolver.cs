@@ -38,16 +38,18 @@ namespace AbilityKit.Triggering.Runtime.Plan
             NamedAction2<TArgs, object, TCtx>[] actions2,
             bool[] useNamedArgs)
         {
-            if (call.HasNamedArgs && TryResolveNamedAction(call, index, in ctx, actions0, actions1, actions2, useNamedArgs))
+            var arguments = call.Arguments;
+            if (arguments.HasNamedArgs && TryResolveNamedAction(call, in arguments, index, in ctx, actions0, actions1, actions2, useNamedArgs))
             {
                 return;
             }
 
-            ResolveLegacyAction(call, index, in ctx, actions0, actions1, actions2, useNamedArgs);
+            ResolveLegacyAction(call, in arguments, index, in ctx, actions0, actions1, actions2, useNamedArgs);
         }
 
         private static bool TryResolveNamedAction(
             ActionCallPlan call,
+            in ActionArgumentsPlan arguments,
             int index,
             in ExecCtx<TCtx> ctx,
             NamedAction0<TArgs, object, TCtx>[] actions0,
@@ -55,7 +57,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
             NamedAction2<TArgs, object, TCtx>[] actions2,
             bool[] useNamedArgs)
         {
-            switch (call.Arity)
+            switch (arguments.Arity)
             {
                 case 0:
                     if (ctx.Actions.TryGet<NamedAction0<TArgs, object, TCtx>>(call.Id, out var na0, out var na0Det))
@@ -94,6 +96,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         private static void ResolveLegacyAction(
             ActionCallPlan call,
+            in ActionArgumentsPlan arguments,
             int index,
             in ExecCtx<TCtx> ctx,
             NamedAction0<TArgs, object, TCtx>[] actions0,
@@ -101,12 +104,12 @@ namespace AbilityKit.Triggering.Runtime.Plan
             NamedAction2<TArgs, object, TCtx>[] actions2,
             bool[] useNamedArgs)
         {
-            switch (call.Arity)
+            switch (arguments.Arity)
             {
                 case 0:
                     if (!ctx.Actions.TryGet<NamedAction0<TArgs, object, TCtx>>(call.Id, out var a0, out var a0Det))
                     {
-                        ThrowActionNotFound(in ctx, call.Id, call.Arity);
+                        ThrowActionNotFound(in ctx, call.Id, arguments.Arity);
                     }
 
                     EnsureDeterministic(in ctx, call.Id, a0Det, "action");
@@ -117,7 +120,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
                 case 1:
                     if (!ctx.Actions.TryGet<NamedAction1<TArgs, object, TCtx>>(call.Id, out var a1, out var a1Det))
                     {
-                        ThrowActionNotFound(in ctx, call.Id, call.Arity);
+                        ThrowActionNotFound(in ctx, call.Id, arguments.Arity);
                     }
 
                     EnsureDeterministic(in ctx, call.Id, a1Det, "action");
@@ -128,7 +131,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
                 case 2:
                     if (!ctx.Actions.TryGet<NamedAction2<TArgs, object, TCtx>>(call.Id, out var a2, out var a2Det))
                     {
-                        ThrowActionNotFound(in ctx, call.Id, call.Arity);
+                        ThrowActionNotFound(in ctx, call.Id, arguments.Arity);
                     }
 
                     EnsureDeterministic(in ctx, call.Id, a2Det, "action");
@@ -137,7 +140,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
                     break;
 
                 default:
-                    throw new InvalidOperationException($"Unsupported action arity: {call.Arity}");
+                    throw new InvalidOperationException($"Unsupported action arity: {arguments.Arity}");
             }
         }
 

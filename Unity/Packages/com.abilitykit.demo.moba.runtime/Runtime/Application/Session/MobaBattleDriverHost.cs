@@ -178,6 +178,12 @@ namespace AbilityKit.Demo.Moba.Session
             return _runtime?.GetAllEntityStates() ?? Array.Empty<LogicWorldEntityState>();
         }
 
+        public int FillLogicWorldEntityStates(IList<LogicWorldEntityState> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            return _runtime?.FillAllEntityStates(buffer) ?? 0;
+        }
+
         public bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot)
         {
             if (_runtime == null)
@@ -259,32 +265,5 @@ namespace AbilityKit.Demo.Moba.Session
             _transformSnapshots?.TryDispatch(_currentFrame, _onTransformSnapshot);
         }
 
-        private void HandleSkillInput(PlayerInput input)
-        {
-            if (!input.TryGetSkillTarget(out int slot, out float x, out float z))
-            {
-                return;
-            }
-
-            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Skill input: player={input.PlayerId} slot={slot} target=({x},{z})");
-            // Skill execution is handled by moba.core logic layer during HostRuntime.Tick
-        }
-
-        private void HandleMoveInput(PlayerInput input)
-        {
-            // 移动输入通过 SubmitInputs -> IMobaBattleRuntimePort.Submit() 处理
-            // 不在这里直接操作实体
-            if (!input.TryGetMoveTarget(out float x, out float z))
-            {
-                return;
-            }
-
-            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Move input queued: player={input.PlayerId} target=({x},{z})");
-        }
-
-        private void HandleStopInput(PlayerInput input)
-        {
-            MobaRuntimeLog.Trace(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.RuntimeTrace, nameof(MobaBattleDriverHost), $"Stop input: player={input.PlayerId}");
-        }
     }
 }

@@ -1,10 +1,14 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using AbilityKit.Ability.Host.Extensions.Server.BattleHost;
 using AbilityKit.Orleans.Contracts.Battle;
+using AbilityKit.Orleans.Contracts.Rooms;
 using AbilityKit.Orleans.Grains.Battle.Gameplay;
-using AbilityKit.Orleans.Grains.Battle.Protocol;
+using AbilityKit.Orleans.Grains.Gameplay;
+using AbilityKit.Orleans.Grains.Gameplays.Moba.Battle;
+using AbilityKit.Orleans.Grains.Gameplays.Moba.Protocol;
+using AbilityKit.Orleans.Grains.Gameplays.Shooter.Battle;
 using AbilityKit.Orleans.Grains.Rooms.Gameplay;
 using Microsoft.Extensions.Logging;
 
@@ -12,7 +16,7 @@ namespace AbilityKit.Orleans.Grains.Battle;
 
 /// <summary>
 /// Battle Logic Host Grain 实现。
-/// 负责通用战斗生命周期、输入缓冲、Tick 和状态同步，具体玩法运行时由 BattleRuntimeAdapter 提供。
+/// 负责通用战斗生命周期、输入缓冲、Tick 与状态同步，具体玩法运行时由 BattleRuntimeAdapter 提供。
 /// </summary>
 public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
 {
@@ -37,7 +41,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
 
     public BattleLogicHostGrain(
         ILogger<BattleLogicHostGrain> logger,
-        ServerMobaWorldManager worldManager)
+        ServerBattleWorldManager worldManager)
     {
         _logger = logger;
         _runtimeRegistry = new BattleRuntimeRegistry(
@@ -46,7 +50,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
                 new MobaBattleRuntimeAdapter(worldManager, DefaultOrleansBattleProtocolMapper.Instance),
                 new ShooterBattleRuntimeAdapter(worldManager)
             },
-            MobaRoomGameplayAdapter.DefaultRoomType);
+            ServerGameplayCatalog.Default);
         _tickDriver = new BattleTickDriver<BattleInputItem>(SubmitRuntimeInputs, TickBattleWorld);
         _snapshotPublisher = new BattleSnapshotPublisher<IStateSyncObserverGrain, StateSyncPush>(
             BuildStateSyncPush,
@@ -97,7 +101,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         _logger.LogInformation(
             "[BattleLogicHost] Initializing battle - BattleId: {BattleId}, RoomType: {RoomType}, WorldId: {WorldId}, TickRate: {TickRate}, Players: {PlayerCount}",
             _battleId,
-            initParams.RoomType ?? MobaRoomGameplayAdapter.DefaultRoomType,
+            initParams.RoomType ?? GameplayRoomTypes.Default,
             _worldId,
             _tickRate,
             initParams.Players?.Count ?? 0);
@@ -195,6 +199,114 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
             BattleInputAcceptStatus.RejectedTooFarFuture => $"Input frame {schedule.RequestedFrame} is too far ahead of current frame {schedule.CurrentFrame}.",
             _ => schedule.Status.ToString()
         };
+    }
+
+    public Task<BattlePlayerJoinResult> JoinPlayerAsync(BattlePlayerJoinRequest request)
+    {
+        if (!_initialized || _runtimeSession == null)
+        {
+            return Task.FromResult(new BattlePlayerJoinResult(
+                false,
+                request?.Player?.PlayerId ?? 0u,
+                _battleHostState.Frame,
+                "RejectedNotInitialized",
+                "Battle is not initialized."));
+        }
+
+        if (request is null)
+        {
+            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, "RejectedNullRequest", "Join request is required."));
+        }
+
+        if (request.Player is null)
+        {
+            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, "RejectedNullPlayer", "Player init info is required."));
+        }
+
+        if (request.WorldId != 0 && request.WorldId != _worldId)
+        {
+            _logger.LogWarning("[BattleLogicHost] JoinPlayer world mismatch. Expected: {ExpectedWorldId}, Actual: {ActualWorldId}", _worldId, request.WorldId);
+            return Task.FromResult(new BattlePlayerJoinResult(
+                false,
+                request.Player.PlayerId,
+                _battleHostState.Frame,
+                "RejectedWorldMismatch",
+                "Join world does not match battle world."));
+        }
+
+        var result = _runtimeSession.JoinPlayer(request, _battleHostState.Frame);
+        if (result.Accepted)
+        {
+            PushSnapshot(isFullSnapshot: true);
+            _logger.LogInformation(
+                "[BattleLogicHost] Player joined running battle. BattleId: {BattleId}, WorldId: {WorldId}, PlayerId: {PlayerId}, IsBot: {IsBot}",
+                _battleId,
+                _worldId,
+                result.PlayerId,
+                request.IsBot);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[BattleLogicHost] Player join rejected. BattleId: {BattleId}, PlayerId: {PlayerId}, Status: {Status}, Message: {Message}",
+                _battleId,
+                request.Player.PlayerId,
+                result.Status,
+                result.Message);
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<BattleBotAiMountResult> MountBotAiAsync(BattleBotAiMountRequest request)
+    {
+        if (!_initialized || _runtimeSession == null)
+        {
+            return Task.FromResult(new BattleBotAiMountResult(
+                false,
+                request?.PlayerId ?? 0u,
+                _battleHostState.Frame,
+                "RejectedNotInitialized",
+                "Battle is not initialized."));
+        }
+
+        if (request is null)
+        {
+            return Task.FromResult(new BattleBotAiMountResult(false, 0u, _battleHostState.Frame, "RejectedNullRequest", "Bot AI mount request is required."));
+        }
+
+        if (request.WorldId != 0 && request.WorldId != _worldId)
+        {
+            _logger.LogWarning("[BattleLogicHost] MountBotAi world mismatch. Expected: {ExpectedWorldId}, Actual: {ActualWorldId}", _worldId, request.WorldId);
+            return Task.FromResult(new BattleBotAiMountResult(
+                false,
+                request.PlayerId,
+                _battleHostState.Frame,
+                "RejectedWorldMismatch",
+                "Bot AI mount world does not match battle world."));
+        }
+
+        var result = _runtimeSession.MountBotAi(request, _battleHostState.Frame);
+        if (result.Accepted)
+        {
+            _logger.LogInformation(
+                "[BattleLogicHost] Bot AI mounted. BattleId: {BattleId}, WorldId: {WorldId}, PlayerId: {PlayerId}, ProfileId: {ProfileId}",
+                _battleId,
+                _worldId,
+                result.PlayerId,
+                request.ProfileId ?? string.Empty);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[BattleLogicHost] Bot AI mount rejected. BattleId: {BattleId}, PlayerId: {PlayerId}, Status: {Status}, Message: {Message}",
+                _battleId,
+                request.PlayerId,
+                result.Status,
+                result.Message);
+        }
+
+        return Task.FromResult(result);
     }
 
     public Task<int> GetCurrentFrameAsync()
@@ -383,3 +495,4 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         _battleHostState.Reset();
     }
 }
+

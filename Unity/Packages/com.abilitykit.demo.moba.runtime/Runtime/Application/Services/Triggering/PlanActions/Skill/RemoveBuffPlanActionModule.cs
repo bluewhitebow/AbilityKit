@@ -21,22 +21,29 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
-            var targets = new List<int>(8);
-            if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, ActionName, targets))
+            var targets = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                return;
-            }
+                if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, ActionName, targets))
+                {
+                    return;
+                }
 
-            var sourceActorId = args.SourceActorId > 0 ? args.SourceActorId : effectInput.CasterActorId;
-            var removed = 0;
-            for (var i = 0; i < targets.Count; i++)
+                var sourceActorId = args.SourceActorId > 0 ? args.SourceActorId : effectInput.CasterActorId;
+                var removed = 0;
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var targetActorId = targets[i];
+                    if (targetActorId <= 0) continue;
+                    removed += buffs.RemoveBuffsImmediate(targetActorId, args.BuffId, sourceActorId, args.RemoveAll, args.Reason);
+                }
+
+                LogApplied($"buffId={args.BuffId} source={sourceActorId} targets={targets.Count} removed={removed} reason={args.Reason}");
+            }
+            finally
             {
-                var targetActorId = targets[i];
-                if (targetActorId <= 0) continue;
-                removed += buffs.RemoveBuffsImmediate(targetActorId, args.BuffId, sourceActorId, args.RemoveAll, args.Reason);
+                PooledMobaPlanActionLists.Release(targets);
             }
-
-            LogApplied($"buffId={args.BuffId} source={sourceActorId} targets={targets.Count} removed={removed} reason={args.Reason}");
         }
     }
 }

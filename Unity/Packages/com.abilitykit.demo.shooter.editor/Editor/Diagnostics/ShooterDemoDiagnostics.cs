@@ -16,6 +16,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Diagnostics
         public int Frame { get; set; }
         public int PlayerCount { get; set; }
         public int BulletCount { get; set; }
+        public int EnemyCount { get; set; }
         public int RollbackCount { get; set; }
         public double MaxDivergence { get; set; }
         public float TickDurationMs { get; set; }
@@ -50,6 +51,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Diagnostics
             Frame = snapshot.Frame;
             PlayerCount = snapshot.PlayerCount;
             BulletCount = snapshot.BulletCount;
+            EnemyCount = snapshot.EnemyCount;
             MaxDivergence = snapshot.MaxDivergence;
             Divergences = snapshot.Divergences;
             RecentEvents = snapshot.RecentEvents;
@@ -61,6 +63,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Diagnostics
             Frame = 0;
             PlayerCount = 0;
             BulletCount = 0;
+            EnemyCount = 0;
             RollbackCount = 0;
             MaxDivergence = 0;
             TickDurationMs = 0f;

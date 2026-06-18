@@ -42,11 +42,12 @@ namespace AbilityKit.Triggering.Runtime.Plan
         {
             var baseExecutor = new DefaultActionExecutor(action);
 
-            return plan.ExecutionPolicy switch
+            var execution = plan.Execution;
+            return execution.Policy switch
             {
                 Config.EActionExecutionPolicy.Queued => new QueuedActionExecutor(baseExecutor),
                 Config.EActionExecutionPolicy.Parallel => baseExecutor,
-                Config.EActionExecutionPolicy.WithRetry => new RetryActionExecutor(baseExecutor, plan.RetryMaxRetries, plan.RetryDelayMs),
+                Config.EActionExecutionPolicy.WithRetry => new RetryActionExecutor(baseExecutor, execution.RetryMaxRetries, execution.RetryDelayMs),
                 Config.EActionExecutionPolicy.Conditional => baseExecutor,
                 _ => baseExecutor
             };

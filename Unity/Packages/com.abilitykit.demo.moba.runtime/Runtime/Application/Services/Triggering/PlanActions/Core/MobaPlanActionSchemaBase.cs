@@ -12,11 +12,8 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
     /// Demo MOBA strongly typed action schema base.
     /// New schemas only need to provide their config action name and argument parsing rules.
     /// </summary>
-    public abstract class MobaPlanActionSchemaBase<TActionArgs> : ITriggerArgsAwareActionSchema<TActionArgs, IWorldResolver>
+    public abstract class MobaPlanActionSchemaBase<TActionArgs> : ITriggerActionParseContextAwareSchema<TActionArgs, IWorldResolver>
     {
-        [ThreadStatic]
-        private static object _currentTriggerArgs;
-
         protected abstract string ActionName { get; }
 
         public string ConfigActionName => ActionName;
@@ -27,18 +24,9 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
         public abstract TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx);
 
-        public TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx, object triggerArgs)
+        public virtual TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext)
         {
-            var previous = _currentTriggerArgs;
-            _currentTriggerArgs = triggerArgs;
-            try
-            {
-                return ParseArgs(namedArgs, ctx);
-            }
-            finally
-            {
-                _currentTriggerArgs = previous;
-            }
+            return ParseArgs(namedArgs, ctx);
         }
 
         public abstract bool TryValidateArgs(ReadOnlySpan<KeyValuePair<string, ActionArgValue>> args, out string error);
@@ -143,25 +131,43 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
                 return arg.Ref.ConstValue;
             }
 
-            if (arg.Ref.Kind == ENumericValueRefKind.PayloadField
-                && TryResolvePayloadField(arg.Ref.FieldId, ctx, out var payloadValue))
-            {
-                return payloadValue;
-            }
-
             return ActionSchemaRegistry.ResolveNumericRef(arg.Ref, ctx);
         }
 
+        protected static bool TryReadCurrentPayloadNumber(ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext, int fieldId, out double value)
+        {
+            return TryResolvePayloadField(fieldId, ctx, in parseContext, out value);
+        }
+
+        protected static int ReadCurrentPayloadInt(ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext, int fieldId, int defaultValue = 0)
+        {
+            return TryResolvePayloadField(fieldId, ctx, in parseContext, out var value) ? (int)Math.Round(value) : defaultValue;
+        }
+
+        protected static int ReadCurrentPayloadInt(ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext, string fieldName, Func<string, int> resolveFieldId, int defaultValue = 0)
+        {
+            if (string.IsNullOrWhiteSpace(fieldName) || resolveFieldId == null)
+            {
+                return defaultValue;
+            }
+
+            return ReadCurrentPayloadInt(ctx, in parseContext, resolveFieldId(fieldName), defaultValue);
+        }
+
+        [Obsolete("Use overloads with TriggerActionParseContext to avoid hidden trigger payload state.")]
         protected static bool TryReadCurrentPayloadNumber(ExecCtx<IWorldResolver> ctx, int fieldId, out double value)
         {
-            return TryResolvePayloadField(fieldId, ctx, out value);
+            value = default;
+            return false;
         }
 
+        [Obsolete("Use overloads with TriggerActionParseContext to avoid hidden trigger payload state.")]
         protected static int ReadCurrentPayloadInt(ExecCtx<IWorldResolver> ctx, int fieldId, int defaultValue = 0)
         {
-            return TryResolvePayloadField(fieldId, ctx, out var value) ? (int)Math.Round(value) : defaultValue;
+            return defaultValue;
         }
 
+        [Obsolete("Use overloads with TriggerActionParseContext to avoid hidden trigger payload state.")]
         protected static int ReadCurrentPayloadInt(ExecCtx<IWorldResolver> ctx, string fieldName, Func<string, int> resolveFieldId, int defaultValue = 0)
         {
             if (string.IsNullOrWhiteSpace(fieldName) || resolveFieldId == null)
@@ -172,11 +178,12 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             return ReadCurrentPayloadInt(ctx, resolveFieldId(fieldName), defaultValue);
         }
 
-        private static bool TryResolvePayloadField(int fieldId, ExecCtx<IWorldResolver> ctx, out double value)
+        private static bool TryResolvePayloadField(int fieldId, ExecCtx<IWorldResolver> ctx, in TriggerActionParseContext parseContext, out double value)
         {
-            if (ctx.Payloads != null && _currentTriggerArgs != null)
+            var triggerArgs = parseContext.TriggerArgs;
+            if (ctx.Payloads != null && triggerArgs != null)
             {
-                if (ctx.Payloads.TryGetDouble(in _currentTriggerArgs, fieldId, out value))
+                if (ctx.Payloads.TryGetDouble(in triggerArgs, fieldId, out value))
                 {
                     return true;
                 }

@@ -14,48 +14,31 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (context == null)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ContextMissing,
-                    $"ContextMissing(Frame={frame.Value},Player={command.Player.Value})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ContextMissing);
                 return false;
             }
 
             if (context.Phase == null || !context.Phase.InGame)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.NotInGame,
-                    $"NotInGame(Frame={frame.Value},Player={command.Player.Value},HasPhase={context.Phase != null})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.NotInGame);
                 return false;
             }
 
             if (context.PlayerActorMap == null || !context.PlayerActorMap.TryGetActorId(command.Player, out int actorId))
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ActorMapMissing,
-                    $"ActorMapMissing(Player={command.Player.Value},HasMap={context.PlayerActorMap != null})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ActorMapMissing);
                 return false;
             }
 
             if (!context.TryGetEntity(actorId, out ActorEntity entity) || entity == null)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ActorEntityMissing,
-                    $"ActorEntityMissing(Actor={actorId})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ActorEntityMissing, actorId);
                 return false;
             }
 
             if (!entity.hasTransform)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.TransformMissing,
-                    $"TransformMissing(Actor={actorId})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.TransformMissing, actorId);
                 return false;
             }
 
@@ -72,10 +55,7 @@ namespace AbilityKit.Demo.Moba.Services
             if (!entity.hasMoveInput) entity.AddMoveInput(dx, dz);
             else entity.ReplaceMoveInput(dx, dz);
 
-            result = MobaInputCommandResult.Accepted(
-                command,
-                $"MoveAccepted(Player={command.Player.Value},Actor={actorId},Dx={dx:0.###},Dz={dz:0.###})",
-                actorId);
+            result = MobaInputCommandResult.Accepted(command, actorId);
             return true;
         }
     }

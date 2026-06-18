@@ -6,6 +6,7 @@ using AbilityKit.Demo.Shooter.View;
 using AbilityKit.Demo.Shooter.View.Hosting;
 using AbilityKit.Demo.Shooter.View.Network;
 using AbilityKit.Network.Runtime.Conditioning;
+using AbilityKit.Network.Runtime.Sync;
 using AbilityKit.Protocol.Shooter;
 
 namespace AbilityKit.Demo.Shooter.View.PlayMode
@@ -23,6 +24,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         private float _accumulator;
         private long _stepCount;
         private long _renderCount;
+        private SyncClock? _localClock;
+        private SyncTimeAnchor _lastLocalTimeAnchor;
 
         public ShooterPlaySessionRunner(IShooterHostInputSource inputSource, IShooterHostViewSink viewSink)
         {
@@ -42,6 +45,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         public int LastAuthorityAcceptedInputs => _lastAuthorityAcceptedInputs;
         public long StepCount => _stepCount;
         public long RenderCount => _renderCount;
+        public SyncTimeAnchor LastLocalTimeAnchor => _lastLocalTimeAnchor;
 
         public ShooterAcceptanceSession Start(ShooterPlayModeSessionOptions options)
         {
@@ -79,6 +83,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _accumulator = 0f;
             _stepCount = 0;
             _renderCount = 0;
+            _localClock = new SyncClock(1d / _options.TickRate, timelineTicksPerStep: 1L);
+            _lastLocalTimeAnchor = default;
             SessionChanged?.Invoke(_session);
             return _session;
         }
@@ -100,6 +106,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _accumulator = 0f;
             _stepCount = 0;
             _renderCount = 0;
+            _localClock = null;
+            _lastLocalTimeAnchor = default;
             session.Dispose();
             _viewSink.Clear();
             SessionChanged?.Invoke(null);
@@ -143,6 +151,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 return;
             }
 
+            _lastLocalTimeAnchor = (_localClock ??= new SyncClock(1d / _options.TickRate, timelineTicksPerStep: 1L)).Advance();
             var input = _inputSource.ReadInput(_options.ControlledPlayerId);
             _lastInput = input;
             _stepCount++;
@@ -185,7 +194,15 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 _session.CarrierNetworkStats,
                 _session.LastCarrierSnapshotApplyResult,
                 _session.LastCarrierTimeAnchor,
-                _session.LagCompensationTelemetry);
+                _lastLocalTimeAnchor,
+                _session.LagCompensationTelemetry,
+                _session.LastLagCompensationEvaluation,
+                _session.Presentation.NeedsPureStateFullBaselineResync,
+                _session.Presentation.LastPureStateResyncReason,
+                _session.Presentation.LastPureStateAppliedFrame,
+                _session.Presentation.LastPureStateAppliedStateHash,
+                _session.Presentation.LastPureStateResyncFrame,
+                _session.Presentation.LastPureStateResyncStateHash);
             _viewSink.Render(in frame);
             _renderCount++;
         }

@@ -1,3 +1,4 @@
+using System;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Host;
 
@@ -44,9 +45,22 @@ namespace AbilityKit.Demo.Moba.Services
             OpCode = opCode;
         }
 
+        public static MobaInputCommandResult Accepted(PlayerInputCommand command, int actorId = 0)
+        {
+            return new MobaInputCommandResult(true, MobaInputCommandFailureCode.None, null, command.Player.Value, actorId, command.OpCode);
+        }
+
         public static MobaInputCommandResult Accepted(PlayerInputCommand command, string message, int actorId = 0)
         {
             return new MobaInputCommandResult(true, MobaInputCommandFailureCode.None, message, command.Player.Value, actorId, command.OpCode);
+        }
+
+        public static MobaInputCommandResult Rejected(
+            PlayerInputCommand command,
+            MobaInputCommandFailureCode failureCode,
+            int actorId = 0)
+        {
+            return new MobaInputCommandResult(false, failureCode, null, command.Player.Value, actorId, command.OpCode);
         }
 
         public static MobaInputCommandResult Rejected(
@@ -68,6 +82,26 @@ namespace AbilityKit.Demo.Moba.Services
 
     public static class MobaInputDiagnostics
     {
+        public static void RecordCommandException(
+            IMobaBattleDiagnosticsService diagnostics,
+            FrameIndex frame,
+            PlayerInputCommand command,
+            Exception exception,
+            string owner)
+        {
+            var key = "input.command.exception";
+            var message = $"Input command handler threw. frame={frame.Value} player={command.Player.Value} op={command.OpCode} exception={exception.GetType().Name}: {exception.Message}";
+            if (diagnostics != null)
+            {
+                diagnostics.Exception(key, exception, message);
+                diagnostics.Counter("moba.input.command.exception");
+                diagnostics.Counter(key);
+                return;
+            }
+
+            MobaRuntimeLog.Exception(exception, MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Exception, owner, message);
+        }
+
         public static void RecordCommandRejected(
             IMobaBattleDiagnosticsService diagnostics,
             FrameIndex frame,
@@ -77,16 +111,20 @@ namespace AbilityKit.Demo.Moba.Services
             if (result.Succeeded) return;
 
             var key = "input.command.rejected." + result.FailureCode;
-            var message = $"Input command rejected. frame={frame.Value} code={result.FailureCode} player={result.PlayerId} actor={result.ActorId} op={result.OpCode} reason={result.Message}";
+            var capturedResult = result;
             if (diagnostics != null)
             {
-                diagnostics.Warning(key, message);
+                diagnostics.Warning(key, () => FormatCommandRejectedMessage(frame, in capturedResult));
                 diagnostics.Counter("moba.input.command.rejected");
                 diagnostics.Counter(key);
                 return;
             }
 
-            MobaRuntimeLog.Warning(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Rejection, owner, message);
+            MobaRuntimeLog.Warning(
+                MobaRuntimeLogModule.Input,
+                MobaRuntimeLogPurpose.Rejection,
+                owner,
+                () => FormatCommandRejectedMessage(frame, in capturedResult));
         }
 
         public static void RecordBatchWarning(
@@ -105,11 +143,34 @@ namespace AbilityKit.Demo.Moba.Services
             MobaRuntimeLog.Warning(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Rejection, owner, message);
         }
 
+        public static void RecordBatchWarning(
+            IMobaBattleDiagnosticsService diagnostics,
+            string key,
+            Func<string> messageFactory,
+            string owner)
+        {
+            if (messageFactory == null) return;
+            if (diagnostics != null)
+            {
+                diagnostics.Warning(key, messageFactory);
+                diagnostics.Counter(key);
+                return;
+            }
+
+            MobaRuntimeLog.Warning(MobaRuntimeLogModule.Input, MobaRuntimeLogPurpose.Rejection, owner, messageFactory);
+        }
+
         public static void RecordBatchAccepted(IMobaBattleDiagnosticsService diagnostics, int acceptedCount, int handledCount)
         {
             diagnostics?.Counter("moba.input.batch.accepted");
             diagnostics?.Sample("moba.input.batch.accepted.count", acceptedCount);
             diagnostics?.Sample("moba.input.batch.handled.count", handledCount);
+        }
+
+        private static string FormatCommandRejectedMessage(FrameIndex frame, in MobaInputCommandResult result)
+        {
+            var reason = string.IsNullOrEmpty(result.Message) ? result.FailureCode.ToString() : result.Message;
+            return $"Input command rejected. frame={frame.Value} code={result.FailureCode} player={result.PlayerId} actor={result.ActorId} op={result.OpCode} reason={reason}";
         }
     }
 }

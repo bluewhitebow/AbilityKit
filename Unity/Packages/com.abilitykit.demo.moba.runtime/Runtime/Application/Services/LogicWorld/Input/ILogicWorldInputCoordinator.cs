@@ -4,16 +4,29 @@ using AbilityKit.Ability.Host;
 
 namespace AbilityKit.Demo.Moba.Services.LogicWorld
 {
+    public enum LogicWorldInputSubmitFailureCode
+    {
+        None = 0,
+        NullOrEmptyCommands = 1,
+        FrameRejected = 2,
+        CommandFrameMismatch = 3,
+        ContextMissing = 4,
+        CommandRejected = 5,
+        HandlerException = 6,
+    }
+
     public readonly struct LogicWorldInputSubmitResult
     {
         public readonly bool Succeeded;
+        public readonly LogicWorldInputSubmitFailureCode FailureCode;
         public readonly int AcceptedCount;
         public readonly int HandledCount;
         public readonly string Message;
 
-        public LogicWorldInputSubmitResult(bool succeeded, int acceptedCount, int handledCount, string message)
+        public LogicWorldInputSubmitResult(bool succeeded, LogicWorldInputSubmitFailureCode failureCode, int acceptedCount, int handledCount, string message)
         {
             Succeeded = succeeded;
+            FailureCode = failureCode;
             AcceptedCount = acceptedCount;
             HandledCount = handledCount;
             Message = message;
@@ -26,19 +39,19 @@ namespace AbilityKit.Demo.Moba.Services.LogicWorld
 
         public static LogicWorldInputSubmitResult Accepted(int acceptedCount, int handledCount, string message)
         {
-            return new LogicWorldInputSubmitResult(true, acceptedCount, handledCount, message);
+            return new LogicWorldInputSubmitResult(true, LogicWorldInputSubmitFailureCode.None, acceptedCount, handledCount, message);
         }
 
-        public static LogicWorldInputSubmitResult Rejected(string message)
+        public static LogicWorldInputSubmitResult Rejected(LogicWorldInputSubmitFailureCode failureCode, string message)
         {
-            return new LogicWorldInputSubmitResult(false, 0, 0, message);
+            return new LogicWorldInputSubmitResult(false, failureCode, 0, 0, message);
         }
 
         public override string ToString()
         {
             return Succeeded
                 ? $"Success: Accepted={AcceptedCount}, Handled={HandledCount}, Message={Message}"
-                : $"Rejected: {Message}";
+                : $"Rejected: Code={FailureCode}, Message={Message}";
         }
     }
 

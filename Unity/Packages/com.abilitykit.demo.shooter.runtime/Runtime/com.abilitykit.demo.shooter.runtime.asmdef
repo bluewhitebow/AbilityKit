@@ -11,7 +11,8 @@
     "Svelto.Common",
     "Svelto.ECS",
     "AbilityKit.Demo.Shooter.Share",
-    "AbilityKit.Protocol.Shooter"
+    "AbilityKit.Protocol.Shooter",
+    "AbilityKit.HFSM.Core"
   ],
   "precompiledReferences": [
     "Newtonsoft.Json.dll"

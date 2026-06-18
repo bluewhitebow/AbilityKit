@@ -183,6 +183,45 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
+    public readonly struct MobaSkillInputHandleResult
+    {
+        public MobaSkillInputHandleResult(bool success, string message, in MobaSkillCastFailure failure)
+        {
+            Success = success;
+            Message = message;
+            Failure = failure;
+        }
+
+        public bool Success { get; }
+        public string Message { get; }
+        public MobaSkillCastFailure Failure { get; }
+        public string Code => Failure.Code;
+
+        public static MobaSkillInputHandleResult Accepted(string message = null)
+        {
+            return new MobaSkillInputHandleResult(true, message, in MobaSkillCastFailure.None);
+        }
+
+        public static MobaSkillInputHandleResult Failed(string code, string message)
+        {
+            var failure = new MobaSkillCastFailure("Input", null, code, message);
+            return new MobaSkillInputHandleResult(false, message, in failure);
+        }
+
+        public static MobaSkillInputHandleResult FromCast(in MobaSkillCastResult result, string successMessage = null)
+        {
+            if (result.Success)
+            {
+                return Accepted(successMessage ?? result.FailReason);
+            }
+
+            var failure = result.Failure.HasValue
+                ? result.Failure
+                : new MobaSkillCastFailure("Cast", null, "skill.input.castRejected", result.FailReason);
+            return new MobaSkillInputHandleResult(false, result.FailReason, in failure);
+        }
+    }
+
     public readonly struct MobaSkillCastResult
     {
         public MobaSkillCastResult(bool success, string failReason, in MobaSkillCastRuntimeHandle runtimeHandle)

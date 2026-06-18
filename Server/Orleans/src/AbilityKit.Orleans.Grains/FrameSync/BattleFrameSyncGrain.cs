@@ -11,7 +11,7 @@ public sealed class BattleFrameSyncGrain : Grain, IBattleFrameSyncGrain
     private readonly ILogger<BattleFrameSyncGrain> _logger;
     private readonly HashSet<IFrameSyncObserver> _observers = new();
 
-    // Keyed by frame index.
+    // 按帧索引分组。
     private readonly Dictionary<int, List<FrameInputItem>> _inputsByFrame = new();
 
     private IDisposable? _timer;

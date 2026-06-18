@@ -77,6 +77,12 @@ namespace AbilityKit.Demo.Shooter.View
                 return MapPackedSnapshot(snapshot.WorldId, in packed, ShooterViewBatchSource.AuthoritativeCorrection, controlledPlayerId);
             }
 
+            if (snapshot.PureStateSnapshot.HasValue)
+            {
+                var pureState = snapshot.PureStateSnapshot.Value;
+                return MapPureStateSnapshot(in pureState, ShooterViewBatchSource.AuthoritativeCorrection, controlledPlayerId);
+            }
+ 
             BeginSnapshot();
 
             var actors = snapshot.Actors;
@@ -134,6 +140,82 @@ namespace AbilityKit.Demo.Shooter.View
                 snapshot.Frame,
                 snapshotKind,
                 source);
+        }
+
+        public ShooterSnapshotViewBatch Map(in ShooterPureStateSnapshotPayload snapshot)
+        {
+            return Map(in snapshot, controlledPlayerId: -1);
+        }
+
+        public ShooterSnapshotViewBatch Map(in ShooterPureStateSnapshotPayload snapshot, int controlledPlayerId)
+        {
+            return MapPureStateSnapshot(in snapshot, ShooterViewBatchSource.AuthoritativeCorrection, controlledPlayerId);
+        }
+
+        private ShooterSnapshotViewBatch MapPureStateSnapshot(
+            in ShooterPureStateSnapshotPayload snapshot,
+            ShooterViewBatchSource source,
+            int controlledPlayerId)
+        {
+            BeginSnapshot();
+
+            var entities = snapshot.Entities ?? Array.Empty<ShooterPureStateEntityDelta>();
+            for (var i = 0; i < entities.Length; i++)
+            {
+                ApplyPureStateEntity(in entities[i], controlledPlayerId);
+            }
+
+            var snapshotKind = snapshot.SnapshotKind == ShooterPureStateSnapshotKinds.FullBaseline
+                ? ShooterViewSnapshotKind.Full
+                : ShooterViewSnapshotKind.Delta;
+
+            return CompleteSnapshot(
+                snapshot.WorldId,
+                snapshot.Frame,
+                snapshotKind,
+                source);
+        }
+
+        private void ApplyPureStateEntity(in ShooterPureStateEntityDelta entity, int controlledPlayerId)
+        {
+            if (entity.EntityId <= 0)
+            {
+                return;
+            }
+
+            var key = CreateViewEntityKey(entity.EntityKind, entity.EntityId);
+            if (!key.HasValue)
+            {
+                return;
+            }
+
+            var alive = (entity.Flags & ShooterPureStateEntityFlags.Alive) != 0 && entity.DeltaKind != ShooterPureStateDeltaKinds.Despawn;
+            AddEntity(key.Value, entity.OwnerId, alive);
+            if (!IsControlledPlayerTransform(key.Value, controlledPlayerId))
+            {
+                AddTransform(
+                    key.Value,
+                    entity.QuantizedX / 1000f,
+                    entity.QuantizedY / 1000f,
+                    entity.QuantizedVelocityX == 0 && entity.QuantizedVelocityY == 0 ? 0f : entity.QuantizedVelocityX / 1000f,
+                    entity.QuantizedVelocityX == 0 && entity.QuantizedVelocityY == 0 ? 1f : entity.QuantizedVelocityY / 1000f,
+                    entity.QuantizedVelocityX / 1000f,
+                    entity.QuantizedVelocityY / 1000f);
+            }
+
+            if (key.Value.Kind == ShooterViewEntityKind.Player)
+            {
+                AddHealth(key.Value, entity.Hp);
+                AddScore(key.Value, entity.Score);
+            }
+            else if (key.Value.Kind == ShooterViewEntityKind.Enemy)
+            {
+                AddHealth(key.Value, entity.Hp);
+            }
+            else if (key.Value.Kind == ShooterViewEntityKind.Bullet)
+            {
+                AddProjectileLifetime(key.Value, entity.RemainingFrames);
+            }
         }
 
         private void ApplyPackedComponentChunk(in ShooterPackedComponentChunk chunk, int controlledPlayerId)
@@ -199,18 +281,16 @@ namespace AbilityKit.Demo.Shooter.View
 
         private void ApplyPackedHealthComponents(in ShooterPackedComponentChunk chunk)
         {
-            if (chunk.EntityKind != ShooterPackedEntityKinds.Player)
-            {
-                return;
-            }
-
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
             {
-                var playerId = GetInt(chunk.EntityIds, i);
-                if (playerId <= 0) continue;
+                var entityId = GetInt(chunk.EntityIds, i);
+                if (entityId <= 0) continue;
 
-                AddHealth(new ShooterViewEntityKey(ShooterViewEntityKind.Player, playerId), GetInt(chunk.IntValues, i));
+                var key = CreateViewEntityKey(chunk.EntityKind, entityId);
+                if (!key.HasValue || key.Value.Kind == ShooterViewEntityKind.Bullet) continue;
+
+                AddHealth(key.Value, GetInt(chunk.IntValues, i));
             }
         }
 
@@ -325,6 +405,8 @@ namespace AbilityKit.Demo.Shooter.View
                     return new ShooterViewEntityKey(ShooterViewEntityKind.Player, entityId);
                 case ShooterPackedEntityKinds.Projectile:
                     return new ShooterViewEntityKey(ShooterViewEntityKind.Bullet, entityId);
+                case ShooterPackedEntityKinds.Enemy:
+                    return new ShooterViewEntityKey(ShooterViewEntityKind.Enemy, entityId);
                 default:
                     return null;
             }

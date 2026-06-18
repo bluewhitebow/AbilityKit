@@ -3,7 +3,7 @@ using AbilityKit.Combat.Projectile;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
-    public sealed class AreaEventArgs : IMobaActorContextProvider, IMobaOriginContextProvider, IMobaTriggerLineageContextProvider, IMobaContextSourceProvider
+    public sealed class AreaEventArgs : IMobaActorContextProvider, IMobaOriginContextProvider, IMobaTriggerLineageContextProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
         public string EventId;
         public int AreaId;
@@ -87,6 +87,18 @@ namespace AbilityKit.Demo.Moba.Services.Projectile
             }
 
             source = default;
+            return false;
+        }
+
+        public bool TryGetPersistentContextSource(out MobaPersistentContextSourceSnapshot snapshot)
+        {
+            if (TryGetContextSource(out var source))
+            {
+                snapshot = MobaPersistentContextSourceSnapshotFactory.FromContextSource(in source);
+                return snapshot.HasExecutionSource;
+            }
+
+            snapshot = default;
             return false;
         }
     }

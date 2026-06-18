@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
@@ -17,6 +18,27 @@ namespace AbilityKit.Demo.Moba.Systems
     [WorldSystem(order: MobaSystemOrder.PassiveSkillTriggers, Phase = WorldSystemPhase.Execute)]
     public sealed class MobaPassiveSkillTriggerRegisterSystem : ReactiveWorldSystemBase<global::ActorEntity>
     {
+        private static readonly ObjectPool<HashSet<long>> s_ownerKeySetPool = Pools.GetPool(
+            createFunc: () => new HashSet<long>(),
+            onRelease: set => set.Clear(),
+            defaultCapacity: 32,
+            maxSize: 512,
+            collectionCheck: false);
+
+        private static readonly ObjectPool<Dictionary<int, long>> s_ownerKeyByPassiveSkillIdPool = Pools.GetPool(
+            createFunc: () => new Dictionary<int, long>(),
+            onRelease: dictionary => dictionary.Clear(),
+            defaultCapacity: 16,
+            maxSize: 256,
+            collectionCheck: false);
+
+        private static readonly ObjectPool<List<long>> s_ownerKeyListPool = Pools.GetPool(
+            createFunc: () => new List<long>(8),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 32,
+            maxSize: 512,
+            collectionCheck: false);
+
         private MobaConfigDatabase _configs;
         private IFrameTime _frameTime;
         private MobaTraceRegistry _trace;
@@ -85,64 +107,80 @@ namespace AbilityKit.Demo.Moba.Systems
 
             var actorId = entity.actorId.Value;
 
-            var desiredOwnerKeys = new HashSet<long>();
-            var ownerKeyByPassiveSkillId = new Dictionary<int, long>();
+            var desiredOwnerKeys = s_ownerKeySetPool.Get();
+            var ownerKeyByPassiveSkillId = s_ownerKeyByPassiveSkillIdPool.Get();
 
-            if (entity.hasPassiveSkillTriggerListeners)
+            try
             {
-                var listeners = entity.passiveSkillTriggerListeners.Active;
-                if (listeners != null)
+                if (entity.hasPassiveSkillTriggerListeners)
                 {
-                    for (int i = 0; i < listeners.Count; i++)
+                    var listeners = entity.passiveSkillTriggerListeners.Active;
+                    if (listeners != null)
                     {
-                        var l = listeners[i];
-                        if (l == null) continue;
-                        if (l.PassiveSkillId <= 0) continue;
-                        if (l.SourceContextId == 0) continue;
-
-                        if (!ownerKeyByPassiveSkillId.ContainsKey(l.PassiveSkillId))
+                        for (int i = 0; i < listeners.Count; i++)
                         {
-                            ownerKeyByPassiveSkillId[l.PassiveSkillId] = l.SourceContextId;
-                            desiredOwnerKeys.Add(l.SourceContextId);
+                            var l = listeners[i];
+                            if (l == null) continue;
+                            if (l.PassiveSkillId <= 0) continue;
+                            if (l.SourceContextId == 0) continue;
+
+                            if (!ownerKeyByPassiveSkillId.ContainsKey(l.PassiveSkillId))
+                            {
+                                ownerKeyByPassiveSkillId[l.PassiveSkillId] = l.SourceContextId;
+                                desiredOwnerKeys.Add(l.SourceContextId);
+                            }
                         }
                     }
                 }
-            }
 
-            // remove ongoing trigger plan intents for passives that are no longer present
-            var prev = GetPreviousOwnerKeys(actorId);
-            if (prev != null && prev.Count > 0)
-            {
-                var removed = new List<long>();
-                foreach (var k in prev)
+                // remove ongoing trigger plan intents for passives that are no longer present
+                var prev = GetPreviousOwnerKeys(actorId);
+                if (prev != null && prev.Count > 0)
                 {
-                    if (!desiredOwnerKeys.Contains(k)) removed.Add(k);
-                }
-                RemoveOngoingTriggerPlansByOwnerKeys(entity, removed);
-            }
+                    var removed = s_ownerKeyListPool.Get();
+                    try
+                    {
+                        foreach (var k in prev)
+                        {
+                            if (!desiredOwnerKeys.Contains(k)) removed.Add(k);
+                        }
 
-            // upsert desired ongoing trigger plan intents
-            foreach (var kv in ownerKeyByPassiveSkillId)
-            {
-                var passiveSkillId = kv.Key;
-                var ownerKey = kv.Value;
-                if (ownerKey == 0) continue;
-
-                if (!_configs.TryGetPassiveSkill(passiveSkillId, out var mo) || mo == null) continue;
-                var triggerIds = mo.TriggerIds;
-                if (triggerIds == null || triggerIds.Count == 0)
-                {
-                    RemoveOngoingTriggerPlansByOwnerKeys(entity, new List<long> { ownerKey });
-                    continue;
+                        RemoveOngoingTriggerPlansByOwnerKeys(entity, removed);
+                    }
+                    finally
+                    {
+                        s_ownerKeyListPool.Release(removed);
+                    }
                 }
 
-                var ids = new int[triggerIds.Count];
-                for (int i = 0; i < triggerIds.Count; i++) ids[i] = triggerIds[i];
+                // upsert desired ongoing trigger plan intents
+                foreach (var kv in ownerKeyByPassiveSkillId)
+                {
+                    var passiveSkillId = kv.Key;
+                    var ownerKey = kv.Value;
+                    if (ownerKey == 0) continue;
 
-                UpsertOngoingTriggerPlansEntry(entity, ownerKey, ids);
+                    if (!_configs.TryGetPassiveSkill(passiveSkillId, out var mo) || mo == null) continue;
+                    var triggerIds = mo.TriggerIds;
+                    if (triggerIds == null || triggerIds.Count == 0)
+                    {
+                        RemoveOngoingTriggerPlanByOwnerKey(entity, ownerKey);
+                        continue;
+                    }
+
+                    var ids = new int[triggerIds.Count];
+                    for (int i = 0; i < triggerIds.Count; i++) ids[i] = triggerIds[i];
+
+                    UpsertOngoingTriggerPlansEntry(entity, ownerKey, ids);
+                }
+
+                StorePreviousOwnerKeys(actorId, desiredOwnerKeys);
             }
-
-            StorePreviousOwnerKeys(actorId, desiredOwnerKeys);
+            finally
+            {
+                s_ownerKeyByPassiveSkillIdPool.Release(ownerKeyByPassiveSkillId);
+                s_ownerKeySetPool.Release(desiredOwnerKeys);
+            }
         }
 
         private static void UpsertOngoingTriggerPlansEntry(global::ActorEntity e, long ownerKey, int[] triggerIds)
@@ -182,6 +220,22 @@ namespace AbilityKit.Demo.Moba.Systems
             else e.AddOngoingTriggerPlans(newList, rev);
         }
 
+        private static void RemoveOngoingTriggerPlanByOwnerKey(global::ActorEntity e, long ownerKey)
+        {
+            if (ownerKey == 0) return;
+
+            var ownerKeys = s_ownerKeyListPool.Get();
+            try
+            {
+                ownerKeys.Add(ownerKey);
+                RemoveOngoingTriggerPlansByOwnerKeys(e, ownerKeys);
+            }
+            finally
+            {
+                s_ownerKeyListPool.Release(ownerKeys);
+            }
+        }
+
         private static void RemoveOngoingTriggerPlansByOwnerKeys(global::ActorEntity e, IEnumerable<long> ownerKeys)
         {
             if (e == null) return;
@@ -191,33 +245,40 @@ namespace AbilityKit.Demo.Moba.Systems
             var oldList = e.ongoingTriggerPlans.Active;
             if (oldList == null || oldList.Count == 0) return;
 
-            var toRemove = new HashSet<long>();
-            foreach (var k in ownerKeys)
+            var toRemove = s_ownerKeySetPool.Get();
+            try
             {
-                if (k != 0) toRemove.Add(k);
-            }
-            if (toRemove.Count == 0) return;
-
-            var newList = new List<OngoingTriggerPlanEntry>(oldList.Count);
-            var removedAny = false;
-
-            for (int i = 0; i < oldList.Count; i++)
-            {
-                var it = oldList[i];
-                if (it == null) continue;
-                if (toRemove.Contains(it.OwnerKey))
+                foreach (var k in ownerKeys)
                 {
-                    removedAny = true;
-                    continue;
+                    if (k != 0) toRemove.Add(k);
                 }
-                newList.Add(new OngoingTriggerPlanEntry { OwnerKey = it.OwnerKey, TriggerIds = it.TriggerIds });
+                if (toRemove.Count == 0) return;
+
+                var newList = new List<OngoingTriggerPlanEntry>(oldList.Count);
+                var removedAny = false;
+
+                for (int i = 0; i < oldList.Count; i++)
+                {
+                    var it = oldList[i];
+                    if (it == null) continue;
+                    if (toRemove.Contains(it.OwnerKey))
+                    {
+                        removedAny = true;
+                        continue;
+                    }
+                    newList.Add(new OngoingTriggerPlanEntry { OwnerKey = it.OwnerKey, TriggerIds = it.TriggerIds });
+                }
+
+                if (!removedAny) return;
+
+                var rev = e.ongoingTriggerPlans.Revision + 1;
+                if (newList.Count == 0) e.RemoveOngoingTriggerPlans();
+                else e.ReplaceOngoingTriggerPlans(newList, rev);
             }
-
-            if (!removedAny) return;
-
-            var rev = e.ongoingTriggerPlans.Revision + 1;
-            if (newList.Count == 0) e.RemoveOngoingTriggerPlans();
-            else e.ReplaceOngoingTriggerPlans(newList, rev);
+            finally
+            {
+                s_ownerKeySetPool.Release(toRemove);
+            }
         }
 
         private HashSet<long> GetPreviousOwnerKeys(int actorId)
@@ -229,14 +290,32 @@ namespace AbilityKit.Demo.Moba.Systems
         private void StorePreviousOwnerKeys(int actorId, HashSet<long> desired)
         {
             if (actorId <= 0) return;
-            if (desired == null) desired = new HashSet<long>();
-            _ownerKeysByActor[actorId] = new HashSet<long>(desired);
+
+            if (_ownerKeysByActor.TryGetValue(actorId, out var oldSet))
+            {
+                _ownerKeysByActor.Remove(actorId);
+                s_ownerKeySetPool.Release(oldSet);
+            }
+
+            var stored = s_ownerKeySetPool.Get();
+            if (desired != null)
+            {
+                foreach (var key in desired)
+                {
+                    if (key != 0) stored.Add(key);
+                }
+            }
+
+            _ownerKeysByActor[actorId] = stored;
         }
 
         private void ForgetPreviousOwnerKeys(int actorId)
         {
             if (actorId <= 0) return;
+            if (!_ownerKeysByActor.TryGetValue(actorId, out var set)) return;
+
             _ownerKeysByActor.Remove(actorId);
+            s_ownerKeySetPool.Release(set);
         }
 
         private int GetFrame()
@@ -268,11 +347,25 @@ namespace AbilityKit.Demo.Moba.Systems
                         }
                     }
                 }
+
+                ReleaseAllPreviousOwnerKeys();
             }
             finally
             {
                 base.OnTearDown();
             }
+        }
+
+        private void ReleaseAllPreviousOwnerKeys()
+        {
+            if (_ownerKeysByActor.Count == 0) return;
+
+            foreach (var kv in _ownerKeysByActor)
+            {
+                if (kv.Value != null) s_ownerKeySetPool.Release(kv.Value);
+            }
+
+            _ownerKeysByActor.Clear();
         }
 
         private void EnsureServices()

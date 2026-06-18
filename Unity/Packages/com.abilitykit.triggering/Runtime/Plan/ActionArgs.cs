@@ -73,6 +73,22 @@ namespace AbilityKit.Triggering.Runtime.Plan
         bool TryValidateArgs(ReadOnlySpan<KeyValuePair<string, ActionArgValue>> args, out string error);
     }
 
+    public readonly struct TriggerActionParseContext
+    {
+        public TriggerActionParseContext(object triggerArgs)
+        {
+            TriggerArgs = triggerArgs;
+        }
+
+        public object TriggerArgs { get; }
+        public bool HasTriggerArgs => TriggerArgs != null;
+    }
+
+    public interface ITriggerActionParseContextAwareSchema<TActionArgs, TCtx> : IActionSchema<TActionArgs, TCtx>
+    {
+        TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<TCtx> ctx, in TriggerActionParseContext parseContext);
+    }
+
     public interface ITriggerArgsAwareActionSchema<TActionArgs, TCtx> : IActionSchema<TActionArgs, TCtx>
     {
         TActionArgs ParseArgs(Dictionary<string, ActionArgValue> namedArgs, ExecCtx<TCtx> ctx, object triggerArgs);

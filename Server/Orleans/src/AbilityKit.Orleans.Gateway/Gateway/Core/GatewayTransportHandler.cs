@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using AbilityKit.Orleans.Contracts.Rooms;
 using AbilityKit.Orleans.Gateway.Abstractions;
-using AbilityKit.Orleans.Gateway.Networking;
 using Orleans;
 
 namespace AbilityKit.Orleans.Gateway.Core;
@@ -15,7 +14,7 @@ public sealed class GatewayTransportHandler : IGatewayTransportEvents
     private readonly IGatewaySessionRegistry _sessionRegistry;
     private readonly IGatewayRequestRouter _router;
     private readonly IClusterClient _clusterClient;
-    private readonly ConcurrentDictionary<long, TcpTransportSession> _sessions = new();
+    private readonly ConcurrentDictionary<long, IGatewayTransportSession> _sessions = new();
 
     private readonly GatewayBackgroundTaskQueue _backgroundTasks;
 
@@ -31,7 +30,7 @@ public sealed class GatewayTransportHandler : IGatewayTransportEvents
         _backgroundTasks = backgroundTasks;
     }
 
-    public void OnConnected(TcpTransportSession session)
+    public void OnConnected(IGatewayTransportSession session)
     {
         RegisterSession(session);
     }
@@ -84,7 +83,7 @@ public sealed class GatewayTransportHandler : IGatewayTransportEvents
         });
     }
 
-    internal void RegisterSession(TcpTransportSession session)
+    internal void RegisterSession(IGatewayTransportSession session)
     {
         _sessions[session.ConnectionId] = session;
         _sessionRegistry.Register(session.ConnectionId, session);

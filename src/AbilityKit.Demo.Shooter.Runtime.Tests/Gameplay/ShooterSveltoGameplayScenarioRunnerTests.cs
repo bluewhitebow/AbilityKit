@@ -25,10 +25,11 @@ public sealed class ShooterSveltoGameplayScenarioRunnerTests
         Assert.Equal(3, scenario.Loadout.ProjectilesPerShot);
         Assert.Equal(180, scenario.BattleFlow.DurationFrames);
         Assert.Equal(96, scenario.BattleFlow.VictoryTargetDefeats);
-        Assert.Equal(48, scenario.BattleFlow.MaxActiveEnemies);
+        Assert.Equal(36, scenario.BattleFlow.MaxActiveEnemies);
         Assert.Equal(3, scenario.BattleFlow.Waves.Length);
-        Assert.Equal(45, scenario.BattleFlow.Waves[1].StartFrame);
-        Assert.Equal(40, scenario.BattleFlow.Waves[2].EnemyCount);
+        Assert.Equal(30, scenario.BattleFlow.Waves[1].StartFrame);
+        Assert.Equal(32, scenario.BattleFlow.Waves[2].EnemyCount);
+        Assert.Equal(2, scenario.BattleFlow.Waves[0].EnemyHp);
     }
 
     [Fact]
@@ -137,10 +138,52 @@ public sealed class ShooterSveltoGameplayScenarioRunnerTests
         Assert.Equal(first.RemainingTargetHp, second.RemainingTargetHp);
         Assert.Equal(first.StateHash, second.StateHash);
         Assert.Equal(64, first.Shooters);
-        Assert.Equal(96, first.Targets);
+        Assert.True(first.Targets > 0);
         Assert.True(first.ProjectilesSpawned > 0);
         Assert.True(first.Hits >= 0);
         Assert.True(first.StateHash != 0);
         Assert.True(container.Resolve<ISveltoWorldContext>().EntitiesDB.Count<ShooterSveltoTransformComponent>(ShooterSveltoGroups.GameplayShooters) > 0);
+    }
+
+    [Fact]
+    public void WaveSurvivalSpawnsFrequentWeakEnemiesThatAttackAndCanBeDefeated()
+    {
+        var container = new WorldContainerBuilder()
+            .AddModule(new ShooterWorldModule())
+            .Build();
+
+        var runner = container.Resolve<IShooterSveltoGameplayScenarioRunner>();
+        var result = runner.Run(ShooterSveltoGameplayScenarioCatalog.WaveSurvival);
+
+        Assert.Equal(ShooterSveltoGameplayScenarioCatalog.WaveSurvival.Id, result.ScenarioId);
+        Assert.True(result.Targets > 0);
+        Assert.True(result.ProjectilesSpawned > ShooterSveltoGameplayScenarioCatalog.WaveSurvival.ShooterCount);
+        Assert.True(result.Hits > 0);
+        Assert.True(result.DefeatedTargets > 0);
+        Assert.True(result.EnemyHits > 0);
+        Assert.True(result.RemainingTargetHp < result.Targets * 3);
+    }
+
+    [Fact]
+    public void BenchmarkProfileRunsScenarioRepeatedlyWithDeterministicOutcome()
+    {
+        var container = new WorldContainerBuilder()
+            .AddModule(new ShooterWorldModule())
+            .Build();
+
+        var runner = container.Resolve<IShooterSveltoGameplayScenarioRunner>();
+        var profile = ShooterSveltoGameplayBenchmarkProfiles.ProjectileStormBaseline;
+        var result = ShooterSveltoGameplayBenchmark.Run(runner, in profile);
+
+        Assert.Equal(profile.Id, result.ProfileId);
+        Assert.Equal(profile.Scenario.Id, result.ScenarioId);
+        Assert.Equal(profile.Iterations, result.Iterations);
+        Assert.Equal(profile.Scenario.TickCount, result.FramesPerIteration);
+        Assert.Equal(profile.Scenario.ShooterCount + profile.Scenario.TargetCount, result.InitialEntityCount);
+        Assert.Equal((long)profile.Iterations * profile.Scenario.TickCount, result.TotalFrames);
+        Assert.Equal(result.TotalFrames * result.InitialEntityCount, result.TotalInitialEntityFrames);
+        Assert.True(result.Deterministic);
+        Assert.Equal(result.FirstResult.StateHash, result.LastResult.StateHash);
+        Assert.True(result.LastResult.ProjectilesSpawned > 0);
     }
 }

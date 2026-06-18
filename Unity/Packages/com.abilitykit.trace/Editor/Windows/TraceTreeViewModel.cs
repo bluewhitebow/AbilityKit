@@ -1,7 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using AbilityKit.Trace;
 
 namespace AbilityKit.Trace.Editor.Windows
@@ -115,135 +113,31 @@ namespace AbilityKit.Trace.Editor.Windows
                 return _registryProvider.GetRegistries();
             }
 
-            // 默认实现：尝试获取注册的实例
-            return GetDefaultRegistries();
-        }
-
-        private IEnumerable<TraceTreeRegistryBase> GetDefaultRegistries()
-        {
-            var result = new List<TraceTreeRegistryBase>();
-
-            // 使用反射查找所有已注册的 TraceTreeRegistry 实例
-            var baseType = typeof(TraceTreeRegistryBase);
-
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var assembly in assemblies)
-            {
-                try
-                {
-                    var types = assembly.GetTypes();
-                    foreach (var type in types)
-                    {
-                        if (baseType.IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface)
-                        {
-                            // 尝试获取 Instance 属性
-                            var instanceProp = type.GetProperty("Instance",
-                                BindingFlags.Public | BindingFlags.Static);
-                            if (instanceProp != null)
-                            {
-                                var value = instanceProp.GetValue(null);
-                                if (value is TraceTreeRegistryBase registry)
-                                {
-                                    result.Add(registry);
-                                    continue;
-                                }
-                            }
-
-                            // 尝试获取 Singleton 属性
-                            var singletonProp = type.GetProperty("Singleton",
-                                BindingFlags.Public | BindingFlags.Static);
-                            if (singletonProp != null)
-                            {
-                                var value = singletonProp.GetValue(null);
-                                if (value is TraceTreeRegistryBase registry)
-                                {
-                                    result.Add(registry);
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                    // 忽略无法加载的程序集
-                }
-            }
-
-            return result;
+            return DefaultTraceRegistryProvider.Instance.GetRegistries();
         }
 
         private void RefreshFromRegistry(TraceTreeRegistryBase registry)
         {
-            try
+            foreach (var root in registry.GetActiveRoots())
             {
-                // 使用反射调用 GetActiveRoots
-                var getActiveRootsMethod = registry.GetType().GetMethod("GetActiveRoots");
-                if (getActiveRootsMethod == null) return;
+                var kind = 0;
+                if (registry.TryGetNodeSnapshot(root.RootId, out var rootSnapshot) && rootSnapshot.IsValid)
+                    kind = rootSnapshot.Kind;
 
-                var rootStates = getActiveRootsMethod.Invoke(registry, null) as IEnumerable<object>;
-                if (rootStates == null) return;
-
-                foreach (var root in rootStates)
+                var nodeCount = registry.GetNodeSnapshotsByRoot(root.RootId).Count();
+                var rootData = new TraceRootViewData
                 {
-                    long rootId = (long)root.GetType().GetProperty("RootId").GetValue(root);
-                    int activeCount = (int)root.GetType().GetProperty("ActiveCount").GetValue(root);
-                    int externalRefCount = (int)root.GetType().GetProperty("ExternalRefCount").GetValue(root);
+                    RootId = root.RootId,
+                    Kind = kind,
+                    KindName = GetKindName(kind, registry),
+                    IsActive = root.ActiveCount > 0,
+                    ActiveCount = root.ActiveCount,
+                    ExternalRefCount = root.ExternalRefCount,
+                    NodeCount = nodeCount
+                };
 
-                    // 获取根节点的 kind
-                    int kind = 0;
-                    try
-                    {
-                        var tryGetSnapshotMethod = registry.GetType().GetMethod("TryGetSnapshot");
-                        var snapshot = tryGetSnapshotMethod.Invoke(registry, new object[] { rootId });
-
-                        // TraceSnapshot<T> 有 IsValid, Kind 属性
-                        var isValidProp = snapshot.GetType().GetProperty("IsValid");
-                        var kindProp = snapshot.GetType().GetProperty("Kind");
-
-                        if (isValidProp != null && (bool)isValidProp.GetValue(snapshot))
-                        {
-                            kind = (int)kindProp.GetValue(snapshot);
-                        }
-                    }
-                    catch
-                    {
-                        // 忽略
-                    }
-
-                    // 获取该根节点下的所有节点数量
-                    int nodeCount = 0;
-                    try
-                    {
-                        var getNodesByRootMethod = registry.GetType().GetMethod("GetNodesByRoot");
-                        var nodes = getNodesByRootMethod.Invoke(registry, new object[] { rootId }) as IEnumerable<object>;
-                        if (nodes != null)
-                        {
-                            nodeCount = nodes.Count();
-                        }
-                    }
-                    catch
-                    {
-                        // 忽略
-                    }
-
-                    var rootData = new TraceRootViewData
-                    {
-                        RootId = rootId,
-                        Kind = kind,
-                        KindName = GetKindName(kind, registry),
-                        IsActive = activeCount > 0,
-                        ActiveCount = activeCount,
-                        ExternalRefCount = externalRefCount,
-                        NodeCount = nodeCount
-                    };
-
-                    ActiveRoots.Add(rootData);
-                    TotalNodeCount += nodeCount;
-                }
-            }
-            catch (Exception)
-            {
-                // 忽略获取数据时的错误
+                ActiveRoots.Add(rootData);
+                TotalNodeCount += nodeCount;
             }
         }
 
@@ -287,52 +181,30 @@ namespace AbilityKit.Trace.Editor.Windows
             var registries = GetRegistries();
             foreach (var registry in registries)
             {
-                try
+                var snapshots = registry.GetNodeSnapshotsByRoot(SelectedRootId);
+                var nodes = new List<TraceNodeViewData>();
+
+                foreach (var snapshot in snapshots)
                 {
-                    var nodes = new List<TraceNodeViewData>();
-
-                    // 使用反射调用 GetNodesByRoot
-                    var getNodesByRootMethod = registry.GetType().GetMethod("GetNodesByRoot");
-                    if (getNodesByRootMethod == null) continue;
-
-                    var snapshots = getNodesByRootMethod.Invoke(registry, new object[] { SelectedRootId }) as IEnumerable<object>;
-                    if (snapshots == null) continue;
-
-                    foreach (var snapshot in snapshots)
+                    var viewData = new TraceNodeViewData
                     {
-                        var contextId = (long)snapshot.GetType().GetProperty("ContextId").GetValue(snapshot);
-                        var rootId = (long)snapshot.GetType().GetProperty("RootId").GetValue(snapshot);
-                        var parentId = (long)snapshot.GetType().GetProperty("ParentId").GetValue(snapshot);
-                        var kind = (int)snapshot.GetType().GetProperty("Kind").GetValue(snapshot);
-                        var isEnded = (bool)snapshot.GetType().GetProperty("IsEnded").GetValue(snapshot);
-                        var childCount = (int)snapshot.GetType().GetProperty("ChildCount").GetValue(snapshot);
-                        var metadata = snapshot.GetType().GetProperty("Metadata").GetValue(snapshot);
-
-                        var viewData = new TraceNodeViewData
-                        {
-                            ContextId = contextId,
-                            RootId = rootId,
-                            ParentId = parentId,
-                            Kind = kind,
-                            KindName = GetKindName(kind, registry),
-                            ChildCount = childCount,
-                            IsEnded = isEnded,
-                            Metadata = metadata
-                        };
-                        nodes.Add(viewData);
-                    }
-
-                    if (nodes.Count > 0)
-                    {
-                        // 计算层级和顺序
-                        BuildNodeHierarchy(nodes);
-                        CurrentNodes = nodes;
-                        return;
-                    }
+                        ContextId = snapshot.ContextId,
+                        RootId = snapshot.RootId,
+                        ParentId = snapshot.ParentId,
+                        Kind = snapshot.Kind,
+                        KindName = GetKindName(snapshot.Kind, registry),
+                        ChildCount = snapshot.ChildCount,
+                        IsEnded = snapshot.IsEnded,
+                        Metadata = snapshot.Metadata
+                    };
+                    nodes.Add(viewData);
                 }
-                catch (Exception)
+
+                if (nodes.Count > 0)
                 {
-                    // 继续尝试其他注册表
+                    BuildNodeHierarchy(nodes);
+                    CurrentNodes = nodes;
+                    return;
                 }
             }
         }
@@ -424,26 +296,8 @@ namespace AbilityKit.Trace.Editor.Windows
         /// </summary>
         private string GetKindName(int kind, TraceTreeRegistryBase registry)
         {
-            // 尝试使用注册表提供的类型名称
-            try
-            {
-                var method = registry.GetType().GetMethod("GetKindName");
-                if (method != null)
-                {
-                    var result = method.Invoke(registry, new object[] { kind });
-                    if (result is string name && !string.IsNullOrEmpty(name))
-                    {
-                        return name;
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // 忽略
-            }
-
-            // 默认返回类型编号
-            return $"Kind_{kind}";
+            var name = registry?.GetKindName(kind);
+            return string.IsNullOrEmpty(name) ? $"Kind_{kind}" : name;
         }
     }
 }

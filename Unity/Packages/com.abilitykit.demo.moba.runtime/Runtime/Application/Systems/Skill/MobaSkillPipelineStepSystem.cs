@@ -87,8 +87,7 @@ namespace AbilityKit.Demo.Moba.Systems
                 in _systemServices,
                 MobaBattleDiagnosticMetric.SkillPipelineStep,
                 start,
-                MobaBattleDiagnosticsDefaults.SkillPipelineStepWarnMs,
-                $"candidates={entities.Length} stepped={stepped}");
+                MobaBattleDiagnosticsDefaults.SkillPipelineStepWarnMs);
         }
     }
 }

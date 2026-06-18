@@ -8,6 +8,7 @@ namespace AbilityKit.Triggering.Eventing
     {
         void Publish<TArgs>(EventKey<TArgs> key, in TArgs args);
         void Publish<TArgs>(EventKey<TArgs> key, in TArgs args, ExecutionControl control);
+        bool HasSubscribers<TArgs>(EventKey<TArgs> key);
 
         IDisposable Subscribe<TArgs>(EventKey<TArgs> key, Action<TArgs> handler);
         IDisposable Subscribe<TArgs>(EventKey<TArgs> key, Action<TArgs, ExecutionControl> handler);

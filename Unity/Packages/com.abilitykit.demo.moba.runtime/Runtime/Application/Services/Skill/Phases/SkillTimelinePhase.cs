@@ -14,8 +14,6 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly SkillTimelineEventDTO[] _events;
         private readonly MobaEffectInvokerService _effects;
 
-        private int _nextIndex;
-
         public SkillTimelinePhase(AbilityPipelinePhaseId phaseId, int durationMs, SkillTimelineEventDTO[] events, MobaEffectInvokerService effects)
             : base(phaseId)
         {
@@ -26,7 +24,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         protected override void OnEnter(SkillPipelineContext context)
         {
-            _nextIndex = 0;
+            context?.SetTimelineNextEventIndex(0);
         }
 
         protected override void OnExecute(SkillPipelineContext context)
@@ -38,19 +36,18 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (IsComplete) return;
 
-            context.SetTimelineNextEventIndex(_nextIndex);
-
+            var nextIndex = context.TimelineNextEventIndex;
             var elapsedMs = (int)(context.ElapsedTime * 1000f);
 
             if (_events != null)
             {
-                while (_nextIndex < _events.Length)
+                while (nextIndex < _events.Length)
                 {
-                    var e = _events[_nextIndex];
+                    var e = _events[nextIndex];
                     if (e == null)
                     {
-                        _nextIndex++;
-                        context.SetTimelineNextEventIndex(_nextIndex);
+                        nextIndex++;
+                        context.SetTimelineNextEventIndex(nextIndex);
                         continue;
                     }
 
@@ -59,25 +56,24 @@ namespace AbilityKit.Demo.Moba.Services
                     var raw = e.ExecuteMode;
                     if (raw != (int)EffectExecuteMode.InternalOnly)
                     {
-                        throw new InvalidOperationException($"Unsupported timeline effect execute mode. phase={PhaseId.Value}, eventIndex={_nextIndex}, effectId={e.EffectId}, executeMode={raw}, skillId={context?.SkillId ?? 0}");
+                        throw new InvalidOperationException($"Unsupported timeline effect execute mode. phase={PhaseId.Value}, eventIndex={nextIndex}, effectId={e.EffectId}, executeMode={raw}, skillId={context?.SkillId ?? 0}");
                     }
 
                     if (e.EffectId <= 0)
                     {
-                        throw new InvalidOperationException($"Invalid timeline effect id. phase={PhaseId.Value}, eventIndex={_nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
+                        throw new InvalidOperationException($"Invalid timeline effect id. phase={PhaseId.Value}, eventIndex={nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
                     }
 
                     var effects = ResolveEffects(context);
                     if (effects == null)
                     {
-                        throw new InvalidOperationException($"Skill timeline requires MobaEffectInvokerService. phase={PhaseId.Value}, eventIndex={_nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
+                        throw new InvalidOperationException($"Skill timeline requires MobaEffectInvokerService. phase={PhaseId.Value}, eventIndex={nextIndex}, effectId={e.EffectId}, skillId={context?.SkillId ?? 0}");
                     }
 
                     effects.Execute(e.EffectId, context);
 
-                    _nextIndex++;
-
-                    context.SetTimelineNextEventIndex(_nextIndex);
+                    nextIndex++;
+                    context.SetTimelineNextEventIndex(nextIndex);
                 }
             }
 
@@ -90,7 +86,7 @@ namespace AbilityKit.Demo.Moba.Services
             }
             else
             {
-                if (_events == null || _nextIndex >= _events.Length)
+                if (_events == null || nextIndex >= _events.Length)
                 {
                     Complete(context);
                 }
@@ -100,7 +96,6 @@ namespace AbilityKit.Demo.Moba.Services
         public override void Reset()
         {
             base.Reset();
-            _nextIndex = 0;
         }
 
         private MobaEffectInvokerService ResolveEffects(SkillPipelineContext context)

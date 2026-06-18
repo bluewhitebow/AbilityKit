@@ -1,6 +1,6 @@
 namespace AbilityKit.Demo.Moba.Services
 {
-    public readonly struct SummonSourceContext : IMobaOriginContextProvider, IMobaTriggerLineageContextProvider, IMobaContextSourceProvider
+    public readonly struct SummonSourceContext : IMobaOriginContextProvider, IMobaTriggerLineageContextProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
         public readonly int SourceActorId;
         public readonly int SummonActorId;
@@ -73,6 +73,18 @@ namespace AbilityKit.Demo.Moba.Services
             }
 
             source = default;
+            return false;
+        }
+
+        public bool TryGetPersistentContextSource(out MobaPersistentContextSourceSnapshot snapshot)
+        {
+            if (TryGetContextSource(out var source))
+            {
+                snapshot = MobaPersistentContextSourceSnapshotFactory.FromContextSource(in source);
+                return snapshot.HasExecutionSource;
+            }
+
+            snapshot = default;
             return false;
         }
 

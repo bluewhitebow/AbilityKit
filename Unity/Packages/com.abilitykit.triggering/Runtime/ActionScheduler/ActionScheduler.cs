@@ -234,7 +234,7 @@ namespace AbilityKit.Triggering.Runtime.ActionScheduler
             _isActive = true;
             foreach (var action in _actions)
             {
-                if (action.State == EActionInstanceState.WaitingDelay && action.Plan.ScheduleMode == EActionScheduleMode.Continuous)
+                if (action.State == EActionInstanceState.WaitingDelay && action.Plan.Schedule.Mode == EActionScheduleMode.Continuous)
                 {
                     action.State = EActionInstanceState.Executing;
                 }

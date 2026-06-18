@@ -73,9 +73,9 @@ public sealed class StartRoomBattleHandler : GatewayRequestHandlerBase
             context.AccountId = accountId;
             return GatewayResponse.Ok(request.Seq, responsePayload.ToArray());
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            return GatewayResponse.Error(request.Seq, GatewayStatusCode.InternalError);
+            return RoomGatewayErrorMapper.ToResponse(request.Seq, exception);
         }
     }
 }

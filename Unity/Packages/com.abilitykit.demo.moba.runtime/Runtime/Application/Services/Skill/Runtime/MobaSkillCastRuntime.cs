@@ -27,6 +27,151 @@ namespace AbilityKit.Demo.Moba.Services
         Presentation = 7,
     }
 
+    public enum MobaSkillRuntimeLifecycleEventKind
+    {
+        Created = 0,
+        ChildRetained = 1,
+        ChildReleased = 2,
+        PipelineEnded = 3,
+        WaitingChildren = 4,
+        Finalizing = 5,
+        Finalized = 6,
+        ForceTerminated = 7,
+        Cleared = 8,
+    }
+
+    public readonly struct MobaSkillRuntimeLifecycleEvent
+    {
+        public MobaSkillRuntimeLifecycleEvent(
+            MobaSkillRuntimeLifecycleEventKind kind,
+            MobaSkillCastRuntime runtime,
+            in MobaSkillRuntimeChildRef child,
+            in MobaSkillRuntimeRetainHandle retainHandle,
+            MobaSkillRuntimeEndReason reason,
+            bool forced)
+        {
+            Kind = kind;
+            Runtime = runtime;
+            Child = child;
+            RetainHandle = retainHandle;
+            Reason = reason;
+            Forced = forced;
+        }
+
+        public MobaSkillRuntimeLifecycleEventKind Kind { get; }
+        public MobaSkillCastRuntime Runtime { get; }
+        public MobaSkillCastRuntimeHandle RuntimeHandle => Runtime != null ? Runtime.Handle : default;
+        public MobaSkillRuntimeChildRef Child { get; }
+        public MobaSkillRuntimeRetainHandle RetainHandle { get; }
+        public MobaSkillRuntimeEndReason Reason { get; }
+        public bool Forced { get; }
+    }
+
+    public interface IMobaSkillRuntimeLifecycleHook
+    {
+        void OnSkillRuntimeLifecycle(in MobaSkillRuntimeLifecycleEvent lifecycleEvent);
+    }
+
+    public sealed class MobaSkillRuntimeLifecycleHookService
+    {
+        private readonly List<IMobaSkillRuntimeLifecycleHook> _hooks = new List<IMobaSkillRuntimeLifecycleHook>(4);
+
+        public int Count => _hooks.Count;
+
+        public void Register(IMobaSkillRuntimeLifecycleHook hook)
+        {
+            if (hook == null || _hooks.Contains(hook)) return;
+            _hooks.Add(hook);
+        }
+
+        public bool Unregister(IMobaSkillRuntimeLifecycleHook hook)
+        {
+            return hook != null && _hooks.Remove(hook);
+        }
+
+        public void Clear()
+        {
+            _hooks.Clear();
+        }
+
+        public void Notify(in MobaSkillRuntimeLifecycleEvent lifecycleEvent)
+        {
+            for (var i = 0; i < _hooks.Count; i++)
+            {
+                _hooks[i]?.OnSkillRuntimeLifecycle(in lifecycleEvent);
+            }
+        }
+    }
+
+    public readonly struct MobaSkillRuntimeDiagnostics
+    {
+        public MobaSkillRuntimeDiagnostics(
+            in MobaSkillCastRuntimeHandle handle,
+            int skillId,
+            int skillSlot,
+            int skillLevel,
+            int sequence,
+            int casterActorId,
+            int targetActorId,
+            SkillCastStage stage,
+            bool pipelineEnded,
+            bool isEnding,
+            bool isEnded,
+            MobaSkillRuntimeEndReason endReason,
+            int pendingChildren,
+            int blackboardEntryCount,
+            MobaSkillRuntimeChildRef[] children)
+        {
+            Handle = handle;
+            SkillId = skillId;
+            SkillSlot = skillSlot;
+            SkillLevel = skillLevel;
+            Sequence = sequence;
+            CasterActorId = casterActorId;
+            TargetActorId = targetActorId;
+            Stage = stage;
+            PipelineEnded = pipelineEnded;
+            IsEnding = isEnding;
+            IsEnded = isEnded;
+            EndReason = endReason;
+            PendingChildren = pendingChildren;
+            BlackboardEntryCount = blackboardEntryCount;
+            Children = children ?? Array.Empty<MobaSkillRuntimeChildRef>();
+        }
+
+        public MobaSkillCastRuntimeHandle Handle { get; }
+        public int SkillId { get; }
+        public int SkillSlot { get; }
+        public int SkillLevel { get; }
+        public int Sequence { get; }
+        public int CasterActorId { get; }
+        public int TargetActorId { get; }
+        public SkillCastStage Stage { get; }
+        public bool PipelineEnded { get; }
+        public bool IsEnding { get; }
+        public bool IsEnded { get; }
+        public MobaSkillRuntimeEndReason EndReason { get; }
+        public int PendingChildren { get; }
+        public int BlackboardEntryCount { get; }
+        public IReadOnlyList<MobaSkillRuntimeChildRef> Children { get; }
+        public bool IsWaitingChildren => PipelineEnded && !IsEnded && PendingChildren > 0;
+    }
+
+    public readonly struct MobaSkillRuntimeScanResult
+    {
+        public MobaSkillRuntimeScanResult(int activeRuntimes, int waitingChildrenRuntimes, int pendingChildren)
+        {
+            ActiveRuntimes = activeRuntimes;
+            WaitingChildrenRuntimes = waitingChildrenRuntimes;
+            PendingChildren = pendingChildren;
+        }
+
+        public int ActiveRuntimes { get; }
+        public int WaitingChildrenRuntimes { get; }
+        public int PendingChildren { get; }
+        public bool HasWaitingChildren => WaitingChildrenRuntimes > 0 || PendingChildren > 0;
+    }
+
     public enum MobaSkillRuntimeBlackboardScope
     {
         Cast = 0,
@@ -366,6 +511,7 @@ namespace AbilityKit.Demo.Moba.Services
         public bool Equals(MobaSkillRuntimeChildRef other) => Kind == other.Kind && ChildId == other.ChildId;
         public override bool Equals(object obj) => obj is MobaSkillRuntimeChildRef other && Equals(other);
         public override int GetHashCode() => ((int)Kind * 397) ^ ChildId.GetHashCode();
+        public override string ToString() => IsValid ? Kind + ":" + ChildId + "@" + TraceContextId + "#" + ConfigId : "Invalid";
     }
 
     public readonly struct MobaSkillCastRuntimeHandle : IEquatable<MobaSkillCastRuntimeHandle>
@@ -405,6 +551,7 @@ namespace AbilityKit.Demo.Moba.Services
         public bool Equals(MobaSkillRuntimeRetainHandle other) => RetainId == other.RetainId && Runtime.Equals(other.Runtime);
         public override bool Equals(object obj) => obj is MobaSkillRuntimeRetainHandle other && Equals(other);
         public override int GetHashCode() => (RetainId.GetHashCode() * 397) ^ Runtime.GetHashCode();
+        public override string ToString() => IsValid ? RetainId + "->" + Runtime + "/" + Child : "Invalid";
     }
 
     public sealed class MobaSkillCastRuntime : IMobaContextSourceProvider
@@ -492,6 +639,53 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (!child.IsValid) return false;
             return _children.Remove(child);
+        }
+
+        public MobaSkillRuntimeDiagnostics CreateDiagnosticsSnapshot()
+        {
+            var children = _children.Count == 0 ? Array.Empty<MobaSkillRuntimeChildRef>() : _children.ToArray();
+            return new MobaSkillRuntimeDiagnostics(
+                Handle,
+                SkillId,
+                SkillSlot,
+                SkillLevel,
+                Sequence,
+                CasterActorId,
+                TargetActorId,
+                Stage,
+                PipelineEnded,
+                IsEnding,
+                IsEnded,
+                EndReason,
+                _children.Count,
+                Blackboard.Count,
+                children);
+        }
+
+        public int CopyChildrenTo(List<MobaSkillRuntimeChildRef> results, MobaSkillRuntimeChildKind kind = MobaSkillRuntimeChildKind.Unknown)
+        {
+            if (results == null) return 0;
+            var start = results.Count;
+            for (var i = 0; i < _children.Count; i++)
+            {
+                var child = _children[i];
+                if (kind != MobaSkillRuntimeChildKind.Unknown && child.Kind != kind) continue;
+                results.Add(child);
+            }
+
+            return results.Count - start;
+        }
+
+        public int CountChildren(MobaSkillRuntimeChildKind kind)
+        {
+            if (kind == MobaSkillRuntimeChildKind.Unknown) return _children.Count;
+            var count = 0;
+            for (var i = 0; i < _children.Count; i++)
+            {
+                if (_children[i].Kind == kind) count++;
+            }
+
+            return count;
         }
 
         public bool SetState<TState>(in MobaSkillRuntimeStateSlotKey<TState> key, TState state) where TState : class, IMobaSkillRuntimeStateSlot

@@ -31,35 +31,41 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
             var coreInput = MobaPlanActionInputResolver.Resolve(triggerArgs, ctx);
             var effectInput = new MobaEffectActionInput(in coreInput);
-            var ownerActorIds = new List<int>(8);
-
-            if (args.OwnerActorId > 0)
+            var ownerActorIds = PooledMobaPlanActionLists.GetIntList();
+            try
             {
-                ownerActorIds.Add(args.OwnerActorId);
-            }
-            else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveArea, ownerActorIds) || ownerActorIds.Count == 0)
-            {
-                if (coreInput.HasCasterActor)
+                if (args.OwnerActorId > 0)
                 {
-                    ownerActorIds.Add(coreInput.CasterActorId);
+                    ownerActorIds.Add(args.OwnerActorId);
                 }
-            }
-
-            var removed = 0;
-            if (ownerActorIds.Count > 0)
-            {
-                for (var i = 0; i < ownerActorIds.Count; i++)
+                else if (!MobaActionTargetResolver.TryResolveTargets(in args.TargetRequest, in coreInput, in effectInput, ctx, TriggeringConstants.Actions.RemoveArea, ownerActorIds) || ownerActorIds.Count == 0)
                 {
-                    removed += areas.DespawnAreas(ownerActorIds[i], args.TemplateId, args.RemoveAll);
-                    if (removed > 0 && !args.RemoveAll) break;
+                    if (coreInput.HasCasterActor)
+                    {
+                        ownerActorIds.Add(coreInput.CasterActorId);
+                    }
                 }
-            }
-            else
-            {
-                removed = areas.DespawnAreas(0, args.TemplateId, args.RemoveAll);
-            }
 
-            LogApplied(ctx, $"templateId={args.TemplateId} owners={ownerActorIds.Count} removed={removed}");
+                var removed = 0;
+                if (ownerActorIds.Count > 0)
+                {
+                    for (var i = 0; i < ownerActorIds.Count; i++)
+                    {
+                        removed += areas.DespawnAreas(ownerActorIds[i], args.TemplateId, args.RemoveAll);
+                        if (removed > 0 && !args.RemoveAll) break;
+                    }
+                }
+                else
+                {
+                    removed = areas.DespawnAreas(0, args.TemplateId, args.RemoveAll);
+                }
+
+                LogApplied(ctx, $"templateId={args.TemplateId} owners={ownerActorIds.Count} removed={removed}");
+            }
+            finally
+            {
+                PooledMobaPlanActionLists.Release(ownerActorIds);
+            }
         }
     }
 }

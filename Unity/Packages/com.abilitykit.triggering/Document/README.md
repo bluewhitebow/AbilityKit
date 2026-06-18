@@ -1,76 +1,86 @@
-# Triggering — 事件触发引擎
+# Triggering — 事件触发规则引擎
 
-## 设计理念
+## 一、定位
 
-Triggering 回答的问题是："当战斗事件发生时，应该执行哪些规则？"
+Triggering 回答的问题是：**当事件发生时，哪些规则应该被评估、以什么顺序执行、以及动作如何被调度？**
 
-Triggering 是一个**强类型、事件驱动的规则引擎**。触发器通过 `EventKey<TArgs>` 订阅事件，事件发布时 TriggerRunner 按 **Phase→Priority→Order** 三级排序依次评估条件并执行逻辑。ExecCtx（执行上下文）通过依赖注入向所有 Evaluate/Execute 调用传递所需服务，确保规则逻辑与具体实现解耦。
+它是 AbilityKit 的事件触发与规则执行包，正式主线围绕 `TriggerRunner<TCtx>`、`TriggerPlan<TArgs>`、`PlannedTrigger<TArgs, TCtx>`、`ExecCtx<TCtx>`、`ActionRegistry`、`FunctionRegistry` 和验证体系展开。包内不假设 Buff、子弹、AOE 等业务概念；这些概念应作为项目层动作、条件、上下文或调度驱动接入。
 
-**与 Pipeline 的关系**：Pipeline 编排技能的执行步骤，Triggering 处理步骤内的事件响应。两者是互补的协作关系，而非替代关系。
+Triggering 与 Pipeline 的关系：Pipeline 负责流程编排，Triggering 负责流程中事件响应与规则执行。两者互补，不互相替代。
 
-## 核心抽象
+## 二、正式主线
 
-```
+```text
 TriggerRunner<TCtx>
-├── RegisterTrigger()           → 注册 ITrigger
-├── Dispatch<TEvent>()          → 触发事件
-└── 按 Phase→Priority→Order 排序执行
+├── Register / RegisterPlan       → 注册手写触发器或数据化计划
+├── Dispatch / EventBus.Publish   → 发布事件并触发规则
+└── Phase → Priority → Order      → 稳定排序与执行顺序
+
+TriggerPlan<TArgs>
+├── PredicateExprPlan             → 数据化条件表达式
+├── ActionCallPlan[]              → 数据化动作调用
+└── ActionSchedulePlan            → 触发器内部动作调度
 
 ExecCtx<TCtx>
-├── EventBus                   → 发布/订阅事件
-├── FunctionRegistry            → 条件函数（可扩展）
-├── ActionRegistry              → 执行动作（可扩展）
-├── BlackboardResolver          → 黑板数据（跨触发器共享）
-├── NumericDomains              → 数值比较域
-└── ExecutionControl           → 短路控制（StopPropagation / Cancel）
-
-ITrigger<TArgs, TCtx>
-├── Evaluate()                  → 评估条件
-└── Execute()                  → 执行逻辑（可附加 ITriggerCue）
-
-MarkerAttribute 注册
-├── [ExecutableTypeId]         → 标记 IExecutable 实现
-└── [ConditionTypeId]         → 标记 ICondition 实现
+├── Context                       → 项目上下文
+├── FunctionRegistry              → 条件函数扩展点
+├── ActionRegistry                → 动作扩展点
+├── BlackboardResolver            → 黑板数据解析
+├── NumericDomains                → 数值域解析
+├── ActionSchedulerManager        → TriggerPlan 内部动作调度
+└── ExecutionControl              → StopPropagation / Cancel
 ```
 
-## 内置条件与动作
+## 三、扩展方式
 
-**条件**：`AndCondition`、`OrCondition`、`NotCondition`、`NumericCompareCondition`、`PayloadCompareCondition`、`HasTargetCondition`、`ConstCondition`
+- 条件扩展：通过 `FunctionRegistry` 注册确定性或非确定性函数，再由 `PredicateExprPlan` 引用。
+- 动作扩展：通过 `ActionRegistry` 注册强类型动作，再由 `ActionCallPlan` 引用。
+- 上下文扩展：通过自定义 `TCtx`、`ITriggerContextSource<TCtx>` 或 `ITriggerDispatcherContext` 提供项目服务。
+- 调度扩展：触发器内部动作延迟/周期执行使用 `Runtime.ActionScheduler`；自然语言规则调度使用 `Runtime.RuleScheduler`。
+- 校验扩展：通过 `ITriggerValidator<TCtx>` 或独立验证器在运行前发现配置错误。
 
-**动作**：通过 `ExecutableRegistry` 的 Marker 扫描自动发现，零侵入扩展。
+## 四、调度边界
 
-## 快速示例
+Triggering 内存在多层历史调度代码，正式版本按以下边界使用：
+
+| 层级 | 定位 | 推荐状态 |
+| --- | --- | --- |
+| `Runtime.ActionScheduler` | `TriggerPlan` 内部动作的延迟、周期、连续执行 | 正式主线 |
+| `Runtime.RuleScheduler` | 自然语言规则拆解后的通用时间意图，例如“立即/延后/每隔/保持期间” | 正式主线 |
+| `Runtime.Schedule` | 早期通用调度与适配层 | 兼容层，谨慎新增依赖 |
+| `Runtime.Scheduler` | 更早的业务 ID 风格调度器 | 遗留兼容层，迁移到前两者 |
+
+`RuleScheduler` 的 `WhileActive` 表示“调度条目未完成、未取消、未中断时持续按间隔执行”，不代表 Core Continuous 的 `ContinuousState.Active`，也不接管 Buff 生命周期。Buff 等持续行为仍应由 Core `IContinuousManager` 管理，Triggering 只负责规则触发与调度驱动适配。
+
+## 五、最小接入示例
 
 ```csharp
-// 定义触发器
-public class OnDamageReceivedTrigger : Trigger<DamageEvent>
-{
-    protected override void Execute(DamageEvent evt, ExecCtx ctx)
-    {
-        // 应用伤害
-        ctx.Source.Health -= evt.Damage;
+var actionId = new ActionId(StableStringId.Get("demo:apply_damage"));
+var actions = new ActionRegistry();
+actions.Register<NamedAction0<DamageEvent, object, BattleContext>>(
+    actionId,
+    (evt, args, ctx) => ctx.Context.ApplyDamage(evt.Amount),
+    isDeterministic: true);
 
-        // 触发特效
-        ctx.EventBus.Publish(new DamageAppliedEvent(evt.Source, evt.Damage));
-    }
-}
+var plan = new TriggerPlan<DamageEvent>(
+    phase: 0,
+    priority: 100,
+    triggerId: 10001,
+    predicate: PredicateExprPlan.True,
+    actions: new[] { ActionCallPlan.NoArgs(actionId) });
 
-// 通过 TriggerPlan 配置（数据驱动）
-var plan = new TriggerPlan<DamageEvent>
-{
-    Phase = TriggerPhase.Reactive,
-    Priority = 100,
-    Predicate = PredicateExpr.And(
-        NumericCompare(nameof(DamageEvent.Damage), ">", 50),
-        PayloadCompare(nameof(DamageEvent.Source.Tag), "==", "Enemy")
-    ),
-    ActionCalls = new[]
-    {
-        new ActionCallConfig { ActionKind = "ApplySlow" }
-    }
-};
+var runner = new TriggerRunner<BattleContext>(
+    eventBus,
+    new FunctionRegistry(),
+    actions,
+    contextSource: battleContextSource);
+
+runner.RegisterPlan(damageEventKey, in plan);
 ```
 
-## 确定性保证
+## 六、稳定性约束
 
-`ExecPolicy.RequireDeterministic` 模式下，Triggering 在注册时拒绝非确定性函数（随机数、网络请求、时间戳等），确保帧同步回放安全可靠。
+- 数据化计划进入运行前应执行验证，至少覆盖引用、动作参数、调度语义和 UGC 限制。
+- `ExecPolicy.RequireDeterministic` 下，计划不得依赖随机数、系统时间、网络请求等非确定性能力。
+- Runtime 包不应新增 Buff、Projectile、AOE 等项目词汇；这些应下沉到 Demo、Samples 或业务包。
+- 遗留目录保留是为了兼容现有 GUID 和旧项目引用，不代表正式主线入口。

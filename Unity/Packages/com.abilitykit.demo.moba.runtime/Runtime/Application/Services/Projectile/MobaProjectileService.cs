@@ -1,7 +1,7 @@
 using System;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Util.Converter;
-using AbilityKit.Demo.Moba.Util.Generator;
+using AbilityKit.Demo.Moba.Services.EntityConstruction;
 using AbilityKit.Ability.Host;
 using AbilityKit.Combat.Projectile;
 using AbilityKit.Ability.FrameSync;

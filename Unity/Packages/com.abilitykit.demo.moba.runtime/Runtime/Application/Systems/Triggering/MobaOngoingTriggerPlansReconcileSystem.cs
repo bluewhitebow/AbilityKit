@@ -56,19 +56,19 @@ namespace AbilityKit.Demo.Moba.Systems.Triggering
                         if (ownerKey == 0) continue;
 
                         var triggerIds = entry.TriggerIds;
+                        _desiredKeys.Add(ownerKey);
+
                         if (triggerIds == null || triggerIds.Length == 0)
                         {
-                            _desiredKeys.Add(ownerKey);
+                            _plans.Stop(ownerKey);
+                            _hashByOwnerKey.Remove(ownerKey);
                             continue;
                         }
-
-                        _desiredKeys.Add(ownerKey);
 
                         var hash = ComputeHash(triggerIds);
                         if (!_hashByOwnerKey.TryGetValue(ownerKey, out var oldHash) || oldHash != hash)
                         {
-                            _plans.Stop(ownerKey);
-                            _plans.StartTriggers(triggerIds, ownerKey);
+                            _plans.ApplyTriggers(triggerIds, ownerKey);
                             _hashByOwnerKey[ownerKey] = hash;
                         }
                     }

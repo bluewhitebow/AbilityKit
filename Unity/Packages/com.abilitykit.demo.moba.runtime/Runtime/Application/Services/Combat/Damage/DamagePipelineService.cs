@@ -106,8 +106,7 @@ namespace AbilityKit.Demo.Moba.Services
                 diagnostics?.RecordDuration(
                     MobaBattleDiagnosticMetric.DamagePipeline,
                     start,
-                    MobaBattleDiagnosticsDefaults.DamagePipelineWarnMs,
-                    $"attacker={attack.AttackerActorId} target={attack.TargetActorId} type={attack.DamageType}");
+                    MobaBattleDiagnosticsDefaults.DamagePipelineWarnMs);
             }
         }
 
@@ -143,8 +142,7 @@ namespace AbilityKit.Demo.Moba.Services
                 diagnostics?.RecordDuration(
                     MobaBattleDiagnosticMetric.DamageStage,
                     start,
-                    MobaBattleDiagnosticsDefaults.DamageStageWarnMs,
-                    $"stage={stage.GetType().Name} event={stage.EventId}");
+                    MobaBattleDiagnosticsDefaults.DamageStageWarnMs);
                 Publish(stage.EventId, calc);
             }
         }
@@ -157,28 +155,40 @@ namespace AbilityKit.Demo.Moba.Services
 
             var eid = TriggeringIdUtil.GetEventEid(eventId);
 
+            var objectKey = new EventKey<object>(eid);
+            var publishObject = eventBus.HasSubscribers(objectKey);
+
             if (payload is AttackInfo ai2)
             {
                 eventBus.Publish(new EventKey<AttackInfo>(eid), in ai2);
-                object boxed = ai2;
-                eventBus.Publish(new EventKey<object>(eid), in boxed);
+                if (publishObject)
+                {
+                    object boxed = ai2;
+                    eventBus.Publish(objectKey, in boxed);
+                }
             }
             else if (payload is AttackCalcInfo ac2)
             {
                 eventBus.Publish(new EventKey<AttackCalcInfo>(eid), in ac2);
-                object boxed = ac2;
-                eventBus.Publish(new EventKey<object>(eid), in boxed);
+                if (publishObject)
+                {
+                    object boxed = ac2;
+                    eventBus.Publish(objectKey, in boxed);
+                }
             }
             else if (payload is DamageResult dr2)
             {
                 eventBus.Publish(new EventKey<DamageResult>(eid), in dr2);
-                object boxed = dr2;
-                eventBus.Publish(new EventKey<object>(eid), in boxed);
+                if (publishObject)
+                {
+                    object boxed = dr2;
+                    eventBus.Publish(objectKey, in boxed);
+                }
             }
-            else
+            else if (publishObject)
             {
                 object boxed = payload;
-                eventBus.Publish(new EventKey<object>(eid), in boxed);
+                eventBus.Publish(objectKey, in boxed);
             }
         }
 

@@ -9,6 +9,7 @@ namespace AbilityKit.Demo.Moba.Services
         private SkillCastPreparationResult(
             bool success,
             string failReason,
+            in MobaSkillCastFailure failure,
             in SkillCastRequest request,
             SkillCastContext context,
             MobaSkillCastRuntimeService runtimes,
@@ -19,6 +20,7 @@ namespace AbilityKit.Demo.Moba.Services
         {
             Success = success;
             FailReason = failReason;
+            Failure = failure;
             Request = request;
             Context = context;
             Runtimes = runtimes;
@@ -30,6 +32,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool Success { get; }
         public string FailReason { get; }
+        public MobaSkillCastFailure Failure { get; }
         public SkillCastRequest Request { get; }
         public SkillCastContext Context { get; }
         public MobaSkillCastRuntimeService Runtimes { get; }
@@ -40,7 +43,13 @@ namespace AbilityKit.Demo.Moba.Services
 
         public static SkillCastPreparationResult Failed(string failReason)
         {
-            return new SkillCastPreparationResult(false, failReason, default, null, null, null, null, null, null);
+            return Failed("skill.cast.prepareFailed", failReason);
+        }
+
+        public static SkillCastPreparationResult Failed(string code, string failReason)
+        {
+            var failure = new MobaSkillCastFailure("Preparation", null, code, failReason);
+            return new SkillCastPreparationResult(false, failReason, in failure, default, null, null, null, null, null, null);
         }
 
         public static SkillCastPreparationResult Ready(
@@ -52,7 +61,7 @@ namespace AbilityKit.Demo.Moba.Services
             IAbilityPipelineConfig castConfig,
             IReadOnlyList<IAbilityPipelinePhase<SkillPipelineContext>> castPhases)
         {
-            return new SkillCastPreparationResult(true, null, in request, context, runtimes, preCastConfig, preCastPhases, castConfig, castPhases);
+            return new SkillCastPreparationResult(true, null, in MobaSkillCastFailure.None, in request, context, runtimes, preCastConfig, preCastPhases, castConfig, castPhases);
         }
     }
 }

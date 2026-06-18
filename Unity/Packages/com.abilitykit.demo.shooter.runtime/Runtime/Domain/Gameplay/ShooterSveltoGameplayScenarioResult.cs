@@ -15,6 +15,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             int defeatedTargets,
             int activeProjectiles,
             int remainingTargetHp,
+            int enemyHits,
             uint stateHash)
         {
             ScenarioId = scenarioId;
@@ -27,6 +28,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             DefeatedTargets = defeatedTargets;
             ActiveProjectiles = activeProjectiles;
             RemainingTargetHp = remainingTargetHp;
+            EnemyHits = enemyHits;
             StateHash = stateHash;
         }
 
@@ -49,6 +51,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
         public int ActiveProjectiles { get; }
 
         public int RemainingTargetHp { get; }
+
+        public int EnemyHits { get; }
 
         public uint StateHash { get; }
     }

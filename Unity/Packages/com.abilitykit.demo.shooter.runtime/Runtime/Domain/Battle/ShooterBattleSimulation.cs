@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Protocol.Shooter;
+using AbilityKit.World.Svelto;
+using Svelto.ECS;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
@@ -22,6 +24,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
         private readonly IShooterBattleRules _rules;
         private readonly List<int> _playerIdBuffer = new List<int>(8);
         private readonly List<int> _projectileIdBuffer = new List<int>(32);
+        private readonly ISveltoWorldContext _context;
 
         public ShooterBattleSimulation(ShooterBattleState state)
             : this(state, ShooterBattleRules.Default)
@@ -33,6 +36,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _state = state ?? throw new ArgumentNullException(nameof(state));
             _rules = rules ?? throw new ArgumentNullException(nameof(rules));
             _entities = _state.Entities;
+            _context = _entities.SveltoContext;
         }
 
         public void Tick(float deltaTime)
@@ -112,6 +116,19 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     continue;
                 }
 
+                if (TryHitEnemy(in bullet, out var enemyId, out var enemyX, out var enemyY, out var defeated))
+                {
+                    if (defeated && _entities.TryGetPlayer(bullet.OwnerPlayerId, out var owner))
+                    {
+                        owner.Score++;
+                        _entities.SetPlayer(in owner);
+                    }
+
+                    _state.Events.Add(new ShooterEventSnapshot(ShooterEventType.Hit, bullet.OwnerPlayerId, -(int)enemyId, bullet.BulletId, enemyX, enemyY, _rules.HitDamage));
+                    _entities.RemoveProjectile(bullet.BulletId);
+                    continue;
+                }
+
                 if (bullet.RemainingFrames <= 0)
                 {
                     _entities.RemoveProjectile(bullet.BulletId);
@@ -159,6 +176,43 @@ namespace AbilityKit.Demo.Shooter.Runtime
             }
 
             target = default;
+            return false;
+        }
+
+        private bool TryHitEnemy(in ShooterSveltoProjectileComponent bullet, out uint enemyId, out float enemyX, out float enemyY, out bool defeated)
+        {
+            var (transforms, healths, ids, count) = _context.EntitiesDB.QueryEntities<ShooterSveltoTransformComponent, ShooterSveltoHealthComponent>(ShooterSveltoGroups.GameplayTargets);
+            for (int i = 0; i < count; i++)
+            {
+                if (healths[i].Alive == 0)
+                {
+                    continue;
+                }
+
+                var dx = transforms[i].X - bullet.X;
+                var dy = transforms[i].Y - bullet.Y;
+                if (dx * dx + dy * dy > _rules.HitRadius * _rules.HitRadius)
+                {
+                    continue;
+                }
+
+                healths[i].Current = Math.Max(0, healths[i].Current - _rules.HitDamage);
+                defeated = healths[i].Current == 0;
+                if (defeated)
+                {
+                    healths[i].Alive = 0;
+                }
+
+                enemyId = ids[i];
+                enemyX = transforms[i].X;
+                enemyY = transforms[i].Y;
+                return true;
+            }
+
+            enemyId = 0u;
+            enemyX = 0f;
+            enemyY = 0f;
+            defeated = false;
             return false;
         }
 

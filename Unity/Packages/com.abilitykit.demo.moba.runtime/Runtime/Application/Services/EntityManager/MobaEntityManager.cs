@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Ability.Battle.EntityManager;
 using AbilityKit.Ability.Host;
 using AbilityKit.Demo.Moba;
@@ -15,6 +16,13 @@ namespace AbilityKit.Demo.Moba.Services.EntityManager
     [WorldService(typeof(MobaEntityManager))]
     public sealed class MobaEntityManager : IService
     {
+        private static readonly ObjectPool<List<int>> s_actorIdListPool = Pools.GetPool(
+            createFunc: () => new List<int>(256),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
+
         private readonly Dictionary<int, global::ActorEntity> _byActorId = new Dictionary<int, global::ActorEntity>();
 
         private readonly AbilityKit.Triggering.Eventing.IEventBus _eventBus;
@@ -134,8 +142,12 @@ namespace AbilityKit.Demo.Moba.Services.EntityManager
             if (eventBus == null) return;
             var eid = TriggeringIdUtil.GetEventEid(eventId);
             eventBus.Publish(new EventKey<UnitEventPayload>(eid), in payload);
-            object boxed = payload;
-            eventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (eventBus.HasSubscribers(objectKey))
+            {
+                object boxed = payload;
+                eventBus.Publish(objectKey, in boxed);
+            }
         }
 
         public IReadOnlyCollection<int> GetTeam(Team team) => ByTeam.Get(team);
@@ -149,13 +161,20 @@ namespace AbilityKit.Demo.Moba.Services.EntityManager
         public void Clear()
         {
             _byActorId.Clear();
-            var tmp = new List<int>(Index.Registry.Count);
-            foreach (var id in Index.Registry.Entities)
+            var tmp = s_actorIdListPool.Get();
+            try
             {
-                tmp.Add(id);
-            }
+                foreach (var id in Index.Registry.Entities)
+                {
+                    tmp.Add(id);
+                }
 
-            Index.Registry.RemoveRange(tmp);
+                Index.Registry.RemoveRange(tmp);
+            }
+            finally
+            {
+                s_actorIdListPool.Release(tmp);
+            }
         }
 
         public void Dispose()

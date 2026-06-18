@@ -6,62 +6,52 @@ namespace AbilityKit.Context
 {
     /// <summary>
     /// 上下文注册中心
-    /// 对齐 ECS 的 World，管理所有实体和属性
+    /// 对齐 ECS 的 World，管理所有实体、属性和流程上下文
     /// </summary>
     public sealed class ContextRegistry
     {
-        private readonly Dictionary<long, EntityData> _entities = new();
-        private readonly List<ContextEventHandler> _globalHandlers = new();
-        private readonly Dictionary<long, List<ContextEventHandler>> _idHandlers = new();
+        private readonly Dictionary<long, EntityData> _entities = new Dictionary<long, EntityData>();
+        private readonly Dictionary<long, FlowContext> _flows = new Dictionary<long, FlowContext>();
+        private readonly Dictionary<int, HashSet<long>> _entitiesByPropertyType = new Dictionary<int, HashSet<long>>();
+        private readonly List<ContextEventHandler> _globalHandlers = new List<ContextEventHandler>();
+        private readonly Dictionary<long, List<ContextEventHandler>> _idHandlers = new Dictionary<long, List<ContextEventHandler>>();
 
-        private readonly object _lock = new();
+        private readonly object _lock = new object();
         private long _nextEntityId = 1;
+        private long _nextFlowId = 1;
 
-        /// <summary>
-        /// 实体数据结构
-        /// </summary>
         private sealed class EntityData
         {
             public long Id { get; }
+            public long FlowId { get; set; }
             public long CreatedAtMs { get; }
-            public Dictionary<int, IProperty> Properties { get; } = new();
+            public Dictionary<int, IProperty> Properties { get; } = new Dictionary<int, IProperty>();
 
-            public EntityData(long id)
+            public EntityData(long id, long flowId)
             {
                 Id = id;
+                FlowId = flowId;
                 CreatedAtMs = TimeUtil.CurrentTimeMs;
             }
         }
 
-        // ============ 事件 ============
-
-        /// <summary>
-        /// 订阅全局事件
-        /// </summary>
         public void Subscribe(ContextEventHandler handler)
         {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
             lock (_lock)
-            {
                 _globalHandlers.Add(handler);
-            }
         }
 
-        /// <summary>
-        /// 取消订阅全局事件
-        /// </summary>
         public void Unsubscribe(ContextEventHandler handler)
         {
+            if (handler == null) return;
             lock (_lock)
-            {
                 _globalHandlers.Remove(handler);
-            }
         }
 
-        /// <summary>
-        /// 订阅指定实体的事件
-        /// </summary>
         public void Subscribe(long entityId, ContextEventHandler handler)
         {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
             lock (_lock)
             {
                 if (!_idHandlers.TryGetValue(entityId, out var list))
@@ -69,111 +59,204 @@ namespace AbilityKit.Context
                     list = new List<ContextEventHandler>();
                     _idHandlers[entityId] = list;
                 }
+
                 list.Add(handler);
             }
         }
 
-        /// <summary>
-        /// 取消订阅指定实体的事件
-        /// </summary>
         public void Unsubscribe(long entityId, ContextEventHandler handler)
         {
+            if (handler == null) return;
             lock (_lock)
             {
                 if (_idHandlers.TryGetValue(entityId, out var list))
-                {
                     list.Remove(handler);
-                }
             }
         }
 
-        // ============ 实体操作 ============
-
-        /// <summary>
-        /// 创建实体
-        /// </summary>
         public EntityBuilder Create()
         {
-            lock (_lock)
-            {
-                var id = _nextEntityId++;
-                var entity = new EntityData(id);
-                _entities[id] = entity;
-
-                RaiseEvent(ContextEvent.Created(id));
-                return new EntityBuilder(this, id);
-            }
+            return CreateInFlow(0);
         }
 
-        /// <summary>
-        /// 销毁实体
-        /// </summary>
+        public EntityBuilder CreateInFlow(long flowId)
+        {
+            ContextEvent evt;
+            long id;
+            lock (_lock)
+            {
+                if (flowId != 0 && !_flows.ContainsKey(flowId))
+                    throw new ArgumentException($"Flow {flowId} not found", nameof(flowId));
+
+                id = _nextEntityId++;
+                var entity = new EntityData(id, flowId);
+                _entities[id] = entity;
+                if (flowId != 0)
+                    _flows[flowId].AddEntity(id);
+
+                evt = ContextEvent.Created(id, flowId);
+            }
+
+            RaiseEvent(evt);
+            return new EntityBuilder(this, id);
+        }
+
         public bool Destroy(long entityId)
         {
+            ContextEvent destroying;
+            ContextEvent destroyed;
             lock (_lock)
             {
                 if (!_entities.TryGetValue(entityId, out var entity))
                     return false;
 
-                RaiseEvent(ContextEvent.Destroying(entityId));
+                destroying = ContextEvent.Destroying(entityId, entity.FlowId);
+            }
+
+            RaiseEvent(destroying);
+
+            lock (_lock)
+            {
+                if (!_entities.TryGetValue(entityId, out var entity))
+                    return false;
+
+                foreach (var propertyTypeId in entity.Properties.Keys.ToList())
+                    RemovePropertyIndex(propertyTypeId, entityId);
+
+                if (entity.FlowId != 0 && _flows.TryGetValue(entity.FlowId, out var flow))
+                    flow.RemoveEntity(entityId);
 
                 _entities.Remove(entityId);
-
-                RaiseEvent(ContextEvent.Destroyed(entityId));
-                return true;
+                _idHandlers.Remove(entityId);
+                destroyed = ContextEvent.Destroyed(entityId, entity.FlowId);
             }
+
+            RaiseEvent(destroyed);
+            return true;
         }
 
-        /// <summary>
-        /// 检查实体是否存在
-        /// </summary>
         public bool Exists(long entityId)
         {
             lock (_lock)
-            {
                 return _entities.ContainsKey(entityId);
-            }
         }
 
-        /// <summary>
-        /// 生成新的实体 ID
-        /// </summary>
         public long GenerateId()
         {
             lock (_lock)
-            {
                 return _nextEntityId++;
+        }
+
+        public FlowContextScope BeginFlow(string name = null, long ownerEntityId = 0, long parentFlowId = 0, FlowContextPhase disposePhase = FlowContextPhase.Completed)
+        {
+            var flowId = CreateFlow(name, ownerEntityId, parentFlowId);
+            SetFlowPhase(flowId, FlowContextPhase.Running);
+            return new FlowContextScope(this, flowId, disposePhase);
+        }
+
+        public long CreateFlow(string name = null, long ownerEntityId = 0, long parentFlowId = 0)
+        {
+            ContextEvent evt;
+            long flowId;
+            lock (_lock)
+            {
+                if (parentFlowId != 0 && !_flows.ContainsKey(parentFlowId))
+                    throw new ArgumentException($"Parent flow {parentFlowId} not found", nameof(parentFlowId));
+
+                flowId = _nextFlowId++;
+                var flow = new FlowContext(flowId, parentFlowId, ownerEntityId, name ?? string.Empty);
+                _flows[flowId] = flow;
+                if (parentFlowId != 0)
+                    _flows[parentFlowId].AddChildFlow(flowId);
+
+                evt = ContextEvent.FlowCreated(flowId, ownerEntityId, parentFlowId, flow.Phase);
+            }
+
+            RaiseEvent(evt);
+            return flowId;
+        }
+
+        public bool SetFlowPhase(long flowId, FlowContextPhase phase)
+        {
+            ContextEvent evt;
+            lock (_lock)
+            {
+                if (!_flows.TryGetValue(flowId, out var flow))
+                    return false;
+
+                if (flow.Phase == phase)
+                    return true;
+
+                flow.SetPhase(phase);
+                evt = ContextEvent.FlowPhaseChanged(flowId, flow.OwnerEntityId, flow.ParentFlowId, phase);
+            }
+
+            RaiseEvent(evt);
+            return true;
+        }
+
+        public bool TryGetFlow(long flowId, out FlowContextInfo info)
+        {
+            lock (_lock)
+            {
+                if (_flows.TryGetValue(flowId, out var flow))
+                {
+                    info = flow.ToInfo();
+                    return true;
+                }
+            }
+
+            info = default;
+            return false;
+        }
+
+        public IEnumerable<FlowContextInfo> GetFlows(bool activeOnly = false)
+        {
+            lock (_lock)
+            {
+                return _flows.Values
+                    .Where(flow => !activeOnly || flow.ToInfo().IsActive)
+                    .Select(flow => flow.ToInfo())
+                    .ToList();
             }
         }
 
-        // ============ 属性操作 ============
 
-        /// <summary>
-        /// 添加属性
-        /// </summary>
+        public IEnumerable<long> GetEntitiesInFlow(long flowId)
+        {
+            lock (_lock)
+            {
+                if (!_flows.TryGetValue(flowId, out var flow))
+                    return Enumerable.Empty<long>();
+                return flow.EntityIds.ToList();
+            }
+        }
+
+        public long GetEntityFlow(long entityId)
+        {
+            lock (_lock)
+                return _entities.TryGetValue(entityId, out var entity) ? entity.FlowId : 0;
+        }
+
         public void Add<T>(long entityId, T property) where T : class, IProperty
         {
+            if (property == null) throw new ArgumentNullException(nameof(property));
+            var type = GetOrRegisterPropertyType<T>();
+            ContextEvent? evt = null;
             lock (_lock)
             {
                 if (!_entities.TryGetValue(entityId, out var entity))
                     return;
 
-                var type = PropertyTypeRegistry.Instance.Get<T>();
-                if (type == null)
-                {
-                    type = PropertyTypeRegistry.Instance.Register<T>();
-                }
-
                 entity.Properties[type.Id] = property;
-
-                RaiseEvent(ContextEvent.Updated(entityId, type.Id, $"__{type.Id}", null, property));
+                AddPropertyIndex(type.Id, entityId);
+                evt = ContextEvent.Updated(entityId, entity.FlowId, type.Id, $"__{type.Id}", null, property);
             }
+
+            RaiseEvent(evt.Value);
         }
 
-        /// <summary>
-        /// 获取属性
-        /// </summary>
-        public T? Get<T>(long entityId) where T : class, IProperty
+        public T Get<T>(long entityId) where T : class, IProperty
         {
             lock (_lock)
             {
@@ -188,29 +271,12 @@ namespace AbilityKit.Context
             }
         }
 
-        /// <summary>
-        /// 获取属性（带默认值）
-        /// </summary>
         public T Get<T>(long entityId, T defaultValue) where T : class, IProperty
         {
             return Get<T>(entityId) ?? defaultValue;
         }
 
-        /// <summary>
-        /// 检查实体是否拥有指定属性
-        /// </summary>
         public bool Has<T>(long entityId) where T : class, IProperty
-        {
-            lock (_lock)
-            {
-                return Get<T>(entityId) != null;
-            }
-        }
-
-        /// <summary>
-        /// 移除属性
-        /// </summary>
-        public bool Remove<T>(long entityId) where T : class, IProperty
         {
             lock (_lock)
             {
@@ -218,113 +284,183 @@ namespace AbilityKit.Context
                     return false;
 
                 var type = PropertyTypeRegistry.Instance.Get<T>();
-                if (type == null)
-                    return false;
-
-                if (entity.Properties.Remove(type.Id, out var oldProp))
-                {
-                    RaiseEvent(ContextEvent.Updated(entityId, type.Id, $"__{type.Id}", oldProp, null));
-                    return true;
-                }
-                return false;
+                return type != null && entity.Properties.ContainsKey(type.Id);
             }
         }
 
-        /// <summary>
-        /// 设置属性（覆盖）
-        /// </summary>
+        public bool Remove<T>(long entityId) where T : class, IProperty
+        {
+            var type = PropertyTypeRegistry.Instance.Get<T>();
+            if (type == null)
+                return false;
+
+            ContextEvent? evt = null;
+            lock (_lock)
+            {
+                if (!_entities.TryGetValue(entityId, out var entity))
+                    return false;
+
+                if (!entity.Properties.Remove(type.Id, out var oldProp))
+                    return false;
+
+                RemovePropertyIndex(type.Id, entityId);
+                evt = ContextEvent.Updated(entityId, entity.FlowId, type.Id, $"__{type.Id}", oldProp, null);
+            }
+
+            RaiseEvent(evt.Value);
+            return true;
+        }
+
         public void Set<T>(long entityId, T property) where T : class, IProperty
         {
+            if (property == null) throw new ArgumentNullException(nameof(property));
+            var type = GetOrRegisterPropertyType<T>();
+            ContextEvent? evt = null;
             lock (_lock)
             {
                 if (!_entities.TryGetValue(entityId, out var entity))
                     return;
 
-                var type = PropertyTypeRegistry.Instance.Get<T>();
-                if (type == null)
-                {
-                    type = PropertyTypeRegistry.Instance.Register<T>();
-                }
-
                 entity.Properties.TryGetValue(type.Id, out var oldProp);
                 entity.Properties[type.Id] = property;
-
-                RaiseEvent(ContextEvent.Updated(entityId, type.Id, $"__{type.Id}", oldProp, property));
+                AddPropertyIndex(type.Id, entityId);
+                evt = ContextEvent.Updated(entityId, entity.FlowId, type.Id, $"__{type.Id}", oldProp, property);
             }
+
+            RaiseEvent(evt.Value);
         }
 
-        // ============ 查询操作 ============
-
-        /// <summary>
-        /// 查询拥有指定属性的所有实体 ID
-        /// </summary>
         public IEnumerable<long> GetEntitiesWith<T>() where T : class, IProperty
         {
-            lock (_lock)
-            {
-                var type = PropertyTypeRegistry.Instance.Get<T>();
-                if (type == null)
-                    return Enumerable.Empty<long>();
-
-                return _entities
-                    .Where(kv => kv.Value.Properties.ContainsKey(type.Id))
-                    .Select(kv => kv.Key)
-                    .ToList();
-            }
+            var type = PropertyTypeRegistry.Instance.Get<T>();
+            return type == null ? Enumerable.Empty<long>() : GetEntitiesWith(type.Id);
         }
 
-        /// <summary>
-        /// 查询拥有指定属性类型 ID 的所有实体 ID（内部使用）
-        /// </summary>
         internal IEnumerable<long> GetEntitiesWith(int propertyTypeId)
         {
             lock (_lock)
             {
-                return _entities
-                    .Where(kv => kv.Value.Properties.ContainsKey(propertyTypeId))
-                    .Select(kv => kv.Key)
-                    .ToList();
+                return _entitiesByPropertyType.TryGetValue(propertyTypeId, out var ids)
+                    ? ids.ToList()
+                    : Enumerable.Empty<long>();
             }
         }
 
-        // ============ 批量操作 ============
-
-        /// <summary>
-        /// 销毁所有实体
-        /// </summary>
-        public void Clear()
+        internal IEnumerable<long> GetEntitiesWithout(int propertyTypeId)
         {
             lock (_lock)
             {
-                var ids = _entities.Keys.ToList();
-                foreach (var id in ids)
-                {
-                    Destroy(id);
-                }
+                if (!_entitiesByPropertyType.TryGetValue(propertyTypeId, out var ids))
+                    return _entities.Keys.ToList();
+
+                return _entities.Keys.Where(id => !ids.Contains(id)).ToList();
             }
         }
 
-        /// <summary>
-        /// 获取实体数量
-        /// </summary>
+        internal IEnumerable<long> GetAllEntityIds()
+        {
+            lock (_lock)
+                return _entities.Keys.ToList();
+        }
+
+        internal IProperty GetProperty(long entityId, int propertyTypeId)
+        {
+            lock (_lock)
+            {
+                if (!_entities.TryGetValue(entityId, out var entity))
+                    return null;
+
+                return entity.Properties.TryGetValue(propertyTypeId, out var property) ? property : null;
+            }
+        }
+
+        public QueryBuilder Query()
+        {
+            return new QueryBuilder(this);
+        }
+
+        public void Clear()
+        {
+            foreach (var id in GetAllEntityIds().ToList())
+                Destroy(id);
+
+            lock (_lock)
+            {
+                _flows.Clear();
+                _entitiesByPropertyType.Clear();
+                _nextEntityId = 1;
+                _nextFlowId = 1;
+            }
+        }
+
         public int Count
         {
             get
             {
                 lock (_lock)
-                {
                     return _entities.Count;
-                }
             }
         }
 
-        // ============ 内部方法 ============
+        public int FlowCount
+        {
+            get
+            {
+                lock (_lock)
+                    return _flows.Count;
+            }
+        }
+
+        public IEnumerable<int> GetPropertyTypes(long entityId)
+        {
+            lock (_lock)
+            {
+                if (!_entities.TryGetValue(entityId, out var entity))
+                    return Enumerable.Empty<int>();
+
+                return entity.Properties.Keys.ToList();
+            }
+        }
+
+        private static PropertyType GetOrRegisterPropertyType<T>() where T : IProperty
+        {
+            var type = PropertyTypeRegistry.Instance.Get<T>();
+            return type ?? PropertyTypeRegistry.Instance.Register<T>();
+        }
+
+        private void AddPropertyIndex(int propertyTypeId, long entityId)
+        {
+            if (!_entitiesByPropertyType.TryGetValue(propertyTypeId, out var ids))
+            {
+                ids = new HashSet<long>();
+                _entitiesByPropertyType[propertyTypeId] = ids;
+            }
+
+            ids.Add(entityId);
+        }
+
+        private void RemovePropertyIndex(int propertyTypeId, long entityId)
+        {
+            if (!_entitiesByPropertyType.TryGetValue(propertyTypeId, out var ids))
+                return;
+
+            ids.Remove(entityId);
+            if (ids.Count == 0)
+                _entitiesByPropertyType.Remove(propertyTypeId);
+        }
 
         private void RaiseEvent(ContextEvent evt)
         {
-            List<Exception>? exceptions = null;
+            List<ContextEventHandler> handlers;
+            lock (_lock)
+            {
+                handlers = new List<ContextEventHandler>(_globalHandlers);
+                if (_idHandlers.TryGetValue(evt.EntityId, out var idList))
+                    handlers.AddRange(idList);
+            }
 
-            foreach (var handler in _globalHandlers)
+            List<Exception> exceptions = null;
+            foreach (var handler in handlers)
             {
                 try
                 {
@@ -337,47 +473,11 @@ namespace AbilityKit.Context
                 }
             }
 
-            if (_idHandlers.TryGetValue(evt.EntityId, out var idList))
-            {
-                foreach (var handler in idList)
-                {
-                    try
-                    {
-                        handler(evt);
-                    }
-                    catch (Exception ex)
-                    {
-                        exceptions ??= new List<Exception>();
-                        exceptions.Add(ex);
-                    }
-                }
-            }
-
             if (exceptions != null && exceptions.Count > 0)
-            {
                 throw new AggregateException("One or more event handlers threw exceptions", exceptions);
-            }
-        }
-
-        /// <summary>
-        /// 获取实体的所有属性类型
-        /// </summary>
-        public IEnumerable<int> GetPropertyTypes(long entityId)
-        {
-            lock (_lock)
-            {
-                if (!_entities.TryGetValue(entityId, out var entity))
-                    return Enumerable.Empty<int>();
-
-                return entity.Properties.Keys.ToList();
-            }
         }
     }
 
-    /// <summary>
-    /// 实体构建器
-    /// 用于给实体添加属性
-    /// </summary>
     public sealed class EntityBuilder
     {
         private readonly ContextRegistry _registry;
@@ -389,18 +489,14 @@ namespace AbilityKit.Context
             _entityId = entityId;
         }
 
-        /// <summary>
-        /// 添加属性
-        /// </summary>
+        public long EntityId => _entityId;
+
         public EntityBuilder With<T>(T property) where T : class, IProperty
         {
             _registry.Add(_entityId, property);
             return this;
         }
 
-        /// <summary>
-        /// 添加多个属性
-        /// </summary>
         public EntityBuilder With<T1, T2>(T1 prop1, T2 prop2)
             where T1 : class, IProperty
             where T2 : class, IProperty
@@ -410,9 +506,6 @@ namespace AbilityKit.Context
             return this;
         }
 
-        /// <summary>
-        /// 添加多个属性（3个）
-        /// </summary>
         public EntityBuilder With<T1, T2, T3>(T1 prop1, T2 prop2, T3 prop3)
             where T1 : class, IProperty
             where T2 : class, IProperty
@@ -424,9 +517,6 @@ namespace AbilityKit.Context
             return this;
         }
 
-        /// <summary>
-        /// 构建并返回实体 ID
-        /// </summary>
         public long Build() => _entityId;
     }
 }

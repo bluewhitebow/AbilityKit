@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AbilityKit.Demo.Shooter.Runtime;
@@ -11,12 +12,11 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> client controller prototype.
-    /// The local player still runs through the existing prediction chain
-    /// (<see cref="ShooterClientFrameSyncCoordinator"/> + <see cref="ShooterClientInputCoordinator"/>),
-    /// but remote authoritative snapshots are not imported or rolled back. Instead they are buffered
-    /// by server ticks and replayed a fixed interpolation delay behind the newest authoritative
-    /// sample, so remote actors move smoothly without correcting the local simulation.
+    /// <see cref="NetworkSyncModel.AuthoritativeInterpolation"/> 客户端控制器原型。
+    /// 本地玩家仍走现有预测链路
+    /// （<see cref="ShooterClientFrameSyncCoordinator"/> + <see cref="ShooterClientInputCoordinator"/>），
+    /// 但远端权威快照不会导入或触发回滚，而是按服务器 tick 缓冲，并以固定插值延迟落后于最新权威样本播放，
+    /// 从而让远端 actor 平滑移动且不校正本地模拟。
     /// </summary>
     public sealed class ShooterClientAuthoritativeInterpolationSyncController : IShooterClientSyncController, IInterpolationDiagnosticsProvider
     {
@@ -76,8 +76,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public AbilityKit.Network.Runtime.Sync.FastReconnectPhase FastReconnectPhase => _frameSync.FastReconnectPhase;
 
-        public System.Collections.Generic.IReadOnlyList<AbilityKit.Network.Runtime.Sync.SyncHealthEvent> LastFastReconnectHealthEvents
-            => _frameSync.LastFastReconnectHealthEvents;
+        public IReadOnlyList<SyncHealthEvent> LastFastReconnectHealthEvents
+            => MergeHealthEvents(_frameSync.LastFastReconnectHealthEvents, _input.LastHealthEvents);
 
         public ShooterClientResyncReason LastResyncReason => _frameSync.LastResyncReason;
 
@@ -91,23 +91,22 @@ namespace AbilityKit.Demo.Shooter.View
 
         public bool HasGateway => _input.HasGateway;
 
-        /// <summary>Number of remote authoritative snapshots currently buffered for interpolation.</summary>
+        /// <summary>当前为插值缓冲的远端权威快照数量。</summary>
         public int BufferedRemoteSnapshotCount => _playback.BufferedSampleCount;
 
-        /// <summary>The current delayed remote playback time, in timeline ticks.</summary>
+        /// <summary>当前延迟远端播放时间，单位为时间线 tick。</summary>
         public long RemotePlaybackTicks => _playback.PlaybackTicks;
 
-        /// <summary>The current local estimate of authoritative server time, in timeline ticks.</summary>
+        /// <summary>当前本地估算的权威服务器时间，单位为时间线 tick。</summary>
         public long EstimatedServerTicks => _playback.EstimatedServerTicks;
 
-        /// <summary>Whether at least one remote interpolation frame has been published to presentation.</summary>
+        /// <summary>是否已经向表现层发布过至少一帧远端插值结果。</summary>
         public bool HasPublishedRemoteFrame => _playback.HasPublished;
 
         /// <summary>
-        /// Whether the most recent publish attempt found the delayed playback time running past the
-        /// newest buffered snapshot by more than <see cref="InterpolationConfig.MaxExtrapolationTicks"/>.
-        /// Indicates the remote buffer is starved (e.g. snapshots stopped arriving) and playback is
-        /// holding the last authoritative pose rather than extrapolating further.
+        /// 最近一次发布尝试是否发现延迟播放时间已经超过最新缓冲快照
+        /// <see cref="InterpolationConfig.MaxExtrapolationTicks"/> 以上。
+        /// 表示远端缓冲已经饥饿（例如快照停止到达），播放会保持最后一个权威姿态，而不是继续外推。
         /// </summary>
         public bool IsRemotePlaybackStarved => _playback.IsStarved;
 
@@ -174,9 +173,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// Buffers a remote authoritative snapshot for delayed interpolation. Unlike the predict
-        /// rollback model this never imports packed state into the local runtime or triggers rollback;
-        /// it only feeds the interpolation buffer and timeline.
+        /// 为延迟插值缓冲远端权威快照。不同于预测回滚模型，它不会把打包状态导入本地运行时，
+        /// 也不会触发回滚；这里只写入插值缓冲与时间线。
         /// </summary>
         public ShooterSnapshotApplyResult ApplyGatewayPush(uint opCode, ArraySegment<byte> payload)
         {
@@ -186,11 +184,17 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             var snapshot = _decoder.Decode(payload);
+            if (snapshot.PureStateSnapshot.HasValue)
+            {
+                var pureStateResult = _presentation.ApplyPureStateGatewaySnapshot(in snapshot);
+                return ShooterPackedSnapshotSyncController.ToSnapshotApplyResult(pureStateResult);
+            }
+
             return BufferRemoteSnapshot(in snapshot);
         }
 
         /// <summary>
-        /// Buffers an already decoded gateway snapshot for delayed interpolation.
+        /// 为延迟插值缓冲一个已经解码的网关快照。
         /// </summary>
         public ShooterSnapshotApplyResult BufferRemoteSnapshot(in ShooterGatewaySnapshot snapshot)
         {
@@ -306,8 +310,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         private void PublishInterpolatedRemoteFrame()
         {
-            // The framework playback owns the buffer + timeline + extrapolation/starvation policy; the
-            // Shooter controller only supplies the "project + apply to presentation" half of the loop.
+            // 框架播放层负责缓冲、时间线以及外推/饥饿策略；
+            // Shooter 控制器只提供“投影 + 应用到表现层”这一半循环。
             if (!_playback.TrySample(out var interpolation))
             {
                 return;
@@ -317,8 +321,36 @@ namespace AbilityKit.Demo.Shooter.View
             _presentation.ApplyInterpolatedGatewaySnapshot(in projected);
         }
 
+        private static IReadOnlyList<SyncHealthEvent> MergeHealthEvents(
+            IReadOnlyList<SyncHealthEvent> primary,
+            IReadOnlyList<SyncHealthEvent> secondary)
+        {
+            if (primary.Count == 0)
+            {
+                return secondary;
+            }
+
+            if (secondary.Count == 0)
+            {
+                return primary;
+            }
+
+            var merged = new SyncHealthEvent[primary.Count + secondary.Count];
+            for (int i = 0; i < primary.Count; i++)
+            {
+                merged[i] = primary[i];
+            }
+
+            for (int i = 0; i < secondary.Count; i++)
+            {
+                merged[primary.Count + i] = secondary[i];
+            }
+
+            return merged;
+        }
+
         /// <summary>
-        /// Captures the current interpolation playback health for diagnostics / smoke output.
+        /// 采集当前插值播放健康状态，用于诊断与 smoke 输出。
         /// </summary>
         public InterpolationDiagnostics GetInterpolationDiagnostics()
         {
@@ -326,7 +358,7 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         // --- IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample> ---
-        // Explicit framework-contract surface that maps onto the existing demo behaviour.
+        // 显式框架契约接口，映射到现有示例行为。
 
         SyncTickResult IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>.Tick(float deltaSeconds)
         {
@@ -340,8 +372,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         void IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>.ObserveRemote(in ShooterRemoteSnapshotSample sample)
         {
-            // For authoritative interpolation, observing a remote sample feeds the delayed playback
-            // buffer (the same path BufferRemoteSnapshot/ApplyGatewayPush use), never the local sim.
+            // 对权威插值来说，观察远端样本会写入延迟播放缓冲
+            // （与 BufferRemoteSnapshot/ApplyGatewayPush 使用同一路径），绝不会进入本地模拟。
             _playback.Observe(sample);
         }
 

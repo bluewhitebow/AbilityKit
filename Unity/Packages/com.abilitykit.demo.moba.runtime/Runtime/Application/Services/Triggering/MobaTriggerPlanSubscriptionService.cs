@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using AbilityKit.Core.Logging;
+using AbilityKit.Core.Pooling;
 using AbilityKit.Demo.Moba.Systems;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
@@ -23,9 +23,14 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
 
         private readonly Dictionary<int, TriggerPlanJsonDatabase.Record> _byTriggerId = new Dictionary<int, TriggerPlanJsonDatabase.Record>();
         private readonly Dictionary<int, Type> _argsTypeByTriggerId = new Dictionary<int, Type>();
-        private readonly Dictionary<long, List<IDisposable>> _regsByOwnerKey = new Dictionary<long, List<IDisposable>>();
+        private static readonly ObjectPool<List<int>> s_intListPool = Pools.GetPool(
+            createFunc: () => new List<int>(8),
+            onRelease: list => list.Clear(),
+            defaultCapacity: 8,
+            maxSize: 64,
+            collectionCheck: false);
 
-        private static readonly MethodInfo RegisterTypedMethod = typeof(MobaTriggerPlanSubscriptionService).GetMethod(nameof(RegisterTyped), BindingFlags.NonPublic | BindingFlags.Static);
+        private readonly Dictionary<long, Dictionary<int, IDisposable>> _regsByOwnerKey = new Dictionary<long, Dictionary<int, IDisposable>>();
 
         public bool ContainsOwnerKey(long ownerKey)
         {
@@ -63,52 +68,39 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
 
         public void StartTriggers(IReadOnlyList<int> triggerIds, long ownerKey)
         {
-            if (ownerKey == 0) return;
-            if (triggerIds == null || triggerIds.Count == 0) return;
-            if (_db == null || _runner == null) return;
+            ApplyTriggers(triggerIds, ownerKey);
+        }
 
-            if (_regsByOwnerKey.ContainsKey(ownerKey))
+        public void ApplyTriggers(IReadOnlyList<int> triggerIds, long ownerKey)
+        {
+            if (ownerKey == 0) return;
+            if (triggerIds == null || triggerIds.Count == 0)
             {
                 Stop(ownerKey);
+                return;
             }
 
-            var regs = new List<IDisposable>(triggerIds.Count);
+            if (_db == null || _runner == null) return;
+
+            if (!_regsByOwnerKey.TryGetValue(ownerKey, out var regs) || regs == null)
+            {
+                regs = new Dictionary<int, IDisposable>(triggerIds.Count);
+                _regsByOwnerKey[ownerKey] = regs;
+            }
 
             for (int i = 0; i < triggerIds.Count; i++)
             {
                 var triggerId = triggerIds[i];
-                if (triggerId <= 0) continue;
-                if (!_byTriggerId.TryGetValue(triggerId, out var record))
-                {
-                    Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId not found in plan db: {triggerId}");
-                    continue;
-                }
+                if (triggerId <= 0 || regs.ContainsKey(triggerId)) continue;
+                if (!TryRegister(triggerId, out var registration)) continue;
 
-                if (record.EventId == 0)
-                {
-                    Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId has empty eventId: {triggerId}");
-                    continue;
-                }
-
-                if (record.Scope != TriggerPlanScope.OwnerBound)
-                {
-                    Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId is not owner-bound. triggerId={triggerId} scope={record.Scope}");
-                    continue;
-                }
-
-                try
-                {
-                    regs.Add(RegisterTyped(record));
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex, $"[MobaTriggerPlanSubscriptionService] register plan failed. triggerId={triggerId}");
-                }
+                regs[triggerId] = registration;
             }
 
-            if (regs.Count > 0)
+            RemoveStaleRegistrations(ownerKey, regs, triggerIds);
+            if (regs.Count == 0)
             {
-                _regsByOwnerKey[ownerKey] = regs;
+                _regsByOwnerKey.Remove(ownerKey);
             }
         }
 
@@ -139,6 +131,39 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
             }
         }
 
+        private bool TryRegister(int triggerId, out IDisposable registration)
+        {
+            registration = null;
+            if (!_byTriggerId.TryGetValue(triggerId, out var record))
+            {
+                Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId not found in plan db: {triggerId}");
+                return false;
+            }
+
+            if (record.EventId == 0)
+            {
+                Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId has empty eventId: {triggerId}");
+                return false;
+            }
+
+            if (record.Scope != TriggerPlanScope.OwnerBound)
+            {
+                Log.Warning($"[MobaTriggerPlanSubscriptionService] triggerId is not owner-bound. triggerId={triggerId} scope={record.Scope}");
+                return false;
+            }
+
+            try
+            {
+                registration = RegisterTyped(record);
+                return registration != null;
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[MobaTriggerPlanSubscriptionService] register plan failed. triggerId={triggerId}");
+                return false;
+            }
+        }
+
         private IDisposable RegisterTyped(in TriggerPlanJsonDatabase.Record record)
         {
             if (!_argsTypeByTriggerId.TryGetValue(record.TriggerId, out var argsType) || argsType == null)
@@ -146,13 +171,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
                 throw new InvalidOperationException($"Owner-bound trigger missing typed event args mapping. triggerId={record.TriggerId} eventName={record.EventName}");
             }
 
-            if (RegisterTypedMethod == null)
-            {
-                throw new MissingMethodException(nameof(MobaTriggerPlanSubscriptionService), nameof(RegisterTyped));
-            }
-
-            var mi = RegisterTypedMethod.MakeGenericMethod(argsType);
-            var registration = (IDisposable)mi.Invoke(null, new object[] { _runner, record.EventId, record.Plan });
+            var registration = _runner.RegisterPlan(record.EventId, argsType, in record.Plan);
             if (registration == null)
             {
                 throw new InvalidOperationException($"Owner-bound trigger typed registration returned null. triggerId={record.TriggerId} eventName={record.EventName} eid={record.EventId}");
@@ -161,60 +180,69 @@ namespace AbilityKit.Demo.Moba.Services.Triggering
             return registration;
         }
 
-        private static IDisposable RegisterTyped<TArgs>(TriggerRunner<IWorldResolver> runner, int eid, TriggerPlan<object> planObj) where TArgs : class
-        {
-            if (runner == null) return null;
-            if (eid == 0) return null;
-
-            var plan = ConvertPlan<TArgs>(in planObj);
-            var key = new EventKey<TArgs>(eid);
-            return runner.RegisterPlan<TArgs, IWorldResolver>(key, in plan);
-        }
-
-        private static TriggerPlan<TArgs> ConvertPlan<TArgs>(in TriggerPlan<object> src)
-        {
-            var actions = src.Actions;
-
-            if (!src.HasPredicate || src.PredicateKind == EPredicateKind.None)
-            {
-                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, actions, src.InterruptPriority, src.Cue, src.Schedule, src.ExecutionControl);
-            }
-
-            if (src.PredicateKind == EPredicateKind.Expr)
-            {
-                return new TriggerPlan<TArgs>(src.Phase, src.Priority, src.TriggerId, src.PredicateExpr, actions, src.InterruptPriority, src.Cue, src.Schedule, src.ExecutionControl);
-            }
-
-            switch (src.PredicateArity)
-            {
-                case 0:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: null, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
-                case 1:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0 }, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
-                case 2:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, predicateId: src.PredicateId, predicateArgs: new[] { src.PredicateArg0, src.PredicateArg1 }, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
-                default:
-                    return new TriggerPlan<TArgs>(phase: src.Phase, priority: src.Priority, triggerId: src.TriggerId, actions: actions, interruptPriority: src.InterruptPriority, cue: src.Cue, schedule: src.Schedule, executionControl: src.ExecutionControl);
-            }
-        }
-
         public void Stop(long ownerKey)
         {
             if (ownerKey == 0) return;
             if (!_regsByOwnerKey.TryGetValue(ownerKey, out var regs) || regs == null) return;
 
             _regsByOwnerKey.Remove(ownerKey);
+            DisposeRegistrations(ownerKey, regs);
+        }
 
-            for (int i = 0; i < regs.Count; i++)
+        private void RemoveStaleRegistrations(long ownerKey, Dictionary<int, IDisposable> regs, IReadOnlyList<int> desiredTriggerIds)
+        {
+            if (regs == null || regs.Count == 0) return;
+
+            var stale = s_intListPool.Get();
+            try
             {
-                try
+                foreach (var kv in regs)
                 {
-                    regs[i]?.Dispose();
+                    if (!ContainsTriggerId(desiredTriggerIds, kv.Key)) stale.Add(kv.Key);
                 }
-                catch (Exception ex)
+
+                for (int i = 0; i < stale.Count; i++)
                 {
-                    Log.Exception(ex, $"[MobaTriggerPlanSubscriptionService] dispose reg failed. ownerKey={ownerKey}");
+                    var triggerId = stale[i];
+                    var registration = regs[triggerId];
+                    regs.Remove(triggerId);
+                    DisposeRegistration(ownerKey, registration);
                 }
+            }
+            finally
+            {
+                s_intListPool.Release(stale);
+            }
+        }
+
+        private static bool ContainsTriggerId(IReadOnlyList<int> triggerIds, int triggerId)
+        {
+            if (triggerIds == null || triggerIds.Count == 0) return false;
+            for (int i = 0; i < triggerIds.Count; i++)
+            {
+                if (triggerIds[i] == triggerId) return true;
+            }
+
+            return false;
+        }
+
+        private static void DisposeRegistrations(long ownerKey, Dictionary<int, IDisposable> regs)
+        {
+            foreach (var kv in regs)
+            {
+                DisposeRegistration(ownerKey, kv.Value);
+            }
+        }
+
+        private static void DisposeRegistration(long ownerKey, IDisposable registration)
+        {
+            try
+            {
+                registration?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[MobaTriggerPlanSubscriptionService] dispose reg failed. ownerKey={ownerKey}");
             }
         }
 

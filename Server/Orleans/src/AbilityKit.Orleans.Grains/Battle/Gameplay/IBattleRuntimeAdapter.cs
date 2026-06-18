@@ -13,7 +13,11 @@ internal interface IBattleRuntimeSession : IDisposable
 {
     BattleRuntimeStartResult Start(BattleInitParams initParams);
 
+    BattlePlayerJoinResult JoinPlayer(BattlePlayerJoinRequest request, int currentFrame);
+
     int SubmitInputs(int frame, IReadOnlyList<BattleInputItem> inputs);
+
+    BattleBotAiMountResult MountBotAi(BattleBotAiMountRequest request, int currentFrame);
 
     bool Tick(int frame, int tickRate, float deltaTime);
 

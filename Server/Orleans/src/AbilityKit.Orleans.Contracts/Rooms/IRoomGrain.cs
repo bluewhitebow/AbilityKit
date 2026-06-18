@@ -12,6 +12,8 @@ public interface IRoomGrain : IGrainWithStringKey
 
     Task<JoinRoomResponse> JoinAsync(string accountId);
 
+    Task<JoinRoomResponse> JoinMemberAsync(JoinRoomMemberRequest request);
+
     Task<RestoreRoomResponse> RestoreAsync(string accountId);
 
     Task MarkOfflineAsync(string accountId);
@@ -20,7 +22,7 @@ public interface IRoomGrain : IGrainWithStringKey
 
     Task SetReadyAsync(RoomReadyRequest request);
 
-    Task PickHeroAsync(RoomPickHeroRequest request);
+    Task SubmitGameplayCommandAsync(RoomGameplayCommandRequest request);
 
     Task<StartRoomBattleResponse> StartBattleAsync(StartRoomBattleRequest request);
 

@@ -1,5 +1,3 @@
-using System;
-
 namespace AbilityKit.Context
 {
     /// <summary>
@@ -7,24 +5,11 @@ namespace AbilityKit.Context
     /// </summary>
     public enum ContextEventType
     {
-        /// <summary>
-        /// 实体被创建
-        /// </summary>
-        Created,
-
-        /// <summary>
-        /// 属性被更新
-        /// </summary>
-        Updated,
-
-        /// <summary>
-        /// 实体即将销毁
-        /// </summary>
-        Destroying,
-
-        /// <summary>
-        /// 实体已销毁
-        /// </summary>
-        Destroyed,
+        Created = 0,
+        Updated = 1,
+        Destroying = 2,
+        Destroyed = 3,
+        FlowCreated = 4,
+        FlowPhaseChanged = 5
     }
 }

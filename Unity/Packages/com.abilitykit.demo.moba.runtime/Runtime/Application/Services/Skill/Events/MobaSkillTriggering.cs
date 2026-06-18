@@ -61,7 +61,12 @@ namespace AbilityKit.Demo.Moba.Services
 
                 var eid = TriggeringIdUtil.GetEventEid(eventId);
                 planBus.Publish(new EventKey<SkillCastContext>(eid), ctx);
-                planBus.Publish(new EventKey<object>(eid), ctx);
+                var objectKey = new EventKey<object>(eid);
+                if (planBus.HasSubscribers(objectKey))
+                {
+                    object boxed = ctx;
+                    planBus.Publish(objectKey, in boxed);
+                }
 
                 ctx.FailReason = oldFailReason;
             }

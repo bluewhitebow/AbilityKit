@@ -11,16 +11,14 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// Client side synchronization controller for one Shooter <see cref="NetworkSyncModel"/>.
-    /// It owns the runtime behaviour the <see cref="ShooterClientSession"/> facade delegates to:
-    /// starting the world, advancing frames, submitting local input, consuming gateway pushes
-    /// and driving recovery. Different sync models (predict rollback, authoritative interpolation,
-    /// batch state sync) provide different implementations while the session stays mode-agnostic.
+    /// 单个 Shooter <see cref="NetworkSyncModel"/> 的客户端同步控制器。
+    /// 它承接 <see cref="ShooterClientSession"/> 门面委托的运行时行为：启动世界、推进帧、
+    /// 提交本地输入、消费网关推送并驱动恢复。不同同步模型（预测回滚、权威插值、批量状态同步）
+    /// 提供不同实现，而会话层保持模式无关。
     ///
-    /// As of migration step 3 this also binds the framework's gameplay-agnostic
-    /// <see cref="IClientSyncStrategy{TInput, TSample}"/> contract (with Shooter's command and
-    /// remote-sample types), so the demo's sync models are reachable through the shared A-axis
-    /// abstraction while keeping their richer demo-facing surface.
+    /// 从迁移步骤 3 起，这里也绑定框架的玩法无关 <see cref="IClientSyncStrategy{TInput, TSample}"/>
+    /// 契约（使用 Shooter 的命令与远端样本类型），让示例同步模型能通过共享 A 轴抽象访问，
+    /// 同时保留更丰富的示例侧接口。
     /// </summary>
     public interface IShooterClientSyncController
         : INetworkSyncController, IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample>
@@ -38,15 +36,14 @@ namespace AbilityKit.Demo.Shooter.View
         ShooterClientRecoveryState RecoveryState { get; }
 
         /// <summary>
-        /// Current framework <see cref="FastReconnectPhase"/> the embedded
-        /// <see cref="FastReconnectSession"/> projects from <see cref="RecoveryState"/>
-        /// (audit §10.4: real consumer of FastReconnect).
+        /// 内嵌 <see cref="FastReconnectSession"/> 从 <see cref="RecoveryState"/> 投影出的当前框架
+        /// <see cref="FastReconnectPhase"/>（审计 §10.4：FastReconnect 的真实消费方）。
         /// </summary>
         FastReconnectPhase FastReconnectPhase { get; }
 
         /// <summary>
-        /// Framework <see cref="SyncHealthEvent"/>s the session emitted during the most recent
-        /// recovery/heartbeat step, for forwarding into DemoHarness telemetry (design §4.4.5).
+        /// 会话在最近一次恢复/心跳步骤中发出的框架 <see cref="SyncHealthEvent"/>，
+        /// 用于转发到 DemoHarness 遥测（设计 §4.4.5）。
         /// </summary>
         System.Collections.Generic.IReadOnlyList<SyncHealthEvent> LastFastReconnectHealthEvents { get; }
 

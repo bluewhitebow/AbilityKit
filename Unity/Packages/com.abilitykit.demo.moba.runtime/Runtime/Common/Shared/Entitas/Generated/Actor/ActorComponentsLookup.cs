@@ -9,53 +9,50 @@
 public static class ActorComponentsLookup {
 
     public const int ActorId = 0;
-    public const int ActorDespawnRequest = 41;
-    public const int ApplyBuffRequest = 1;
-    public const int AttributeGroup = 2;
-    public const int Buffs = 3;
-    public const int Collider = 4;
-    public const int CollisionId = 5;
-    public const int CollisionLayer = 6;
-    public const int EffectListeners = 7;
-    public const int EntityMainType = 8;
-    public const int FlyingProjectileTag = 9;
-    public const int Lifetime = 10;
-    public const int ModelId = 11;
-    public const int Motion = 12;
-    public const int MoveInput = 13;
-    public const int OngoingTriggerPlans = 14;
-    public const int OwnerLink = 15;
-    public const int OwnerPlayerId = 16;
-    public const int PassiveSkillTriggerListeners = 17;
-    public const int ProjectileEffectSnapshot = 18;
-    public const int ProjectileLauncher = 19;
-    public const int RemoveBuffRequest = 20;
-    public const int ResourceContainer = 21;
-    public const int SkillCastAim = 22;
-    public const int SkillCastCancelRequest = 23;
-    public const int SkillCastDestroyRequest = 24;
-    public const int SkillCastInstanceId = 25;
-    public const int SkillCastOwnerActorId = 26;
-    public const int SkillCastRunningTag = 27;
-    public const int SkillCastSequence = 28;
-    public const int SkillCastSkillId = 29;
-    public const int SkillCastSkillLevel = 30;
-    public const int SkillCastSlot = 31;
-    public const int SkillCastStage = 32;
-    public const int SkillCastStartFrame = 33;
-    public const int SkillCastTargetActorId = 34;
-    public const int SkillCastTimelineRuntime = 35;
-    public const int SkillLoadout = 36;
-    public const int SummonMeta = 37;
-    public const int Team = 38;
-    public const int Transform = 39;
-    public const int UnitSubType = 40;
+    public const int AttributeGroup = 1;
+    public const int Buffs = 2;
+    public const int Collider = 3;
+    public const int CollisionId = 4;
+    public const int CollisionLayer = 5;
+    public const int EffectListeners = 6;
+    public const int EntityMainType = 7;
+    public const int FlyingProjectileTag = 8;
+    public const int Lifetime = 9;
+    public const int ModelId = 10;
+    public const int Motion = 11;
+    public const int MoveInput = 12;
+    public const int OngoingTriggerPlans = 13;
+    public const int OwnerLink = 14;
+    public const int OwnerPlayerId = 15;
+    public const int PassiveSkillTriggerListeners = 16;
+    public const int ProjectileEffectSnapshot = 17;
+    public const int ProjectileLauncher = 18;
+    public const int ResourceContainer = 19;
+    public const int SkillCastAim = 20;
+    public const int SkillCastCancelRequest = 21;
+    public const int SkillCastDestroyRequest = 22;
+    public const int SkillCastInstanceId = 23;
+    public const int SkillCastOwnerActorId = 24;
+    public const int SkillCastRunningTag = 25;
+    public const int SkillCastSequence = 26;
+    public const int SkillCastSkillId = 27;
+    public const int SkillCastSkillLevel = 28;
+    public const int SkillCastSlot = 29;
+    public const int SkillCastStage = 30;
+    public const int SkillCastStartFrame = 31;
+    public const int SkillCastTargetActorId = 32;
+    public const int SkillCastTimelineRuntime = 33;
+    public const int SkillLoadout = 34;
+    public const int SummonMeta = 35;
+    public const int Team = 36;
+    public const int Transform = 37;
+    public const int UnitSubType = 38;
+    public const int ActorDespawnRequest = 39;
 
-    public const int TotalComponents = 42;
+    public const int TotalComponents = 40;
 
     public static readonly string[] componentNames = {
         "ActorId",
-        "ApplyBuffRequest",
         "AttributeGroup",
         "Buffs",
         "Collider",
@@ -74,7 +71,6 @@ public static class ActorComponentsLookup {
         "PassiveSkillTriggerListeners",
         "ProjectileEffectSnapshot",
         "ProjectileLauncher",
-        "RemoveBuffRequest",
         "ResourceContainer",
         "SkillCastAim",
         "SkillCastCancelRequest",
@@ -100,7 +96,6 @@ public static class ActorComponentsLookup {
 
     public static readonly System.Type[] componentTypes = {
         typeof(AbilityKit.Demo.Moba.Components.ActorIdComponent),
-        typeof(AbilityKit.Demo.Moba.Components.ApplyBuffRequestComponent),
         typeof(AbilityKit.Demo.Moba.Components.AttributeGroupComponent),
         typeof(AbilityKit.Demo.Moba.Components.BuffsComponent),
         typeof(AbilityKit.Demo.Moba.Components.ColliderComponent),
@@ -119,7 +114,6 @@ public static class ActorComponentsLookup {
         typeof(AbilityKit.Demo.Moba.Components.PassiveSkillTriggerListenersComponent),
         typeof(AbilityKit.Demo.Moba.Components.ProjectileEffectSnapshotComponent),
         typeof(AbilityKit.Demo.Moba.Components.ProjectileLauncherComponent),
-        typeof(AbilityKit.Demo.Moba.Components.RemoveBuffRequestComponent),
         typeof(AbilityKit.Demo.Moba.Components.ResourceContainerComponent),
         typeof(AbilityKit.Demo.Moba.Components.SkillCastAimComponent),
         typeof(AbilityKit.Demo.Moba.Components.SkillCastCancelRequestComponent),

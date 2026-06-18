@@ -7,7 +7,7 @@ using AbilityKit.Demo.Moba.Events.Summon;
 using AbilityKit.Core.Logging;
 using AbilityKit.Core.Mathematics;
 using AbilityKit.Demo.Moba.Util.Converter;
-using AbilityKit.Demo.Moba.Util.Generator;
+using AbilityKit.Demo.Moba.Services.EntityConstruction;
 using AbilityKit.Demo.Moba.Services.EntityManager;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
@@ -25,7 +25,7 @@ namespace AbilityKit.Demo.Moba.Services
         [WorldInject] private ActorIdAllocator _actorIds = null;
         [WorldInject] private MobaActorRegistry _registry = null;
         [WorldInject] private MobaEntityManager _entities = null;
-        [WorldInject] private AbilityKit.Demo.Moba.Util.Generator.ActorEntityInitPipeline _generator = null;
+        [WorldInject] private AbilityKit.Demo.Moba.Services.EntityConstruction.ActorEntityInitPipeline _generator = null;
         [WorldInject] private MobaConfigDatabase _config = null;
         [WorldInject] private MobaComponentTemplateService _componentTemplates = null;
         [WorldInject] private AbilityKit.Triggering.Eventing.IEventBus _eventBus = null;
@@ -34,6 +34,7 @@ namespace AbilityKit.Demo.Moba.Services
         [WorldInject(required: false)] private MobaTraceRegistry _trace = null;
         [WorldInject(required: false)] private IMobaActorSpawnService _actorSpawn = null;
         [WorldInject(required: false)] private IMobaTemporaryEntityLifecycleService _lifecycle = null;
+        [WorldInject(required: false)] private MobaSkillCastRuntimeService _skillRuntimes = null;
 
         private enum SummonOverflowPolicy
         {
@@ -45,6 +46,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private readonly Dictionary<int, List<int>> _summonsByRootOwner = new Dictionary<int, List<int>>();
         private readonly Dictionary<int, SummonSourceContext> _sourceBySummonActorId = new Dictionary<int, SummonSourceContext>();
+        private readonly Dictionary<int, MobaSkillRuntimeRetainHandle> _skillRuntimeRetainsBySummonActorId = new Dictionary<int, MobaSkillRuntimeRetainHandle>();
         private readonly List<int> _queryBuffer = new List<int>(16);
 
         public int ActiveCount => CountAllTrackedSummons();
@@ -134,6 +136,7 @@ namespace AbilityKit.Demo.Moba.Services
 
             TrackSummon(rootOwner, actorId);
             TrackSourceContext(actorId, in spawnSourceContext);
+            RetainSkillRuntime(actorId, summonId, in spawnSourceContext);
             _lifecycle?.RecordSpawn(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
 
             PublishSummonEvent(MobaSummonTriggering.Events.Spawned, rootOwner, casterActorId, actorId, summonId, (int)SummonDespawnReason.None, in spawnSourceContext);
@@ -204,6 +207,7 @@ namespace AbilityKit.Demo.Moba.Services
 
             UntrackSummon(rootOwner, summonActorId);
             var sourceContext = ConsumeSourceContext(summonActorId);
+            ReleaseSkillRuntime(summonActorId, summonId);
             EndSpawnTrace(in sourceContext, reason);
             _lifecycle?.RecordDespawn(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
             if (reason == SummonDespawnReason.ReplacedByLimit) _lifecycle?.RecordReplaced(MobaTemporaryEntityKind.Summon, ActiveCount, CurrentFrame);
@@ -360,6 +364,61 @@ namespace AbilityKit.Demo.Moba.Services
             return sourceContext;
         }
 
+        private bool RetainSkillRuntime(int summonActorId, int summonId, in SummonSourceContext sourceContext)
+        {
+            if (summonActorId <= 0) return false;
+            if (_skillRuntimes == null) return false;
+            if (!sourceContext.SkillRuntimeHandle.IsValid) return false;
+            if (_skillRuntimeRetainsBySummonActorId.ContainsKey(summonActorId)) return true;
+
+            var child = new MobaSkillRuntimeChildRef(MobaSkillRuntimeChildKind.Summon, summonActorId, sourceContext.SourceContextId, summonId);
+            var runtimeHandle = sourceContext.SkillRuntimeHandle;
+            if (_skillRuntimes.RetainChild(in runtimeHandle, in child, out var retainHandle))
+            {
+                _skillRuntimeRetainsBySummonActorId[summonActorId] = retainHandle;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void ReleaseSkillRuntime(int summonActorId, int summonId)
+        {
+            if (summonActorId <= 0) return;
+            if (!_skillRuntimeRetainsBySummonActorId.TryGetValue(summonActorId, out var retainHandle)) return;
+            _skillRuntimeRetainsBySummonActorId.Remove(summonActorId);
+
+            try
+            {
+                _skillRuntimes?.ReleaseChild(in retainHandle);
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[MobaSummonService] Release skill runtime retain failed (summonActorId={summonActorId}, summonId={summonId})");
+            }
+        }
+
+        private void ReleaseAllSkillRuntimes()
+        {
+            if (_skillRuntimeRetainsBySummonActorId.Count == 0) return;
+
+            foreach (var kv in _skillRuntimeRetainsBySummonActorId)
+            {
+                var summonActorId = kv.Key;
+                var retainHandle = kv.Value;
+                try
+                {
+                    _skillRuntimes?.ReleaseChild(in retainHandle);
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex, $"[MobaSummonService] Release skill runtime retain failed during dispose (summonActorId={summonActorId})");
+                }
+            }
+
+            _skillRuntimeRetainsBySummonActorId.Clear();
+        }
+
         private void EndSpawnTrace(in SummonSourceContext sourceContext, SummonDespawnReason reason)
         {
             if (_trace == null) return;
@@ -443,8 +502,12 @@ namespace AbilityKit.Demo.Moba.Services
 
             var eid = TriggeringIdUtil.GetEventEid(eventId);
             _eventBus.Publish(new EventKey<SummonEventPayload>(eid), in payload);
-            object boxed = payload;
-            _eventBus.Publish(new EventKey<object>(eid), in boxed);
+            var objectKey = new EventKey<object>(eid);
+            if (_eventBus.HasSubscribers(objectKey))
+            {
+                object boxed = payload;
+                _eventBus.Publish(objectKey, in boxed);
+            }
         }
 
         private SummonSourceContext CreateSpawnSourceContext(int casterActorId, int summonActorId, int summonId, in SummonSourceContext sourceContext)
@@ -590,6 +653,7 @@ namespace AbilityKit.Demo.Moba.Services
         {
             _summonsByRootOwner.Clear();
             _sourceBySummonActorId.Clear();
+            ReleaseAllSkillRuntimes();
             _lifecycle?.SetActive(MobaTemporaryEntityKind.Summon, 0, CurrentFrame);
         }
     }

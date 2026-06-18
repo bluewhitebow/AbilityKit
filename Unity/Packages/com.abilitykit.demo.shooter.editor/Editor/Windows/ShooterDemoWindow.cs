@@ -258,6 +258,16 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                 EditorGUI.EndDisabledGroup();
             }
 
+            var canRebuildViews = Application.isPlaying &&
+                ((attachMode && ShooterPlayModeSessionHost.IsRunning) ||
+                 (remoteMode && ShooterRemoteStateSyncPlayModeHost.IsRunning));
+            EditorGUI.BeginDisabledGroup(!canRebuildViews);
+            if (GUILayout.Button("↻ 重建显示", EditorStyles.toolbarButton, GUILayout.Width(90)))
+            {
+                RebuildPlayModeViewsInternal();
+            }
+            EditorGUI.EndDisabledGroup();
+
             // 暂停与单步只适用于窗口自驱的 Editor Direct 模式。
             EditorGUI.BeginDisabledGroup(!_running || attachMode || remoteMode);
             _paused = GUILayout.Toggle(_paused, "‖ 暂停", EditorStyles.toolbarButton, GUILayout.Width(70));
@@ -561,6 +571,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
             EditorGUILayout.LabelField($"帧: {_diagnostics.Frame}", GUILayout.Width(100));
             EditorGUILayout.LabelField($"玩家: {_diagnostics.PlayerCount}", GUILayout.Width(90));
             EditorGUILayout.LabelField($"子弹: {_diagnostics.BulletCount}", GUILayout.Width(90));
+            EditorGUILayout.LabelField($"敌人: {_diagnostics.EnemyCount}", GUILayout.Width(90));
             EditorGUILayout.LabelField($"回滚: {_diagnostics.TotalRollbacks}", GUILayout.Width(100));
             EditorGUILayout.EndHorizontal();
 
@@ -589,16 +600,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                 for (int i = 0; i < clientEntities.Count; i++)
                 {
                     var e = clientEntities[i];
-                    string label;
-                    if (e.Kind == ShooterViewEntityKind.Player)
-                    {
-                        label = $"  玩家 #{e.EntityId}  HP:{e.Hp}  分数:{e.Score}  ({e.X:F1}, {e.Y:F1})";
-                    }
-                    else
-                    {
-                        label = $"  子弹 #{e.EntityId}  归属:{e.OwnerEntityId}  ({e.X:F1}, {e.Y:F1})  速度:({e.VelocityX:F1}, {e.VelocityY:F1})  剩余帧:{e.RemainingFrames}";
-                    }
-                    EditorGUILayout.LabelField(label, EditorStyles.miniLabel);
+                    EditorGUILayout.LabelField(FormatEntityLabel(in e), EditorStyles.miniLabel);
                 }
             }
             EditorGUILayout.EndScrollView();
@@ -649,6 +651,21 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                     $"  子弹 #{bullet.BulletId}  归属:{bullet.OwnerPlayerId}  ({bullet.X:F1}, {bullet.Y:F1})  速度:({bullet.VelocityX:F1}, {bullet.VelocityY:F1})  剩余帧:{bullet.RemainingFrames}",
                     EditorStyles.miniLabel);
             }
+        }
+
+        private static string FormatEntityLabel(in ShooterEditorSceneViewSink.EntityDrawData entity)
+        {
+            if (entity.Kind == ShooterViewEntityKind.Player)
+            {
+                return $"  玩家 #{entity.EntityId}  HP:{entity.Hp}  分数:{entity.Score}  ({entity.X:F1}, {entity.Y:F1})";
+            }
+
+            if (entity.Kind == ShooterViewEntityKind.Enemy)
+            {
+                return $"  敌人 #{entity.EntityId}  HP:{entity.Hp}  ({entity.X:F1}, {entity.Y:F1})  速度:({entity.VelocityX:F1}, {entity.VelocityY:F1})";
+            }
+
+            return $"  子弹 #{entity.EntityId}  归属:{entity.OwnerEntityId}  ({entity.X:F1}, {entity.Y:F1})  速度:({entity.VelocityX:F1}, {entity.VelocityY:F1})  剩余帧:{entity.RemainingFrames}";
         }
 
         // =====================================================================
@@ -887,6 +904,29 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
             Repaint();
         }
 
+        private void RebuildPlayModeViewsInternal()
+        {
+            try
+            {
+                if (_driveMode == ShooterDemoDriveMode.RemoteStateSync)
+                {
+                    ShooterRemoteStateSyncPlayModeHost.RebuildViews();
+                }
+                else
+                {
+                    ShooterPlayModeSessionHost.RebuildViews();
+                }
+
+                _lastError = "已从最新投影状态重建 Shooter GameObject 显示层。";
+                Repaint();
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"Rebuild views failed: {ex.Message}";
+                Debug.LogException(ex);
+            }
+        }
+
         private void StopPlayModeHostInternal()
         {
             try
@@ -944,7 +984,15 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                     null,
                     null,
                     default,
-                    null);
+                    default,
+                    null,
+                    null,
+                    false,
+                    ShooterPureStateResyncReason.None,
+                    0,
+                    0u,
+                    0,
+                    0u);
                 _sink.Render(in frame);
 
                 _diagnostics.Reset();
@@ -1120,12 +1168,28 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                 return;
             }
 
-            var batch = session.Presentation.ViewModel.Current;
-            var players = 0;
-            var bullets = 0;
-            for (var i = 0; i < batch.EntityChangeCount; i++)
+            CountViewEntities(session.Presentation.ViewModel.Current.EntityChanges, out var players, out var bullets, out var enemies);
+
+            _diagnostics.Frame = session.CurrentFrame;
+            _diagnostics.PlayerCount = players;
+            _diagnostics.BulletCount = bullets;
+            _diagnostics.EnemyCount = enemies;
+            _diagnostics.TotalRollbacks = 0;
+            _diagnostics.MaxDivergence = 0d;
+        }
+
+        private static void CountViewEntities(
+            IReadOnlyList<ShooterViewEntityChange> entities,
+            out int players,
+            out int bullets,
+            out int enemies)
+        {
+            players = 0;
+            bullets = 0;
+            enemies = 0;
+            for (var i = 0; i < entities.Count; i++)
             {
-                var entity = batch.EntityChanges[i];
+                var entity = entities[i];
                 if (!entity.Alive)
                 {
                     continue;
@@ -1139,13 +1203,11 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                 {
                     bullets++;
                 }
+                else if (entity.Kind == ShooterViewEntityKind.Enemy)
+                {
+                    enemies++;
+                }
             }
-
-            _diagnostics.Frame = session.CurrentFrame;
-            _diagnostics.PlayerCount = players;
-            _diagnostics.BulletCount = bullets;
-            _diagnostics.TotalRollbacks = 0;
-            _diagnostics.MaxDivergence = 0d;
         }
 
         private bool TryBuildRemoteEndpoint(out ShooterClientNetworkEndpoint endpoint)

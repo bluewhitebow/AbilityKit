@@ -12,8 +12,8 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View
 {
     /// <summary>
-    /// 验收验证可选择的同步模式。封�?<see cref="NetworkSyncModel"/> 与面向人的显示名�?
-    /// �?Unity 外壳无需了解框架内部即可展示支持的同步策略�?
+    /// 验收验证可选择的同步模式。封装 <see cref="NetworkSyncModel"/> 与面向人的显示名。
+    /// Unity 外壳无需了解框架内部即可展示支持的同步策略。
     /// </summary>
     public readonly struct ShooterAcceptanceSyncOption
     {
@@ -26,24 +26,24 @@ namespace AbilityKit.Demo.Shooter.View
             Implemented = implemented;
         }
 
-        /// <summary>该选项选择的框架无关同步模型�?/summary>
+        /// <summary>该选项选择的框架无关同步模型。</summary>
         public NetworkSyncModel Model { get; }
 
-        /// <summary>显示�?Unity 验收外壳中的标签�?/summary>
+        /// <summary>显示在 Unity 验收外壳中的标签。</summary>
         public string DisplayName { get; }
 
         /// <summary>
-        /// �?Shooter 客户端已经落地该模型对应控制器时�?true。Unity 外壳可将未实现选项置灰�?
-        /// 使用未实现模型调�?<see cref="ShooterAcceptanceLab"/> 会抛出异常�?
+        /// 当 Shooter 客户端已经落地该模型对应控制器时为 true。Unity 外壳可将未实现选项置灰。
+        /// 使用未实现模型调用 <see cref="ShooterAcceptanceLab"/> 会抛出异常。
         /// </summary>
         public bool Implemented { get; }
 
-        /// <summary>该模型对应的完整框架同步档案（播放、快照、校验策略）�?/summary>
+        /// <summary>该模型对应的完整框架同步档案（播放、快照、校验策略）。</summary>
         public NetworkSyncProfile Profile => NetworkSyncProfiles.FromCompatibilityModel(Model);
     }
 
     /// <summary>
-    /// 验收验证可选择的模拟网络环境。封�?<see cref="NetworkConditionProfile"/> 预设、稳�?id 与标签�?
+    /// 验收验证可选择的模拟网络环境。封装 <see cref="NetworkConditionProfile"/> 预设、稳定 id 与标签。
     /// </summary>
     public readonly struct ShooterAcceptanceNetworkOption
     {
@@ -57,13 +57,13 @@ namespace AbilityKit.Demo.Shooter.View
             Profile = profile;
         }
 
-        /// <summary>稳定标识，适合持久化或命令行选择�?/summary>
+        /// <summary>稳定标识，适合持久化或命令行选择。</summary>
         public string Id { get; }
 
-        /// <summary>显示�?Unity 验收外壳中的标签�?/summary>
+        /// <summary>显示在 Unity 验收外壳中的标签。</summary>
         public string DisplayName { get; }
 
-        /// <summary>该选项应用的模拟网络条件�?/summary>
+        /// <summary>该选项应用的模拟网络条件。</summary>
         public NetworkConditionProfile Profile { get; }
     }
 
@@ -72,6 +72,69 @@ namespace AbilityKit.Demo.Shooter.View
         RuntimeSnapshot,
         PresentationInterpolation,
         RuntimeSnapshotWithRemoteInterpolation
+    }
+
+    public readonly struct ShooterSyncAcceptanceCriterion
+    {
+        public ShooterSyncAcceptanceCriterion(string id, string description)
+        {
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Id is required.", nameof(id));
+            if (string.IsNullOrWhiteSpace(description)) throw new ArgumentException("Description is required.", nameof(description));
+
+            Id = id;
+            Description = description;
+        }
+
+        public string Id { get; }
+        public string Description { get; }
+    }
+
+    public readonly struct ShooterSyncModeMatrixRow
+    {
+        public ShooterSyncModeMatrixRow(
+            ShooterSyncTemplate template,
+            NetworkSyncProfile profile,
+            IReadOnlyList<ShooterSyncAcceptanceCriterion> acceptanceCriteria)
+        {
+            Template = template;
+            Profile = profile;
+            AcceptanceCriteria = acceptanceCriteria ?? throw new ArgumentNullException(nameof(acceptanceCriteria));
+        }
+
+        public ShooterSyncTemplate Template { get; }
+        public NetworkSyncProfile Profile { get; }
+        public IReadOnlyList<ShooterSyncAcceptanceCriterion> AcceptanceCriteria { get; }
+        public string TemplateId => Template.Id;
+        public NetworkSyncModel SyncModel => Template.SyncModel;
+        public string ExpectedCarrierName => Template.ExpectedCarrierName;
+        public ShooterSyncTemplateConvergenceKind ConvergenceKind => Template.ConvergenceKind;
+        public bool RequiresAuthoritativeWorld => Template.EnableAuthoritativeWorld;
+        public bool ExposesInterpolationDiagnostics => Template.ExpectsInterpolationDiagnostics;
+    }
+
+    public readonly struct ShooterSyncModeMatrix
+    {
+        public ShooterSyncModeMatrix(IReadOnlyList<ShooterSyncModeMatrixRow> rows)
+        {
+            Rows = rows ?? throw new ArgumentNullException(nameof(rows));
+        }
+
+        public IReadOnlyList<ShooterSyncModeMatrixRow> Rows { get; }
+
+        public ShooterSyncModeMatrixRow GetRow(string templateId)
+        {
+            if (string.IsNullOrWhiteSpace(templateId)) throw new ArgumentException("Template id is required.", nameof(templateId));
+
+            for (var i = 0; i < Rows.Count; i++)
+            {
+                if (string.Equals(Rows[i].TemplateId, templateId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Rows[i];
+                }
+            }
+
+            throw new KeyNotFoundException($"Shooter sync matrix row '{templateId}' was not found.");
+        }
     }
 
     public readonly struct ShooterSyncTemplate
@@ -122,12 +185,12 @@ namespace AbilityKit.Demo.Shooter.View
     }
 
     /// <summary>
-    /// Shooter 验收提供的固定同步模式、网络环境与同步方案模板菜单。Unity 外壳直接绑定这些列表�?
-    /// 确保可选项与纯 C# 层实际可构建、可运行的能力保持一致�?
+    /// Shooter 验收提供的固定同步模式、网络环境与同步方案模板菜单。Unity 外壳直接绑定这些列表。
+    /// 确保可选项与纯 C# 层实际可构建、可运行的能力保持一致。
     /// </summary>
     public static class ShooterAcceptanceCatalog
     {
-        /// <summary>验收提供的同步模式，只有已实现模式可运行�?/summary>
+        /// <summary>验收提供的同步模式，只有已实现模式可运行。</summary>
         public static IReadOnlyList<ShooterAcceptanceSyncOption> SyncModes { get; } = new[]
         {
             new ShooterAcceptanceSyncOption(NetworkSyncModel.PredictRollback, "Predict + Rollback", implemented: true),
@@ -135,7 +198,7 @@ namespace AbilityKit.Demo.Shooter.View
             new ShooterAcceptanceSyncOption(NetworkSyncModel.HybridHeroPrediction, "Hybrid (Predict + Interpolation)", implemented: true)
         };
 
-        /// <summary>模拟网络环境，从理想基线到压力场景排序�?/summary>
+        /// <summary>模拟网络环境，从理想基线到压力场景排序。</summary>
         public static IReadOnlyList<ShooterAcceptanceNetworkOption> NetworkEnvironments { get; } = new[]
         {
             new ShooterAcceptanceNetworkOption("ideal", "Ideal (0ms)", NetworkConditionProfile.Ideal),
@@ -186,6 +249,8 @@ namespace AbilityKit.Demo.Shooter.View
                 InterpolationConfig.Default)
         };
 
+        public static ShooterSyncModeMatrix SyncModeMatrix { get; } = BuildSyncModeMatrix();
+
         public static ShooterSyncTemplate GetSyncTemplate(string id)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Template id is required.", nameof(id));
@@ -199,6 +264,11 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             throw new KeyNotFoundException($"Shooter sync template '{id}' was not found.");
+        }
+
+        public static ShooterSyncModeMatrixRow GetSyncModeMatrixRow(string templateId)
+        {
+            return SyncModeMatrix.GetRow(templateId);
         }
 
         public static ShooterAcceptanceNetworkOption GetNetworkEnvironment(string id)
@@ -215,11 +285,54 @@ namespace AbilityKit.Demo.Shooter.View
 
             throw new KeyNotFoundException($"Shooter network environment '{id}' was not found.");
         }
+
+        private static ShooterSyncModeMatrix BuildSyncModeMatrix()
+        {
+            var rows = new ShooterSyncModeMatrixRow[SyncTemplates.Count];
+            for (var i = 0; i < SyncTemplates.Count; i++)
+            {
+                var template = SyncTemplates[i];
+                rows[i] = new ShooterSyncModeMatrixRow(
+                    template,
+                    NetworkSyncProfiles.FromCompatibilityModel(template.SyncModel),
+                    BuildAcceptanceCriteria(in template));
+            }
+
+            return new ShooterSyncModeMatrix(rows);
+        }
+
+        private static IReadOnlyList<ShooterSyncAcceptanceCriterion> BuildAcceptanceCriteria(in ShooterSyncTemplate template)
+        {
+            switch (template.ConvergenceKind)
+            {
+                case ShooterSyncTemplateConvergenceKind.PresentationInterpolation:
+                    return new[]
+                    {
+                        new ShooterSyncAcceptanceCriterion("remote-buffer", "权威远端样本必须进入延迟播放缓冲并拒绝过期样本。"),
+                        new ShooterSyncAcceptanceCriterion("presentation-convergence", "表现层帧号、实体投影与插值诊断必须持续更新。"),
+                        new ShooterSyncAcceptanceCriterion("server-authority", "客户端本地输入只作为占位预测，最终状态以服务器快照为准。")
+                    };
+                case ShooterSyncTemplateConvergenceKind.RuntimeSnapshotWithRemoteInterpolation:
+                    return new[]
+                    {
+                        new ShooterSyncAcceptanceCriterion("local-hero-prediction", "本地英雄路径必须支持预测、回滚快照与权威快照追帧。"),
+                        new ShooterSyncAcceptanceCriterion("remote-interpolation", "远端对象必须通过权威样本插值播放。"),
+                        new ShooterSyncAcceptanceCriterion("full-snapshot-recovery", "漂移、导入失败或重连后必须能进入完整快照恢复。")
+                    };
+                default:
+                    return new[]
+                    {
+                        new ShooterSyncAcceptanceCriterion("prediction-reconciliation", "客户端预测世界必须与权威世界按帧比较并完成回滚收敛。"),
+                        new ShooterSyncAcceptanceCriterion("packed-snapshot", "权威快照必须能覆盖运行时状态并刷新表现层。"),
+                        new ShooterSyncAcceptanceCriterion("deterministic-replay", "相同输入与种子必须产出可复现的矩阵运行结果。")
+                    };
+            }
+        }
     }
 
     /// <summary>
     /// 指定帧下客户端预测世界与权威世界的逐实体偏差。Unity 外壳可并排渲染两个世界，
-    /// 并高�?<see cref="Distance"/> 超过容差的实体，让预测误差可视化�?
+    /// 并高亮 <see cref="Distance"/> 超过容差的实体，让预测误差可视化。
     /// </summary>
     public readonly struct ShooterWorldDivergence
     {
@@ -244,13 +357,13 @@ namespace AbilityKit.Demo.Shooter.View
 
         public float AuthorityY { get; }
 
-        /// <summary>预测位置与权威位置之间的欧氏距离�?/summary>
+        /// <summary>预测位置与权威位置之间的欧氏距离。</summary>
         public double Distance { get; }
     }
 
     /// <summary>
-    /// 客户端预测世界相对权威世界漂移程度的快照。由 <see cref="ShooterAcceptanceSession.CompareWorlds"/> 生成�?
-    /// Unity 外壳读取 <see cref="MaxDistance"/> / <see cref="Divergences"/> 来驱动偏差叠加显示�?
+    /// 客户端预测世界相对权威世界漂移程度的快照。由 <see cref="ShooterAcceptanceSession.CompareWorlds"/> 生成。
+    /// Unity 外壳读取 <see cref="MaxDistance"/> / <see cref="Divergences"/> 来驱动偏差叠加显示。
     /// </summary>
     public readonly struct ShooterWorldComparison
     {
@@ -278,15 +391,15 @@ namespace AbilityKit.Demo.Shooter.View
 
         public IReadOnlyList<ShooterWorldDivergence> Divergences { get; }
 
-        /// <summary>本次比较中观测到的最大逐实体位置偏差�?/summary>
+        /// <summary>本次比较中观测到的最大逐实体位置偏差。</summary>
         public double MaxDistance { get; }
     }
 
     /// <summary>
-    /// 已完整装配、可运行�?Shooter 验收会话：包�?runtime port、表现门面、已选择同步控制器与 demo-harness carrier�?
+    /// 已完整装配、可运行的 Shooter 验收会话：包含 runtime port、表现门面、已选择同步控制器与 demo-harness carrier。
     /// 并已启动到可推进状态。同一个对象既可由 xUnit 无头驱动，也可由 Unity 外壳可视化驱动；
-    /// 外壳读取 <see cref="Runtime"/> / <see cref="Presentation"/> 渲染已验证状态�?
-    /// �?<see cref="HasAuthoritativeWorld"/> �?true 时，会并行运行独立权威模拟，便于两个世界并排渲染与比较�?
+    /// 外壳读取 <see cref="Runtime"/> / <see cref="Presentation"/> 渲染已验证状态。
+    /// 当 <see cref="HasAuthoritativeWorld"/> 为 true 时，会并行运行独立权威模拟，便于两个世界并排渲染与比较。
     /// </summary>
     public sealed class ShooterAcceptanceSession : IDisposable
     {
@@ -334,64 +447,64 @@ namespace AbilityKit.Demo.Shooter.View
             }
         }
 
-        /// <summary>控制器每步推进的确定性战斗运行时（客户端预测世界）�?/summary>
+        /// <summary>控制器每步推进的确定性战斗运行时（客户端预测世界）。</summary>
         public ShooterBattleRuntimePort Runtime { get; }
 
-        /// <summary>Unity 外壳用于渲染客户端预测会话的表现门面�?/summary>
+        /// <summary>Unity 外壳用于渲染客户端预测会话的表现门面。</summary>
         public ShooterPresentationFacade Presentation { get; }
 
-        /// <summary>当前选择的同步控制器（预测回滚、插值等）�?/summary>
+        /// <summary>当前选择的同步控制器（预测回滚、插值等）。</summary>
         public IShooterClientSyncController Controller { get; }
 
-        /// <summary>将控制器桥接到框�?DemoHarness �?Carrier�?/summary>
+        /// <summary>将控制器桥接到框架 DemoHarness Carrier。</summary>
         public ISyncDemoCarrier Carrier { get; }
 
         public NetworkSyncModel SyncModel { get; }
 
         /// <summary>
-        /// 当前生效的网络环境。可通过 <see cref="ApplyNetwork"/> 修改�?
-        /// �?Unity 外壳在会话持续推进时实时调节延迟、丢包与抖动�?
+        /// 当前生效的网络环境。可通过 <see cref="ApplyNetwork"/> 修改。
+        /// Unity 外壳在会话持续推进时实时调节延迟、丢包与抖动。
         /// </summary>
         public NetworkConditionProfile NetworkProfile => _networkProfile;
 
-        /// <summary>当前网络环境的可读标签�?/summary>
+        /// <summary>当前网络环境的可读标签。</summary>
         public string NetworkName => _networkName;
 
-        /// <summary>存在用于并排比较的独立权威世界时�?true�?/summary>
+        /// <summary>存在用于并排比较的独立权威世界时为 true。</summary>
         public bool HasAuthoritativeWorld => AuthoritativeWorld != null;
 
         /// <summary>
-        /// 可选的独立权威模拟（无预测，仅纯推进）。启动时未启用比较模式则�?null�?
-        /// Unity 外壳将其作为“真实基准”世界渲染�?
+        /// 可选的独立权威模拟（无预测，仅纯推进）。启动时未启用比较模式则为 null。
+        /// Unity 外壳将其作为“真实基准”世界渲染。
         /// </summary>
         public ShooterBattleRuntimePort? AuthoritativeWorld { get; }
 
         /// <summary>
-        /// 可选的权威世界表现门面。比较模式禁用时�?null�?
-        /// 让外壳可以复用现�?view binder 渲染第二个世界�?
+        /// 可选的权威世界表现门面。比较模式禁用时为 null。
+        /// 让外壳可以复用现有 view binder 渲染第二个世界。
         /// </summary>
         public ShooterPresentationFacade? AuthoritativePresentation { get; }
 
-        /// <summary>Carrier 侧网络中间件链路的实时统计�?/summary>
+        /// <summary>Carrier 侧网络中间件链路的实时统计。</summary>
         public NetworkConditioningStats? CarrierNetworkStats => _authoritativeDriver?.Stats;
 
-        /// <summary>最近一次带网络条件的权威快照应用到控制器后的结果�?/summary>
+        /// <summary>最近一次带网络条件的权威快照应用到控制器后的结果。</summary>
         public ShooterSnapshotApplyResult? LastCarrierSnapshotApplyResult => _authoritativeDriver?.LastApplyResult;
 
-        /// <summary>最近一次通过 Carrier 链路发布权威快照时使用的时间锚点�?/summary>
+        /// <summary>最近一次通过 Carrier 链路发布权威快照时使用的时间锚点。</summary>
         public SyncTimeAnchor LastCarrierTimeAnchor => _authoritativeDriver?.LastCarrierTimeAnchor ?? default;
 
-        /// <summary>从权威世界采集到的当�?LagComp 历史遥测�?/summary>
+        /// <summary>从权威世界采集到的当前 LagComp 历史遥测。</summary>
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry => _authoritativeDriver?.Telemetry;
 
         public int LastAuthorityDeliveredInputCount => _authoritativeDriver?.LastDeliveredInputCount ?? 0;
 
-        /// <summary>最近一次服务端回溯命中验证结果�?/summary>
+        /// <summary>最近一次服务端回溯命中验证结果。</summary>
         public ShooterLagCompensationEvaluation? LastLagCompensationEvaluation => _authoritativeDriver?.LastLagCompensationEvaluation;
 
         /// <summary>
-        /// Uses the authoritative world history to validate a client-reported shot against rewound
-        /// player hitboxes. Returns false when comparison mode is disabled or the shot is rejected.
+        /// 使用权威世界历史，将客户端上报的射击与回溯后的玩家碰撞盒进行验证。
+        /// 当比较模式禁用或射击被拒绝时返回 false。
         /// </summary>
         public bool TryEvaluateLagCompensationShot(
             in ShooterLagCompensationShot shot,
@@ -407,8 +520,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
  
         /// <summary>
-        /// 在不重建会话的情况下实时调节网络环境。下一�?<see cref="Run"/> 或单步推进会使用新的 profile�?
-        /// 可接收目录预设，也可接收由运行时滑条构建的临�?<see cref="NetworkConditionProfile"/>�?
+        /// 在不重建会话的情况下实时调节网络环境。下一次 <see cref="Run"/> 或单步推进会使用新的 profile。
+        /// 可接收目录预设，也可接收由运行时滑条构建的临时 <see cref="NetworkConditionProfile"/>。
         /// </summary>
         public void ApplyNetwork(NetworkConditionProfile profile, string? displayName = null)
         {
@@ -418,9 +531,9 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// 在当前网�?profile 下通过框架 DemoHarness 推进会话，并返回包含指标的四态运行结果�?
-        /// 当存在权威世界时，它会按锁步推进，确保两个世界保持帧对齐以便比较�?
-        /// 复用 <see cref="DemoHarnessRunner"/> 意味着验收路径会覆盖无头测试套件已经验证过的同一套机制�?
+        /// 在当前网络 profile 下通过框架 DemoHarness 推进会话，并返回包含指标的四态运行结果。
+        /// 当存在权威世界时，它会按锁步推进，确保两个世界保持帧对齐以便比较。
+        /// 复用 <see cref="DemoHarnessRunner"/> 意味着验收路径会覆盖无头测试套件已经验证过的同一套机制。
         /// </summary>
         public DemoHarnessRunResult Run(int stepCount = DefaultStepCount, float deltaSeconds = 1f / 30f, int seed = 0)
         {
@@ -439,7 +552,7 @@ namespace AbilityKit.Demo.Shooter.View
             var runner = new DemoHarnessRunner();
             var result = runner.Run(in scenario, Carrier);
 
-            // 让权威世界在批量运行后与客户端世界保持同一帧范围，便于后续 CompareWorlds 对齐比较�?
+            // 让权威世界在批量运行后与客户端世界保持同一帧范围，便于后续 CompareWorlds 对齐比较。
             AdvanceAuthoritativeWorld(result.Metrics.StepsRun, deltaSeconds);
 
             return result;
@@ -451,8 +564,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// 推进权威世界一�?tick。Unity 外壳逐帧驱动会话（通过 Carrier.Step / Controller.Tick）时�?
-        /// 可调用它保持权威世界对齐；比较模式禁用时该操作为空�?
+        /// 推进权威世界一个 tick。Unity 外壳逐帧驱动会话（通过 Carrier.Step / Controller.Tick）时，
+        /// 可调用它保持权威世界对齐；比较模式禁用时该操作为空。
         /// </summary>
         public void TickAuthoritativeWorld(float deltaSeconds)
         {
@@ -460,8 +573,8 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// 比较客户端预测世界与权威世界，并返回逐实体位置偏差。比较模式禁用时返回空比较结果�?
-        /// Unity 外壳使用它来可视化高亮预测误差�?
+        /// 比较客户端预测世界与权威世界，并返回逐实体位置偏差。比较模式禁用时返回空比较结果。
+        /// Unity 外壳使用它来可视化高亮预测误差。
         /// </summary>
         public ShooterWorldComparison CompareWorlds()
         {
@@ -527,32 +640,32 @@ namespace AbilityKit.Demo.Shooter.View
     }
 
     /// <summary>
-    /// Shooter 验收会话的一站式工厂。给定同步模式与网络环境后，装配完整�?C# �?
-    /// （runtime + presentation + controller + carrier）、启动对局，并返回可运行的 <see cref="ShooterAcceptanceSession"/>�?
-    /// 这是 Unity 验收外壳依赖的单一接缝：选择模式、选择网络、可选启用权威比较世界，然后调用 Create、推进并观察�?
+    /// Shooter 验收会话的一站式工厂。给定同步模式与网络环境后，装配完整的 C# 会话
+    /// （runtime + presentation + controller + carrier）、启动对局，并返回可运行的 <see cref="ShooterAcceptanceSession"/>。
+    /// 这是 Unity 验收外壳依赖的单一接缝：选择模式、选择网络、可选启用权威比较世界，然后调用 Create、推进并观察。
     /// </summary>
     public static class ShooterAcceptanceLab
     {
         public const int DefaultTickRate = 30;
 
         /// <summary>
-        /// 根据显式同步模型与网�?profile 构建可运行会话�?
+        /// 根据显式同步模型与网络 profile 构建可运行会话。
         /// </summary>
-        /// <param name="syncModel">要验证的同步策略，必须是已实现模型�?/param>
-        /// <param name="networkProfile">模拟网络环境�?/param>
-        /// <param name="networkName">可选网络标签；默认使用 profile 延迟描述�?/param>
-        /// <param name="tickRate">模拟 tick rate，也会写�?start payload�?/param>
-        /// <param name="players">可选玩家名单；默认生成两个玩家�?/param>
-        /// <param name="matchId">可选对局 id；默认从模型派生验收 id�?/param>
-        /// <param name="randomSeed">战斗运行时的确定性随机种子�?/param>
-        /// <param name="interpolationConfig">插值模型的可选配置�?/param>
+        /// <param name="syncModel">要验证的同步策略，必须是已实现模型。</param>
+        /// <param name="networkProfile">模拟网络环境。</param>
+        /// <param name="networkName">可选网络标签；默认使用 profile 延迟描述。</param>
+        /// <param name="tickRate">模拟 tick rate，也会写入 start payload。</param>
+        /// <param name="players">可选玩家名单；默认生成两个玩家。</param>
+        /// <param name="matchId">可选对局 id；默认从模型派生验收 id。</param>
+        /// <param name="randomSeed">战斗运行时的确定性随机种子。</param>
+        /// <param name="interpolationConfig">插值模型的可选配置。</param>
         /// <param name="enableAuthoritativeWorld">
-        /// �?true 时，在客户端世界旁启动独立权威模拟，�?Unity 外壳可以同时渲染与比较二者。默�?false（仅客户端世界）�?
+        /// 为 true 时，在客户端世界旁启动独立权威模拟，让 Unity 外壳可以同时渲染与比较二者。默认为 false（仅客户端世界）。
         /// </param>
-        /// <param name="networkStats">可选的实时网络统计源，会暴露给 harness�?/param>
-        /// <param name="remoteJitter">可选的实时远端抖动源�?/param>
-        /// <param name="acceptedHits">可选的命中接受计数源�?/param>
-        /// <param name="rejectedHits">可选的命中拒绝计数源�?/param>
+        /// <param name="networkStats">可选的实时网络统计源，会暴露给 harness。</param>
+        /// <param name="remoteJitter">可选的实时远端抖动源。</param>
+        /// <param name="acceptedHits">可选的命中接受计数源。</param>
+        /// <param name="rejectedHits">可选的命中拒绝计数源。</param>
         public static ShooterAcceptanceSession Create(
             NetworkSyncModel syncModel,
             NetworkConditionProfile networkProfile,
@@ -588,14 +701,15 @@ namespace AbilityKit.Demo.Shooter.View
                         $"Shooter acceptance session failed to start the '{syncModel}' controller.");
                 }
 
-                ISyncDemoCarrier carrier = syncModel == NetworkSyncModel.AuthoritativeInterpolation
-                    ? new ShooterInterpolationDemoHarnessCarrier(
-                        controller, networkStats, remoteJitter, acceptedHits, rejectedHits)
-                    : syncModel == NetworkSyncModel.HybridHeroPrediction
-                        ? new ShooterHybridDemoHarnessCarrier(
-                            controller, networkStats, remoteJitter, acceptedHits, rejectedHits)
-                        : new ShooterDemoHarnessCarrier(
-                            controller, networkStats, remoteJitter, acceptedHits, rejectedHits);
+                var syncProfile = NetworkSyncProfiles.FromCompatibilityModel(syncModel);
+                var carrier = CreateCarrier(
+                    in syncProfile,
+                    in networkProfile,
+                    controller,
+                    networkStats,
+                    remoteJitter,
+                    acceptedHits,
+                    rejectedHits);
 
                 ShooterPresentationFacade? authoritativePresentation = null;
                 if (enableAuthoritativeWorld)
@@ -645,7 +759,7 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// 由目录菜单选项直接构建会话的重载�?
+        /// 由目录菜单选项直接构建会话的重载。
         /// </summary>
         public static ShooterAcceptanceSession Create(
             in ShooterAcceptanceSyncOption sync,
@@ -670,8 +784,9 @@ namespace AbilityKit.Demo.Shooter.View
         }
 
         /// <summary>
-        /// 将每个已实现同步模式运行在每个目录化网络环境上，并返回包含聚合摘要的四态批量结果�?
-        /// 这是逐个点击完整 Unity 验收矩阵的无头等价路径�?
+        /// 将每个 capability matrix 行运行在每个目录化网络环境上，并返回包含聚合摘要的四态批量结果。
+        /// 这是逐个点击完整 Unity 验收矩阵的无头等价路径，展开依据是 <see cref="NetworkSyncProfile"/>
+        /// 与 carrier capability，而不是同步模式名称匹配。
         /// </summary>
         public static DemoHarnessBatchResult RunCatalogMatrix(
             int stepCount = ShooterAcceptanceSession.DefaultStepCount,
@@ -679,21 +794,45 @@ namespace AbilityKit.Demo.Shooter.View
             int seed = 0)
         {
             var results = new List<DemoHarnessRunResult>();
-            foreach (var sync in ShooterAcceptanceCatalog.SyncModes)
+            foreach (var row in ShooterAcceptanceCatalog.SyncModeMatrix.Rows)
             {
-                if (!sync.Implemented)
-                {
-                    continue;
-                }
-
                 foreach (var network in ShooterAcceptanceCatalog.NetworkEnvironments)
                 {
-                    using var session = Create(sync, network);
+                    using var session = Create(
+                        row.SyncModel,
+                        network.Profile,
+                        network.DisplayName,
+                        players: BuildTemplatePlayers(row.Template.RecommendedPlayerCount),
+                        interpolationConfig: row.Template.InterpolationConfig,
+                        enableAuthoritativeWorld: row.Template.EnableAuthoritativeWorld);
                     results.Add(session.Run(stepCount, deltaSeconds, seed));
                 }
             }
 
             return new DemoHarnessBatchResult(results.AsReadOnly());
+        }
+
+        private static ISyncDemoCarrier CreateCarrier(
+            in NetworkSyncProfile profile,
+            in NetworkConditionProfile networkProfile,
+            IClientSyncStrategy<ShooterPlayerCommand, ShooterRemoteSnapshotSample> controller,
+            Func<NetworkConditioningStats>? networkStats,
+            Func<double>? remoteJitter,
+            Func<long>? acceptedHits,
+            Func<long>? rejectedHits)
+        {
+            var candidates = new ISyncDemoCarrier[]
+            {
+                new ShooterDemoHarnessCarrier(controller, networkStats, remoteJitter, acceptedHits, rejectedHits),
+                new ShooterInterpolationDemoHarnessCarrier(controller, networkStats, remoteJitter, acceptedHits, rejectedHits),
+                new ShooterHybridDemoHarnessCarrier(controller, networkStats, remoteJitter, acceptedHits, rejectedHits)
+            };
+
+            return DemoHarnessCarrierSelector.SelectFirstOrThrow(
+                candidates,
+                in profile,
+                in networkProfile,
+                "Shooter demo harness carrier");
         }
 
         private static ShooterStartGamePayload BuildStartPayload(

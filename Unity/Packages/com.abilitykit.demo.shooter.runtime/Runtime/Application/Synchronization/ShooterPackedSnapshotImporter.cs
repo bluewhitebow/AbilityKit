@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AbilityKit.Protocol.Shooter;
+using Svelto.ECS;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
@@ -26,6 +27,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             if (!isDelta)
             {
                 _state.Reset(default);
+                ClearImportedEnemies();
             }
 
             _state.CurrentFrame = snapshot.Frame;
@@ -46,6 +48,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
         {
             var players = new Dictionary<int, ShooterSveltoPlayerComponent>();
             var projectiles = new Dictionary<int, ShooterSveltoProjectileComponent>();
+            var enemies = new Dictionary<int, ImportedEnemy>();
 
             for (int i = 0; i < componentChunks.Length; i++)
             {
@@ -53,13 +56,13 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 switch (chunk.ComponentKind)
                 {
                     case ShooterPackedComponentKinds.EntityLifecycle:
-                        ImportLifecycleComponentChunk(in chunk, players, projectiles);
+                        ImportLifecycleComponentChunk(in chunk, players, projectiles, enemies);
                         break;
                     case ShooterPackedComponentKinds.Transform:
-                        ImportTransformComponentChunk(in chunk, players, projectiles);
+                        ImportTransformComponentChunk(in chunk, players, projectiles, enemies);
                         break;
                     case ShooterPackedComponentKinds.Health:
-                        ImportHealthComponentChunk(in chunk, players);
+                        ImportHealthComponentChunk(in chunk, players, enemies);
                         break;
                     case ShooterPackedComponentKinds.Score:
                         ImportScoreComponentChunk(in chunk, players);
@@ -97,12 +100,18 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
                 _state.AdvanceBulletIdPast(value.BulletId);
             }
+
+            foreach (var enemy in enemies.Values)
+            {
+                UpsertEnemy(in enemy);
+            }
         }
 
         private static void ImportLifecycleComponentChunk(
             in ShooterPackedComponentChunk chunk,
             Dictionary<int, ShooterSveltoPlayerComponent> players,
-            Dictionary<int, ShooterSveltoProjectileComponent> projectiles)
+            Dictionary<int, ShooterSveltoProjectileComponent> projectiles,
+            Dictionary<int, ImportedEnemy> enemies)
         {
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
@@ -129,13 +138,27 @@ namespace AbilityKit.Demo.Shooter.Runtime
                         OwnerPlayerId = ShooterPackedSnapshotChunkCodec.GetInt(chunk.OwnerIds, i)
                     };
                 }
+                else if (chunk.EntityKind == ShooterPackedEntityKinds.Enemy)
+                {
+                    enemies[entityId] = new ImportedEnemy
+                    {
+                        EntityId = entityId,
+                        Health = new ShooterSveltoHealthComponent
+                        {
+                            Current = 1,
+                            Max = 1,
+                            Alive = (byte)((flags & ShooterPackedEntityFlags.Alive) != 0 ? 1 : 0)
+                        }
+                    };
+                }
             }
         }
 
         private static void ImportTransformComponentChunk(
             in ShooterPackedComponentChunk chunk,
             Dictionary<int, ShooterSveltoPlayerComponent> players,
-            Dictionary<int, ShooterSveltoProjectileComponent> projectiles)
+            Dictionary<int, ShooterSveltoProjectileComponent> projectiles,
+            Dictionary<int, ImportedEnemy> enemies)
         {
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
@@ -159,24 +182,44 @@ namespace AbilityKit.Demo.Shooter.Runtime
                     projectile.VelocityY = ShooterPackedSnapshotChunkCodec.GetPackedPairValue(chunk.Aux, i, 1);
                     projectiles[entityId] = projectile;
                 }
+                else if (chunk.EntityKind == ShooterPackedEntityKinds.Enemy && enemies.TryGetValue(entityId, out var enemy))
+                {
+                    enemy.Transform = new ShooterSveltoTransformComponent
+                    {
+                        X = ShooterPackedSnapshotChunkCodec.GetFloat(chunk.ValueX, i),
+                        Y = ShooterPackedSnapshotChunkCodec.GetFloat(chunk.ValueY, i),
+                        DirectionX = ShooterPackedSnapshotChunkCodec.GetFloat(chunk.ValueZ, i, 1f),
+                        DirectionY = ShooterPackedSnapshotChunkCodec.GetFloat(chunk.ValueW, i)
+                    };
+                    enemies[entityId] = enemy;
+                }
             }
         }
 
-        private static void ImportHealthComponentChunk(in ShooterPackedComponentChunk chunk, Dictionary<int, ShooterSveltoPlayerComponent> players)
+        private static void ImportHealthComponentChunk(
+            in ShooterPackedComponentChunk chunk,
+            Dictionary<int, ShooterSveltoPlayerComponent> players,
+            Dictionary<int, ImportedEnemy> enemies)
         {
-            if (chunk.EntityKind != ShooterPackedEntityKinds.Player)
-            {
-                return;
-            }
-
             var count = Math.Max(0, chunk.Count);
             for (int i = 0; i < count; i++)
             {
                 var entityId = ShooterPackedSnapshotChunkCodec.GetInt(chunk.EntityIds, i);
-                if (entityId <= 0 || !players.TryGetValue(entityId, out var player)) continue;
+                if (entityId <= 0) continue;
 
-                player.Hp = ShooterPackedSnapshotChunkCodec.GetInt(chunk.IntValues, i, player.Hp);
-                players[entityId] = player;
+                if (chunk.EntityKind == ShooterPackedEntityKinds.Player && players.TryGetValue(entityId, out var player))
+                {
+                    player.Hp = ShooterPackedSnapshotChunkCodec.GetInt(chunk.IntValues, i, player.Hp);
+                    players[entityId] = player;
+                }
+                else if (chunk.EntityKind == ShooterPackedEntityKinds.Enemy && enemies.TryGetValue(entityId, out var enemy))
+                {
+                    var hp = ShooterPackedSnapshotChunkCodec.GetInt(chunk.IntValues, i, enemy.Health.Current);
+                    enemy.Health.Current = hp;
+                    enemy.Health.Max = Math.Max(enemy.Health.Max, hp);
+                    enemy.Health.Alive = (byte)(hp > 0 ? 1 : 0);
+                    enemies[entityId] = enemy;
+                }
             }
         }
 
@@ -214,6 +257,46 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 projectile.RemainingFrames = ShooterPackedSnapshotChunkCodec.GetInt(chunk.IntValues, i, projectile.RemainingFrames);
                 projectiles[entityId] = projectile;
             }
+        }
+
+        private void ClearImportedEnemies()
+        {
+            if (!_entities.SveltoContext.EntitiesDB.ExistsAndIsNotEmpty(ShooterSveltoGroups.GameplayTargets))
+            {
+                return;
+            }
+
+            _entities.SveltoContext.EntityFunctions.RemoveEntitiesFromGroup(ShooterSveltoGroups.GameplayTargets);
+            _entities.SveltoContext.SubmitEntities();
+        }
+
+        private void UpsertEnemy(in ImportedEnemy enemy)
+        {
+            if (enemy.EntityId <= 0)
+            {
+                return;
+            }
+
+            var context = _entities.SveltoContext;
+            var entityId = (uint)enemy.EntityId;
+            if (context.EntitiesDB.Exists<ShooterSveltoHealthComponent>(entityId, ShooterSveltoGroups.GameplayTargets))
+            {
+                context.EntitiesDB.QueryEntity<ShooterSveltoTransformComponent>(entityId, ShooterSveltoGroups.GameplayTargets) = enemy.Transform;
+                context.EntitiesDB.QueryEntity<ShooterSveltoHealthComponent>(entityId, ShooterSveltoGroups.GameplayTargets) = enemy.Health;
+                return;
+            }
+
+            var initializer = context.EntityFactory.BuildEntity<ShooterSveltoGameplayTargetDescriptor>(entityId, ShooterSveltoGroups.GameplayTargets);
+            initializer.Init(enemy.Transform);
+            initializer.Init(enemy.Health);
+            context.SubmitEntities();
+        }
+
+        private struct ImportedEnemy
+        {
+            public int EntityId;
+            public ShooterSveltoTransformComponent Transform;
+            public ShooterSveltoHealthComponent Health;
         }
     }
 }

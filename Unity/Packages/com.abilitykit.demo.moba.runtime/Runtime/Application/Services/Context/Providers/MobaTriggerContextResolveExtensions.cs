@@ -13,6 +13,12 @@ namespace AbilityKit.Demo.Moba.Services
                 return true;
             }
 
+            if (payload is MobaPersistentContextSourceSnapshot snapshot && snapshot.TryGetContextSource(out source) && source.IsValid)
+                return true;
+
+            if (payload is IMobaPersistentContextSourceProvider persistentProvider && persistentProvider.TryGetPersistentContextSource(out snapshot) && snapshot.TryGetContextSource(out source) && source.IsValid)
+                return true;
+
             if (payload is IMobaContextSourceProvider sourceProvider && sourceProvider.TryGetContextSource(out source) && source.IsValid)
                 return true;
 
@@ -57,9 +63,9 @@ namespace AbilityKit.Demo.Moba.Services
                 return source.IsValid;
             }
 
-            if (payload.TryResolveExecutionSnapshot(out var snapshot))
+            if (payload.TryResolveExecutionSnapshot(out var executionSnapshot))
             {
-                source = MobaContextSourceView.FromExecutionSnapshot(in snapshot);
+                source = MobaContextSourceView.FromExecutionSnapshot(in executionSnapshot);
                 return source.IsValid;
             }
 

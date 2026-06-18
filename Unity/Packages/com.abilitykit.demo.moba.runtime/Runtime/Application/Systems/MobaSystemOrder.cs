@@ -62,16 +62,12 @@ namespace AbilityKit.Demo.Moba.Systems
         // ========== Buff 系统 (Execute/Normal) ==========
         /// <summary>Buff 命令队列处理</summary>
         public const int BuffCommandsDrain = Base + WorldSystemOrder.Normal + 295;
-        /// <summary>Buff 应用</summary>
-        public const int BuffsApply = Base + WorldSystemOrder.Normal + 300;
-        /// <summary>Buff 移除</summary>
-        public const int BuffsRemove = Base + WorldSystemOrder.Normal + 305;
 
         // ========== 持续效果系统 (Execute/Normal) ==========
         /// <summary>持续行为统一 Tick</summary>
         public const int ContinuousTick = Base + WorldSystemOrder.Normal + 307;
-        /// <summary>Buff 生命周期清理</summary>
-        public const int BuffsTick = Base + WorldSystemOrder.Normal + 310;
+        /// <summary>Buff 生命周期调和</summary>
+        public const int BuffLifecycleReconcile = Base + WorldSystemOrder.Normal + 310;
         /// <summary>持续触发器计划调和</summary>
         public const int OngoingTriggerPlansReconcile = Base + WorldSystemOrder.Normal + 312;
         /// <summary>玩法规则 Tick</summary>
@@ -118,14 +114,14 @@ namespace AbilityKit.Demo.Moba.Systems
                 return Fail(nameof(EffectsStep), nameof(BuffCommandsDrain));
             }
 
-            if (BuffCommandsDrain >= BuffsApply || BuffsApply >= BuffsRemove || BuffsRemove >= ContinuousTick)
+            if (BuffCommandsDrain >= ContinuousTick)
             {
-                return new OrderCheckResult(false, "Buff order must be BuffCommandsDrain < BuffsApply < BuffsRemove < ContinuousTick.");
+                return new OrderCheckResult(false, "Buff order must be BuffCommandsDrain < ContinuousTick.");
             }
 
-            if (ContinuousTick >= BuffsTick || BuffsTick >= OngoingTriggerPlansReconcile || OngoingTriggerPlansReconcile >= GameplayTick)
+            if (ContinuousTick >= BuffLifecycleReconcile || BuffLifecycleReconcile >= OngoingTriggerPlansReconcile || OngoingTriggerPlansReconcile >= GameplayTick)
             {
-                return new OrderCheckResult(false, "Continuous order must be ContinuousTick < BuffsTick < OngoingTriggerPlansReconcile < GameplayTick.");
+                return new OrderCheckResult(false, "Continuous order must be ContinuousTick < BuffLifecycleReconcile < OngoingTriggerPlansReconcile < GameplayTick.");
             }
 
             if (ProjectileSync >= ProjectileLauncherCleanup || ProjectileLauncherCleanup >= ShieldLifecycle || ShieldLifecycle >= SummonLifecycle || SummonLifecycle >= ActorDespawnCleanup)

@@ -78,7 +78,7 @@ flowchart TB
 
 ## 3. 被演示的框架能力清单（A 轴 Profile）
 
-依据基线文档 §10.1，当前**真正具备运行时落地**的 Profile 有三个，Shooter 全部接入演示：
+依据基线文档 §10.1，当前**真正具备运行时落地**的 Profile 有三个，Shooter 全部接入演示。示例层不再只暴露松散的模式列表，而是通过 [`ShooterAcceptanceCatalog.SyncModeMatrix`](../Unity/Packages/com.abilitykit.demo.shooter.view.runtime/Runtime/Client/Synchronization/ShooterAcceptanceLab.cs:1) 固化「模板 → `NetworkSyncProfile` → 承载类型 → 验收准则」的正式矩阵，避免纯状态同步、帧同步与混合同步在 Unity 面板里混成同一条临时流程：
 
 ```mermaid
 flowchart LR
@@ -96,6 +96,7 @@ flowchart LR
 |---------------|----------------|-----------------|-----------|
 | **PredictRollback** | ClientPlayback=Predict + 回滚 + 输入重放 | `ShooterClientPredictRollbackSyncController` | `SyncReconciliationReport`（misprediction/replay） |
 | **AuthoritativeInterpolation** | ClientPlayback=None + 远端插值 | `ShooterClientAuthoritativeInterpolationSyncController` + `RemoteInterpolationPlayback` | 插值诊断（`IInterpolationDiagnosticsProvider`） |
+| **HybridHeroPrediction** | 本地英雄预测 + 远端对象插值 + 全量快照恢复 | `ShooterClientHybridHeroPredictionSyncController` | 本地追帧、远端插值、恢复诊断 |
 | **FastReconnect** | RecoveryPolicy=ReconnectResume\|RequestFullSnapshot | `ShooterFastReconnectDriver`（包裹 `FastReconnectSession`） | `LastFastReconnectHealthEvents`（`SyncHealthEvent`） |
 
 ---
@@ -211,7 +212,13 @@ sequenceDiagram
 
 ## 6. DemoHarness 能力矩阵运行模型
 
-DemoHarness 是把上述能力「批量演示并验收」的引擎，核心是 **A×B×C 矩阵 + 四态结果**。
+DemoHarness 是把上述能力「批量演示并验收」的引擎，核心是 **A×B×C 矩阵 + 四态结果**。Shooter 侧额外提供正式验收矩阵 [`ShooterSyncModeMatrix`](../Unity/Packages/com.abilitykit.demo.shooter.view.runtime/Runtime/Client/Synchronization/ShooterAcceptanceLab.cs:1)，用于把每个同步模板的验收边界显式暴露给 Unity 面板、xUnit 和文档：
+
+| 模板 | 承载语义 | 必须验收 |
+|------|----------|----------|
+| `predict-rollback-authority` | 本地预测 + 回滚权威对账 | 预测回滚、packed snapshot 覆盖、确定性重放 |
+| `authoritative-interpolation-presentation` | 服务器权威 + 远端延迟插值 | 远端缓冲、表现收敛、客户端本地输入不污染权威状态 |
+| `hybrid-hero-prediction` | 本地英雄预测 + 远端插值 | 本地英雄追帧、远端插值、全量快照恢复 |
 
 ### 6.1 三轴矩阵
 
@@ -254,6 +261,19 @@ flowchart TD
 
 ---
 
+### 6.4 ECS/Svelto 基准入口
+
+同步验收矩阵之外，Shooter runtime 现在提供 [`ShooterSveltoGameplayBenchmark`](../Unity/Packages/com.abilitykit.demo.shooter.runtime/Runtime/Domain/Gameplay/ShooterSveltoGameplayBenchmark.cs:1) 作为高性能 ECS 范式入口。它复用 [`ShooterSveltoGameplayScenarioRunner`](../Unity/Packages/com.abilitykit.demo.shooter.runtime/Runtime/Domain/Gameplay/ShooterSveltoGameplayScenarioRunner.cs:1) 的 `EntitiesDB.QueryEntities<...>()` 批量处理路径，按 profile 多次运行并断言 deterministic outcome：
+
+| Profile | 场景 | 用途 |
+|---------|------|------|
+| `svelto-projectile-storm-baseline` | ProjectileStorm | 高投射物生成/移动/销毁基线 |
+| `svelto-wave-survival-baseline` | WaveSurvival | 射手/目标/投射物混合负载基线 |
+
+该入口让 Shooter 的「高实体 ECS/Svelto 标准示例」与「网络同步能力展柜」并列存在：同步策略只消费 runtime 快照/输入/状态哈希，性能基准直接验证 runtime 批量范式本身。
+
+---
+
 ## 7. 端到端演示数据流（汇总图）
 
 ```mermaid
@@ -281,7 +301,11 @@ flowchart LR
 |---------|------|------|
 | PredictRollback | ✅ 已演示 | 预测+回滚+对账，诊断完整 |
 | AuthoritativeInterpolation | ✅ 已演示 | 权威帧+远端插值回放 |
+| HybridHeroPrediction | ✅ 已演示 | 本地英雄预测与远端插值拆分，具备全量快照恢复验收边界 |
 | FastReconnect | ✅ 已演示 | 续帧/全量快照恢复，健康事件可采集（基线 §10.4 已闭环） |
+| 正式同步验收矩阵 | ✅ 已演示 | `SyncModeMatrix` 固化模板、profile、承载类型与 per-mode acceptance criteria |
+| ECS/Svelto 基准入口 | ✅ 已演示 | `ShooterSveltoGameplayBenchmark` 覆盖 projectile storm / wave survival 基线并断言确定性 |
+| 中立服务端 World 管理 | ✅ 已演示 | Orleans 使用 `ServerBattleWorldManager` 同时管理 MOBA 与 Shooter battle world 生命周期 |
 | 连接底座 (ConnectionManager/Tcp/Heartbeat/RequestClient) | ✅ 已演示 | 生产连接链路在用 |
 | 统一健康事件 (`SyncHealthEvent`) | ✅ 已演示 | 经 DemoHarness 聚合为四态 |
 | **NetworkConditioningMiddleware**（抖动/丢包注入） | 🟡 仅测试/Harness | 未挂到生产连接链；B 轴条件目前主要在 Harness 内模拟 |
@@ -297,6 +321,6 @@ flowchart LR
 
 ## 9. 小结
 
-Shooter 示例以「包裹而非替换 + 适配中性类型 + 能力可观测」三原则，把框架三大已落地 Profile（PredictRollback / AuthoritativeInterpolation / FastReconnect）接入并经 DemoHarness 的 A×B×C 矩阵、四态结果完成可验收演示。主循环 `Tick` 以恢复状态机分流推帧/追帧/全量重同步，并在 Normal 态发出 FastReconnect 心跳；诊断经 `SyncReconciliationReport`/`SyncHealthEvent` 聚合为 `DemoHarnessMetrics`。
+Shooter 示例以「包裹而非替换 + 适配中性类型 + 能力可观测」三原则，把框架已落地 Profile（PredictRollback / AuthoritativeInterpolation / HybridHeroPrediction / FastReconnect）接入并经 DemoHarness 的 A×B×C 矩阵、四态结果完成可验收演示。主循环 `Tick` 以恢复状态机分流推帧/追帧/全量重同步，并在 Normal 态发出 FastReconnect 心跳；诊断经 `SyncReconciliationReport`/`SyncHealthEvent`/`ShooterHostDiagnosticsSnapshot` 聚合为 `DemoHarnessMetrics` 与 Unity 面板快照。
 
-待补齐项集中在三处：lag compensation 完全空转、conditioning 未入生产链、时间锚未驱动客户端步进。补齐后，示例对框架同步能力的覆盖将更完整。
+P0–P2 的正式化入口已经落地到三处：`SyncModeMatrix` 固化同步验收边界，`ShooterSveltoGameplayBenchmark` 固化 ECS/Svelto 批量范式基准，`ServerBattleWorldManager` 消除 Orleans server world 管理的 MOBA 命名偏置。剩余缺口集中在三处：lag compensation 完全空转、conditioning 未入生产链、时间锚未驱动客户端步进。

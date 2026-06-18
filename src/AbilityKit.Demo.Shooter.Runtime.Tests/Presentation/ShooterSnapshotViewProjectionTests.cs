@@ -51,6 +51,75 @@ public sealed class ShooterSnapshotViewProjectionTests
     }
 
     [Fact]
+    public void PackedEnemySnapshotProjectsEnemyTransformAndHealthIntoStore()
+    {
+        var projection = new ShooterSnapshotViewProjection();
+        var mapper = new ShooterSnapshotViewModelMapper();
+        var packed = new ShooterPackedSnapshotPayload(
+            ShooterPackedSnapshotCodec.CurrentVersion,
+            worldId: 88ul,
+            frame: 6,
+            serverTick: 6L,
+            snapshotFlags: ShooterPackedSnapshotFlags.Full,
+            stateHash: 0u,
+            entityCount: 1,
+            extensionPayload: Array.Empty<byte>(),
+            componentChunks: new[]
+            {
+                new ShooterPackedComponentChunk(
+                    ShooterPackedComponentKinds.EntityLifecycle,
+                    ShooterPackedEntityKinds.Enemy,
+                    count: 1,
+                    entityIds: new[] { 10001 },
+                    valueX: Array.Empty<float>(),
+                    valueY: Array.Empty<float>(),
+                    valueZ: Array.Empty<float>(),
+                    valueW: Array.Empty<float>(),
+                    intValues: Array.Empty<int>(),
+                    flags: new[] { ShooterPackedEntityFlags.Alive },
+                    ownerIds: Array.Empty<int>(),
+                    aux: Array.Empty<int>()),
+                new ShooterPackedComponentChunk(
+                    ShooterPackedComponentKinds.Transform,
+                    ShooterPackedEntityKinds.Enemy,
+                    count: 1,
+                    entityIds: new[] { 10001 },
+                    valueX: new[] { 7f },
+                    valueY: new[] { -3f },
+                    valueZ: new[] { -1f },
+                    valueW: new[] { 0f },
+                    intValues: Array.Empty<int>(),
+                    flags: Array.Empty<byte>(),
+                    ownerIds: Array.Empty<int>(),
+                    aux: new[] { 0, 0 }),
+                new ShooterPackedComponentChunk(
+                    ShooterPackedComponentKinds.Health,
+                    ShooterPackedEntityKinds.Enemy,
+                    count: 1,
+                    entityIds: new[] { 10001 },
+                    valueX: Array.Empty<float>(),
+                    valueY: Array.Empty<float>(),
+                    valueZ: Array.Empty<float>(),
+                    valueW: Array.Empty<float>(),
+                    intValues: new[] { 2 },
+                    flags: Array.Empty<byte>(),
+                    ownerIds: Array.Empty<int>(),
+                    aux: Array.Empty<int>())
+            });
+
+        var batch = mapper.Map(in packed);
+        projection.Apply(in batch);
+
+        var enemy = new ShooterViewEntityKey(ShooterViewEntityKind.Enemy, 10001);
+        Assert.Equal(1, projection.Store.EnemyCount);
+        Assert.True(projection.Store.TryGetTransform(enemy, out var transform));
+        Assert.Equal(7f, transform.X);
+        Assert.Equal(-3f, transform.Y);
+        Assert.True(projection.Store.TryGetHealth(enemy, out var health));
+        Assert.Equal(2, health.Hp);
+    }
+
+    [Fact]
     public void DeltaSnapshotUpdatesComponentsWithoutRemovingMissingEntities()
     {
         var projection = new ShooterSnapshotViewProjection();

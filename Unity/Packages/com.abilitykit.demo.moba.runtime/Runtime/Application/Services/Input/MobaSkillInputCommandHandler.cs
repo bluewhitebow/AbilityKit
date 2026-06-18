@@ -14,58 +14,37 @@ namespace AbilityKit.Demo.Moba.Services
         {
             if (context == null)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ContextMissing,
-                    $"ContextMissing(Frame={frame.Value},Player={command.Player.Value})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ContextMissing);
                 return false;
             }
 
             if (context.Phase == null || !context.Phase.InGame)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.NotInGame,
-                    $"NotInGame(Frame={frame.Value},Player={command.Player.Value},HasPhase={context.Phase != null})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.NotInGame);
                 return false;
             }
 
             if (context.PlayerActorMap == null || !context.PlayerActorMap.TryGetActorId(command.Player, out int actorId))
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ActorMapMissing,
-                    $"ActorMapMissing(Player={command.Player.Value},HasMap={context.PlayerActorMap != null})");
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ActorMapMissing);
                 return false;
             }
 
             if (!context.TryGetEntity(actorId, out ActorEntity entity) || entity == null)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.ActorEntityMissing,
-                    $"ActorEntityMissing(Actor={actorId})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.ActorEntityMissing, actorId);
                 return false;
             }
 
             if (!entity.hasTransform)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.TransformMissing,
-                    $"TransformMissing(Actor={actorId})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.TransformMissing, actorId);
                 return false;
             }
 
             if (command.Payload == null || command.Payload.Length == 0)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.PayloadMissing,
-                    $"PayloadMissing(Player={command.Player.Value},Actor={actorId})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.PayloadMissing, actorId);
                 return false;
             }
 
@@ -81,35 +60,29 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (context.Skills == null)
             {
-                result = MobaInputCommandResult.Rejected(
-                    command,
-                    MobaInputCommandFailureCode.SkillExecutorMissing,
-                    $"SkillExecutorMissing(Player={command.Player.Value},Actor={actorId},Slot={evt.Slot})",
-                    actorId);
+                result = MobaInputCommandResult.Rejected(command, MobaInputCommandFailureCode.SkillExecutorMissing, actorId);
                 return false;
             }
 
-            var handled = context.Skills.TryHandleInput(actorId, in evt, out var failReason);
-            if (!handled)
+            var skillResult = context.Skills.TryHandleInputResult(actorId, in evt);
+            if (!skillResult.Success)
             {
-                var reason = failReason ?? "unknown";
                 result = MobaInputCommandResult.Rejected(
                     command,
                     MobaInputCommandFailureCode.SkillRejected,
-                    $"SkillRejected(Player={command.Player.Value},Actor={actorId},Slot={evt.Slot},Target={evt.TargetActorId},Reason={reason})",
+                    CreateSkillRejectedMessage(in skillResult, evt.Slot, evt.TargetActorId),
                     actorId);
                 return false;
             }
 
-            var castResult = string.IsNullOrEmpty(failReason) ? "Success" : failReason;
-            var running = context.Skills.TryGetRunningBySlot(actorId, evt.Slot, out var snapshot)
-                ? $"Running=True,Skill={snapshot.SkillId},Stage={snapshot.Stage},ElapsedMs={snapshot.ElapsedMs},NextEvent={snapshot.NextEventIndex},Runtime={snapshot.InstanceId}"
-                : "Running=False";
-            result = MobaInputCommandResult.Accepted(
-                command,
-                $"SkillAccepted(Player={command.Player.Value},Actor={actorId},Slot={evt.Slot},Phase={evt.Phase},Target={evt.TargetActorId},Result={castResult},{running})",
-                actorId);
+            result = MobaInputCommandResult.Accepted(command, actorId);
             return true;
+        }
+
+        private static string CreateSkillRejectedMessage(in MobaSkillInputHandleResult skillResult, int slot, int targetActorId)
+        {
+            var code = string.IsNullOrEmpty(skillResult.Code) ? "skill.input.rejected" : skillResult.Code;
+            return "SkillRejected(Code=" + code + ",Slot=" + slot + ",Target=" + targetActorId + ")";
         }
     }
 }

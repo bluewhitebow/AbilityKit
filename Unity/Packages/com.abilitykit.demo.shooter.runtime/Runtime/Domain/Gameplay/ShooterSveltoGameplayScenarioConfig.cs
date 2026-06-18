@@ -263,11 +263,11 @@ namespace AbilityKit.Demo.Shooter.Runtime
 {
   ""durationFrames"": 120,
   ""victoryTargetDefeats"": 96,
-  ""maxActiveEnemies"": 96,
+  ""maxActiveEnemies"": 48,
   ""waves"": [
-    { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 1, ""enemyCount"": 32, ""enemyHp"": 3, ""spawnRadius"": 12.0 },
-    { ""waveId"": 2, ""startFrame"": 30, ""spawnFrameInterval"": 2, ""enemyCount"": 32, ""enemyHp"": 4, ""spawnRadius"": 14.0 },
-    { ""waveId"": 3, ""startFrame"": 60, ""spawnFrameInterval"": 3, ""enemyCount"": 32, ""enemyHp"": 5, ""spawnRadius"": 16.0 }
+    { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 1, ""enemyCount"": 36, ""enemyHp"": 2, ""spawnRadius"": 9.0 },
+    { ""waveId"": 2, ""startFrame"": 20, ""spawnFrameInterval"": 1, ""enemyCount"": 36, ""enemyHp"": 2, ""spawnRadius"": 11.0 },
+    { ""waveId"": 3, ""startFrame"": 40, ""spawnFrameInterval"": 2, ""enemyCount"": 36, ""enemyHp"": 3, ""spawnRadius"": 13.0 }
   ]
 }";
 
@@ -294,11 +294,11 @@ namespace AbilityKit.Demo.Shooter.Runtime
   ""battleFlow"": {
     ""durationFrames"": 120,
     ""victoryTargetDefeats"": 96,
-    ""maxActiveEnemies"": 96,
+    ""maxActiveEnemies"": 48,
     ""waves"": [
-      { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 1, ""enemyCount"": 32, ""enemyHp"": 3, ""spawnRadius"": 12.0 },
-      { ""waveId"": 2, ""startFrame"": 30, ""spawnFrameInterval"": 2, ""enemyCount"": 32, ""enemyHp"": 4, ""spawnRadius"": 14.0 },
-      { ""waveId"": 3, ""startFrame"": 60, ""spawnFrameInterval"": 3, ""enemyCount"": 32, ""enemyHp"": 5, ""spawnRadius"": 16.0 }
+      { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 1, ""enemyCount"": 36, ""enemyHp"": 2, ""spawnRadius"": 9.0 },
+      { ""waveId"": 2, ""startFrame"": 20, ""spawnFrameInterval"": 1, ""enemyCount"": 36, ""enemyHp"": 2, ""spawnRadius"": 11.0 },
+      { ""waveId"": 3, ""startFrame"": 40, ""spawnFrameInterval"": 2, ""enemyCount"": 36, ""enemyHp"": 3, ""spawnRadius"": 13.0 }
     ]
   }
 }";
@@ -326,11 +326,11 @@ namespace AbilityKit.Demo.Shooter.Runtime
   ""battleFlow"": {
     ""durationFrames"": 180,
     ""victoryTargetDefeats"": 96,
-    ""maxActiveEnemies"": 48,
+    ""maxActiveEnemies"": 36,
     ""waves"": [
-      { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 2, ""enemyCount"": 24, ""enemyHp"": 3, ""spawnRadius"": 12.0 },
-      { ""waveId"": 2, ""startFrame"": 45, ""spawnFrameInterval"": 2, ""enemyCount"": 32, ""enemyHp"": 4, ""spawnRadius"": 15.0 },
-      { ""waveId"": 3, ""startFrame"": 90, ""spawnFrameInterval"": 3, ""enemyCount"": 40, ""enemyHp"": 5, ""spawnRadius"": 18.0 }
+      { ""waveId"": 1, ""startFrame"": 0, ""spawnFrameInterval"": 1, ""enemyCount"": 32, ""enemyHp"": 2, ""spawnRadius"": 9.0 },
+      { ""waveId"": 2, ""startFrame"": 30, ""spawnFrameInterval"": 1, ""enemyCount"": 32, ""enemyHp"": 2, ""spawnRadius"": 11.0 },
+      { ""waveId"": 3, ""startFrame"": 60, ""spawnFrameInterval"": 2, ""enemyCount"": 32, ""enemyHp"": 3, ""spawnRadius"": 13.0 }
     ]
   }
 }";

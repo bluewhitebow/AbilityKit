@@ -18,6 +18,7 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly List<IMobaContinuousIntervalHandler> _intervalHandlers = new List<IMobaContinuousIntervalHandler>();
         private MobaContinuousModifierProjectorRegistry _modifierProjectors;
         private MobaContinuousLifecycleBinder _lifecycleBinder;
+        private MobaContinuousContextLifecycleBinder _contextLifecycleBinder;
         private IMobaEffectiveTagQueryService _effectiveTags;
         private IMobaContinuousTagRuleService _tagRules;
         private IWorldResolver _services;
@@ -86,8 +87,7 @@ namespace AbilityKit.Demo.Moba.Services
                 diagnostics.RecordDuration(
                     MobaBattleDiagnosticMetric.ContinuousTick,
                     start,
-                    MobaBattleDiagnosticsDefaults.ContinuousTickWarnMs,
-                    $"active={active.Count} ticked={ticked} intervalCandidates={intervalCandidates}");
+                    MobaBattleDiagnosticsDefaults.ContinuousTickWarnMs);
             }
         }
 
@@ -127,13 +127,25 @@ namespace AbilityKit.Demo.Moba.Services
 
         private void DispatchInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodic)
         {
+            var executionContext = ResolveExecutionContext(continuous);
             for (int i = 0; i < _intervalHandlers.Count; i++)
             {
                 var handler = _intervalHandlers[i];
                 if (handler == null || !handler.CanHandle(continuous)) continue;
 
-                handler.OnInterval(continuous, periodic);
+                handler.OnInterval(continuous, periodic, in executionContext);
             }
+        }
+
+        private static MobaCombatExecutionContext ResolveExecutionContext(IContinuous continuous)
+        {
+            if (continuous is IMobaContinuousExecutionContextProvider provider
+                && provider.TryGetCombatExecutionContext(out var context))
+            {
+                return context;
+            }
+
+            return default;
         }
 
         private void RegisterDefaultIntervalHandlers(IWorldResolver services)
@@ -158,6 +170,11 @@ namespace AbilityKit.Demo.Moba.Services
 
             _lifecycleBinder = new MobaContinuousLifecycleBinder(_modifierProjectors);
             AddLifecycleBinder(_lifecycleBinder);
+
+            services.TryResolve(out MobaTraceRegistry trace);
+            services.TryResolve(out AbilityKit.Ability.Triggering.Runtime.ITriggerActionRunner actionRunner);
+            _contextLifecycleBinder = new MobaContinuousContextLifecycleBinder(trace, actionRunner);
+            AddLifecycleBinder(_contextLifecycleBinder);
         }
 
         private void ReprojectModifiers(IContinuous continuous)
@@ -191,6 +208,12 @@ namespace AbilityKit.Demo.Moba.Services
             {
                 RemoveLifecycleBinder(_lifecycleBinder);
                 _lifecycleBinder = null;
+            }
+
+            if (_contextLifecycleBinder != null)
+            {
+                RemoveLifecycleBinder(_contextLifecycleBinder);
+                _contextLifecycleBinder = null;
             }
 
             _intervalHandlers.Clear();

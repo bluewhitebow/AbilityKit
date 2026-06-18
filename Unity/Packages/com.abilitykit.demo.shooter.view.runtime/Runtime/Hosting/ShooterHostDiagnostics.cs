@@ -10,8 +10,8 @@ using AbilityKit.Protocol.Shooter;
 namespace AbilityKit.Demo.Shooter.View.Hosting
 {
     /// <summary>
-    /// Host-neutral diagnostics snapshot for Shooter demo shells. Editor windows, PlayMode hosts and
-    /// attach-mode observers can project the same runtime/session state without owning collection logic.
+    /// Shooter 演示外壳使用的宿主无关诊断快照。Editor 窗口、PlayMode host 与 attach 模式观察器
+    /// 都可以投影同一份运行时/会话状态，而不需要各自持有采集逻辑。
     /// </summary>
     public readonly struct ShooterHostDiagnosticsSnapshot
     {
@@ -19,6 +19,7 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             int frame,
             int playerCount,
             int bulletCount,
+            int enemyCount,
             IReadOnlyList<ShooterEventSnapshot> recentEvents,
             int totalEvents,
             double maxDivergence,
@@ -26,11 +27,20 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             NetworkConditioningStats? carrierNetworkStats,
             ShooterSnapshotApplyResult? lastCarrierSnapshotApplyResult,
             SyncTimeAnchor lastCarrierTimeAnchor,
-            ShooterLagCompensationTelemetry? lagCompensationTelemetry)
+            SyncTimeAnchor localTimeAnchor,
+            ShooterLagCompensationTelemetry? lagCompensationTelemetry,
+            ShooterLagCompensationEvaluation? lagCompensationEvaluation,
+            bool needsPureStateBaselineResync,
+            ShooterPureStateResyncReason lastPureStateResyncReason,
+            int lastPureStateAppliedFrame,
+            uint lastPureStateAppliedStateHash,
+            int lastPureStateResyncFrame,
+            uint lastPureStateResyncStateHash)
         {
             Frame = frame;
             PlayerCount = playerCount;
             BulletCount = bulletCount;
+            EnemyCount = enemyCount;
             RecentEvents = recentEvents ?? Array.Empty<ShooterEventSnapshot>();
             TotalEvents = totalEvents;
             MaxDivergence = maxDivergence;
@@ -38,7 +48,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             CarrierNetworkStats = carrierNetworkStats;
             LastCarrierSnapshotApplyResult = lastCarrierSnapshotApplyResult;
             LastCarrierTimeAnchor = lastCarrierTimeAnchor;
+            LocalTimeAnchor = localTimeAnchor;
             LagCompensationTelemetry = lagCompensationTelemetry;
+            LagCompensationEvaluation = lagCompensationEvaluation;
+            NeedsPureStateBaselineResync = needsPureStateBaselineResync;
+            LastPureStateResyncReason = lastPureStateResyncReason;
+            LastPureStateAppliedFrame = lastPureStateAppliedFrame;
+            LastPureStateAppliedStateHash = lastPureStateAppliedStateHash;
+            LastPureStateResyncFrame = lastPureStateResyncFrame;
+            LastPureStateResyncStateHash = lastPureStateResyncStateHash;
         }
 
         public int Frame { get; }
@@ -46,6 +64,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
         public int PlayerCount { get; }
 
         public int BulletCount { get; }
+
+        public int EnemyCount { get; }
 
         public IReadOnlyList<ShooterEventSnapshot> RecentEvents { get; }
 
@@ -61,7 +81,23 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
 
         public SyncTimeAnchor LastCarrierTimeAnchor { get; }
 
+        public SyncTimeAnchor LocalTimeAnchor { get; }
+
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry { get; }
+
+        public ShooterLagCompensationEvaluation? LagCompensationEvaluation { get; }
+
+        public bool NeedsPureStateBaselineResync { get; }
+
+        public ShooterPureStateResyncReason LastPureStateResyncReason { get; }
+
+        public int LastPureStateAppliedFrame { get; }
+
+        public uint LastPureStateAppliedStateHash { get; }
+
+        public int LastPureStateResyncFrame { get; }
+
+        public uint LastPureStateResyncStateHash { get; }
     }
 
     public static class ShooterHostDiagnosticsProjector
@@ -82,6 +118,7 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 snapshot.Frame,
                 snapshot.Players?.Length ?? 0,
                 snapshot.Bullets?.Length ?? 0,
+                CountEntities(session.Presentation.ViewModel.Current.EntityChanges, ShooterViewEntityKind.Enemy),
                 recentEvents,
                 previousTotalEvents + recentEvents.Length,
                 comparison.MaxDistance,
@@ -89,7 +126,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 session.CarrierNetworkStats,
                 session.LastCarrierSnapshotApplyResult,
                 session.LastCarrierTimeAnchor,
-                session.LagCompensationTelemetry);
+                default,
+                session.LagCompensationTelemetry,
+                session.LastLagCompensationEvaluation,
+                session.Presentation.NeedsPureStateFullBaselineResync,
+                session.Presentation.LastPureStateResyncReason,
+                session.Presentation.LastPureStateAppliedFrame,
+                session.Presentation.LastPureStateAppliedStateHash,
+                session.Presentation.LastPureStateResyncFrame,
+                session.Presentation.LastPureStateResyncStateHash);
         }
 
         public static ShooterHostDiagnosticsSnapshot ProjectFromFrame(
@@ -103,6 +148,7 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 batch.Frame,
                 CountEntities(batch.EntityChanges, ShooterViewEntityKind.Player),
                 CountEntities(batch.EntityChanges, ShooterViewEntityKind.Bullet),
+                CountEntities(batch.EntityChanges, ShooterViewEntityKind.Enemy),
                 recentEvents,
                 previousTotalEvents + recentEvents.Count,
                 0d,
@@ -110,7 +156,15 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 frame.CarrierNetworkStats,
                 frame.LastCarrierSnapshotApplyResult,
                 frame.LastCarrierTimeAnchor,
-                frame.LagCompensationTelemetry);
+                frame.LocalTimeAnchor,
+                frame.LagCompensationTelemetry,
+                frame.LagCompensationEvaluation,
+                frame.NeedsPureStateBaselineResync,
+                frame.LastPureStateResyncReason,
+                frame.LastPureStateAppliedFrame,
+                frame.LastPureStateAppliedStateHash,
+                frame.LastPureStateResyncFrame,
+                frame.LastPureStateResyncStateHash);
         }
 
         private static int CountEntities(IReadOnlyList<ShooterViewEntityChange> changes, ShooterViewEntityKind kind)

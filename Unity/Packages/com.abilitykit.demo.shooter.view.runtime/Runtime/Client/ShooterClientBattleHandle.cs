@@ -83,11 +83,22 @@ namespace AbilityKit.Demo.Shooter.View
             return result;
         }
 
+        public async Task<ShooterSnapshotApplyResult> ApplyGatewayPushAndRequestFullSnapshotResyncIfNeededAsync(
+            uint opCode,
+            ArraySegment<byte> payload,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
+        {
+            var result = _session.ApplyGatewayPush(opCode, payload);
+            await RequestFullSnapshotResyncIfNeededAsync(timeout, cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+
         public async Task<ShooterGatewayFullStateSyncRequestResult> RequestFullSnapshotResyncIfNeededAsync(
             TimeSpan? timeout = null,
             CancellationToken cancellationToken = default)
         {
-            if (_roomClient == null || !_session.NeedsFullSnapshotResync)
+            if (_roomClient == null || !ShouldRequestFullStateSync())
             {
                 return ShooterGatewayFullStateSyncRequestResult.NotRequested;
             }
@@ -110,16 +121,50 @@ namespace AbilityKit.Demo.Shooter.View
 
         public ShooterGatewayFullStateSyncRequest CreateFullStateSyncRequest()
         {
+            if (_session.NeedsFullSnapshotResync)
+            {
+                return new ShooterGatewayFullStateSyncRequest(
+                    _flow.SessionToken,
+                    _flow.BattleId,
+                    _flow.RoomId,
+                    _flow.WorldId,
+                    _session.LastResyncClientFrame,
+                    _session.LastResyncAuthoritativeFrame,
+                    _session.LastResyncClientStateHash,
+                    _session.LastResyncAuthoritativeStateHash,
+                    _session.LastResyncReason.ToString());
+            }
+
+            if (_session.Presentation.NeedsPureStateFullBaselineResync)
+            {
+                var reason = $"PureState{_session.Presentation.LastPureStateResyncReason}";
+                return new ShooterGatewayFullStateSyncRequest(
+                    _flow.SessionToken,
+                    _flow.BattleId,
+                    _flow.RoomId,
+                    _flow.WorldId,
+                    _session.Presentation.LastPureStateAppliedFrame,
+                    _session.Presentation.LastPureStateResyncFrame,
+                    _session.Presentation.LastPureStateAppliedStateHash,
+                    _session.Presentation.LastPureStateResyncStateHash,
+                    reason);
+            }
+
             return new ShooterGatewayFullStateSyncRequest(
                 _flow.SessionToken,
                 _flow.BattleId,
                 _flow.RoomId,
                 _flow.WorldId,
-                _session.LastResyncClientFrame,
-                _session.LastResyncAuthoritativeFrame,
-                _session.LastResyncClientStateHash,
-                _session.LastResyncAuthoritativeStateHash,
-                _session.LastResyncReason.ToString());
+                _session.CurrentFrame,
+                _session.CurrentFrame,
+                0u,
+                0u,
+                ShooterClientResyncReason.None.ToString());
+        }
+
+        private bool ShouldRequestFullStateSync()
+        {
+            return _session.NeedsFullSnapshotResync || _session.Presentation.NeedsPureStateFullBaselineResync;
         }
 
         public Task<ShooterClientGatewayInputSubmitResult> SubmitLocalInputToGatewayAsync(

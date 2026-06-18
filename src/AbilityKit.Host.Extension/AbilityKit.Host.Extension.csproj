@@ -22,7 +22,9 @@
     <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Client\FrameSync\*.cs" />
     <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Moba\Shared\Struct\*.cs" />
     <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Moba\Shared\CreateWorld\*.cs" />
+    <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Moba\Shared\StartSources\*.cs" />
     <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Moba\Shared\Snapshot\*.cs" />
+    <Compile Include="..\..\Unity\Packages\com.abilitykit.host.extension\Runtime\Moba\Shared\Runtime\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

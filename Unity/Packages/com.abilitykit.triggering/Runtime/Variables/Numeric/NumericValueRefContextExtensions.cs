@@ -25,9 +25,26 @@ namespace AbilityKit.Triggering.Variables.Numeric
 
         public static bool TryResolve(this in NumericValueRef valueRef, ActionContext context, out double value)
         {
-            value = 0.0;
             if (context == null) throw new ArgumentNullException(nameof(context));
 
+            if (!TryResolveSource(in valueRef, context, out value))
+            {
+                if (!valueRef.HasFallback || valueRef.Required)
+                {
+                    value = 0.0;
+                    return false;
+                }
+
+                value = valueRef.FallbackValue;
+            }
+
+            value = ApplyNumericValuePolicy(in valueRef, value);
+            return true;
+        }
+
+        private static bool TryResolveSource(in NumericValueRef valueRef, ActionContext context, out double value)
+        {
+            value = 0.0;
             return valueRef.Kind switch
             {
                 ENumericValueRefKind.Const => TryResolveConst(in valueRef, out value),
@@ -104,9 +121,18 @@ namespace AbilityKit.Triggering.Variables.Numeric
             return true;
         }
 
+        private static double ApplyNumericValuePolicy(in NumericValueRef valueRef, double value)
+        {
+            if (valueRef.HasScale) value *= valueRef.Scale;
+            if (valueRef.Offset != 0d) value += valueRef.Offset;
+            if (valueRef.HasMin && value < valueRef.MinValue) value = valueRef.MinValue;
+            if (valueRef.HasMax && value > valueRef.MaxValue) value = valueRef.MaxValue;
+            return value;
+        }
+
         private static string Describe(in NumericValueRef valueRef)
         {
-            return valueRef.Kind switch
+            var source = valueRef.Kind switch
             {
                 ENumericValueRefKind.Const => $"Const({valueRef.ConstValue})",
                 ENumericValueRefKind.Blackboard => $"Blackboard(boardId={valueRef.BoardId}, keyId={valueRef.KeyId})",
@@ -115,6 +141,16 @@ namespace AbilityKit.Triggering.Variables.Numeric
                 ENumericValueRefKind.Expr => "Expr(" + valueRef.ExprText + ")",
                 _ => "Unsupported(" + valueRef.Kind + ")"
             };
+
+            if (!string.IsNullOrEmpty(valueRef.Label)) source += $", label='{valueRef.Label}'";
+            if (!string.IsNullOrEmpty(valueRef.Scope)) source += $", scope='{valueRef.Scope}'";
+            if (valueRef.Required) source += ", required=true";
+            if (valueRef.HasFallback) source += $", fallback={valueRef.FallbackValue}";
+            if (valueRef.HasScale) source += $", scale={valueRef.Scale}";
+            if (valueRef.Offset != 0d) source += $", offset={valueRef.Offset}";
+            if (valueRef.HasMin) source += $", min={valueRef.MinValue}";
+            if (valueRef.HasMax) source += $", max={valueRef.MaxValue}";
+            return source;
         }
     }
 }

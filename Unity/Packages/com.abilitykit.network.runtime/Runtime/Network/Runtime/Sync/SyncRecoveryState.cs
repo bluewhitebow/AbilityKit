@@ -3,24 +3,24 @@
 namespace AbilityKit.Network.Runtime.Sync
 {
     /// <summary>
-    /// Gameplay-agnostic recovery phase a client sync strategy is currently in. Unifies what demos
-    /// previously expressed through bespoke enums (e.g. Shooter's ShooterClientRecoveryState).
+    /// 客户端同步策略当前所处的玩法无关恢复阶段。统一了示例过去通过自定义枚举表达的状态
+    /// （例如 Shooter 的 ShooterClientRecoveryState）。
     /// </summary>
     public enum SyncRecoveryState
     {
-        /// <summary>Local simulation/playback is tracking the server normally.</summary>
+        /// <summary>本地模拟/播放正常跟随服务器。</summary>
         Normal = 0,
 
-        /// <summary>Catching up a small frame deficit by fast-forwarding local simulation.</summary>
+        /// <summary>通过快进本地模拟追赶较小的帧差。</summary>
         CatchUp = 1,
 
-        /// <summary>Drift exceeded incremental recovery; waiting for a full authoritative snapshot.</summary>
+        /// <summary>漂移超过增量恢复能力；正在等待完整权威快照。</summary>
         AwaitingFullSnapshot = 2,
 
-        /// <summary>Applying a received full authoritative snapshot.</summary>
+        /// <summary>正在应用已收到的完整权威快照。</summary>
         ApplyingFullSnapshot = 3,
 
-        /// <summary>Recovery just completed and local state was restored to authority.</summary>
+        /// <summary>恢复刚刚完成，本地状态已还原到权威状态。</summary>
         Recovered = 4
     }
 }

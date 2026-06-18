@@ -79,6 +79,12 @@ namespace AbilityKit.Triggering.Eventing
             return channel.Subscribe(handler);
         }
 
+        public bool HasSubscribers<TArgs>(EventKey<TArgs> key)
+        {
+            if (!TryGetChannelDictionary<TArgs>(out var dict)) return false;
+            return dict.TryGetValue(key, out var channel) && channel.SubscriberCount > 0;
+        }
+
         public void Flush()
         {
             if (_options.DispatchMode == EEventDispatchMode.Immediate) return;

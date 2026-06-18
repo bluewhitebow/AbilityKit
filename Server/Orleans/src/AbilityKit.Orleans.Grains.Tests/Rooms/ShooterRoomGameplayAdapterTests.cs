@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using AbilityKit.Demo.Shooter;
 using AbilityKit.Orleans.Contracts.Battle;
 using AbilityKit.Orleans.Contracts.Rooms;
+using AbilityKit.Orleans.Grains.Gameplays.Shooter.Rooms;
 using AbilityKit.Orleans.Grains.Rooms.Gameplay;
 using Xunit;
 

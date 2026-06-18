@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using AbilityKit.World.Svelto;
 
 namespace AbilityKit.Demo.Shooter.Runtime
 {
     public interface IShooterEntityManager
     {
+        ISveltoWorldContext SveltoContext { get; }
+
         int MaxEntityCount { get; }
 
         int PlayerCount { get; }

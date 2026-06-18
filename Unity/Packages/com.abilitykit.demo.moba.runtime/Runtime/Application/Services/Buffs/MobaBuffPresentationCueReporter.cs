@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
@@ -13,6 +15,8 @@ namespace AbilityKit.Demo.Moba.Services
 
         private readonly MobaConfigDatabase _configs;
         private readonly MobaPresentationCueSnapshotService _snapshots;
+        private readonly Dictionary<int, int[]> _singleTargetArrays = new Dictionary<int, int[]>(32);
+        private readonly Dictionary<BuffPresentationInstanceKey, string> _instanceKeys = new Dictionary<BuffPresentationInstanceKey, string>(64);
 
         public MobaBuffPresentationCueReporter(MobaConfigDatabase configs, MobaPresentationCueSnapshotService snapshots)
         {
@@ -67,16 +71,17 @@ namespace AbilityKit.Demo.Moba.Services
             TraceLifecycleReason reason)
         {
             var remainingSeconds = ResolveRemainingSeconds(runtime);
+            var instanceKey = GetInstanceKey(buff.Id, targetActorId, runtime.SourceContextId);
             return new MobaPresentationCueSnapshotEntry
             {
                 Stage = (int)stage,
                 CueKind = OwnerKindBuff,
                 TemplateId = template.Id,
                 VfxId = template.AssetId,
-                RequestKey = BuildInstanceKey(buff.Id, targetActorId, runtime.SourceContextId),
+                RequestKey = instanceKey,
                 SourceActorId = sourceActorId,
                 TargetActorId = targetActorId,
-                Targets = targetActorId > 0 ? new[] { targetActorId } : null,
+                Targets = GetSingleTargetArray(targetActorId),
                 OffsetX = template.OffsetX,
                 OffsetY = template.OffsetY,
                 OffsetZ = template.OffsetZ,
@@ -88,7 +93,7 @@ namespace AbilityKit.Demo.Moba.Services
                 ColorA = template.ColorA != 0f ? template.ColorA : 1f,
                 OwnerKind = OwnerKindBuff,
                 InstanceId = runtime.SourceContextId,
-                InstanceKey = BuildInstanceKey(buff.Id, targetActorId, runtime.SourceContextId),
+                InstanceKey = instanceKey,
                 StackCount = runtime.StackCount,
                 MaxStackCount = buff.MaxStacks,
                 ElapsedSeconds = runtime.Continuous != null ? runtime.Continuous.ElapsedSeconds : 0f,
@@ -124,9 +129,61 @@ namespace AbilityKit.Demo.Moba.Services
             }
         }
 
-        private static string BuildInstanceKey(int buffId, int targetActorId, long sourceContextId)
+        private int[] GetSingleTargetArray(int targetActorId)
         {
-            return $"buff:{targetActorId}:{buffId}:{sourceContextId}";
+            if (targetActorId <= 0) return null;
+            if (_singleTargetArrays.TryGetValue(targetActorId, out var targets) && targets != null) return targets;
+
+            targets = new[] { targetActorId };
+            _singleTargetArrays[targetActorId] = targets;
+            return targets;
+        }
+
+        private string GetInstanceKey(int buffId, int targetActorId, long sourceContextId)
+        {
+            var key = new BuffPresentationInstanceKey(buffId, targetActorId, sourceContextId);
+            if (_instanceKeys.TryGetValue(key, out var value) && !string.IsNullOrEmpty(value)) return value;
+
+            value = $"buff:{targetActorId}:{buffId}:{sourceContextId}";
+            _instanceKeys[key] = value;
+            return value;
+        }
+
+        private readonly struct BuffPresentationInstanceKey : IEquatable<BuffPresentationInstanceKey>
+        {
+            private readonly int _buffId;
+            private readonly int _targetActorId;
+            private readonly long _sourceContextId;
+
+            public BuffPresentationInstanceKey(int buffId, int targetActorId, long sourceContextId)
+            {
+                _buffId = buffId;
+                _targetActorId = targetActorId;
+                _sourceContextId = sourceContextId;
+            }
+
+            public bool Equals(BuffPresentationInstanceKey other)
+            {
+                return _buffId == other._buffId
+                       && _targetActorId == other._targetActorId
+                       && _sourceContextId == other._sourceContextId;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is BuffPresentationInstanceKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = _buffId;
+                    hash = (hash * 397) ^ _targetActorId;
+                    hash = (hash * 397) ^ _sourceContextId.GetHashCode();
+                    return hash;
+                }
+            }
         }
     }
 }

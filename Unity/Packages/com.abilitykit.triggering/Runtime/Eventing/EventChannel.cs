@@ -35,6 +35,7 @@ namespace AbilityKit.Triggering.Eventing
         private List<Item> _dispatch = new List<Item>(16);
 
         public bool HasPending => _queue.Count > 0;
+        public int SubscriberCount => _handlerCount;
 
         public IDisposable Subscribe(Action<TArgs> handler)
         {

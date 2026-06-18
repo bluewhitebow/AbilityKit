@@ -8,7 +8,9 @@ namespace AbilityKit.Demo.Shooter.Runtime
         IShooterSimulationClock,
         IShooterSnapshotReadPort,
         IShooterStateHashProvider,
-        IShooterPackedSnapshotPort
+        IShooterPackedSnapshotPort,
+        IShooterPureStateSnapshotPort,
+        IShooterBotAiPort
     {
         bool TryGetPlayer(int playerId, out ShooterSveltoPlayerComponent player);
 

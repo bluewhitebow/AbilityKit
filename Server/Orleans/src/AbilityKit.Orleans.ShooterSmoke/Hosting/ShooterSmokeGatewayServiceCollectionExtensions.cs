@@ -54,7 +54,7 @@ internal static class ShooterSmokeGatewayServiceCollectionExtensions
 
         services.AddSingleton<GatewayCore.GatewayBackgroundTaskQueue>();
         services.AddHostedService(sp => sp.GetRequiredService<GatewayCore.GatewayBackgroundTaskQueue>());
-        services.AddSingleton<GatewayNetworking.IGatewayTransportEvents, GatewayCore.GatewayTransportHandler>();
+        services.AddSingleton<GatewayAbstractions.IGatewayTransportEvents, GatewayCore.GatewayTransportHandler>();
         services.AddSingleton<GatewayCore.GatewayTransportHandler>();
         services.AddSingleton<GatewayNetworking.TcpTransportServer>();
 

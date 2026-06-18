@@ -43,4 +43,39 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         bool ImportPackedSnapshotBytes(byte[] payload);
     }
+
+    public interface IShooterPureStateSnapshotPort
+    {
+        ShooterPureStateSnapshotPayload ExportPureStateSnapshot(
+            ulong worldId,
+            bool isFullBaseline = true,
+            ShooterPureStateSyncSettings? settings = null,
+            int baselineFrame = 0,
+            uint baselineHash = 0,
+            ShooterPureStateInterestScope? interestScope = null);
+    }
+
+    public readonly struct ShooterPureStateInterestScope
+    {
+        public ShooterPureStateInterestScope(int observerPlayerId, float centerX, float centerY, float radius, int maxEntities = 0)
+        {
+            ObserverPlayerId = observerPlayerId;
+            CenterX = centerX;
+            CenterY = centerY;
+            Radius = radius;
+            MaxEntities = maxEntities;
+        }
+
+        public int ObserverPlayerId { get; }
+
+        public float CenterX { get; }
+
+        public float CenterY { get; }
+
+        public float Radius { get; }
+
+        public int MaxEntities { get; }
+
+        public bool HasRadius => Radius > 0f;
+    }
 }

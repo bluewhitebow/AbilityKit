@@ -26,6 +26,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
         private ShooterSnapshotViewBatch _clientBatch;
         private ShooterSnapshotViewBatch _authorityBatch;
         private ShooterLagCompensationTelemetry? _lagCompensationTelemetry;
+        private ShooterLagCompensationEvaluation? _lagCompensationEvaluation;
         private bool _hasAuthorityBatch;
         private bool _showDivergence;
 
@@ -52,6 +53,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
         public void Render(in ShooterHostPresentationFrame frame)
         {
             _lagCompensationTelemetry = frame.LagCompensationTelemetry;
+            _lagCompensationEvaluation = frame.LagCompensationEvaluation;
             var clientBatch = frame.ClientBatch;
             ApplySnapshot(in clientBatch);
             if (frame.HasAuthorityBatch)
@@ -90,6 +92,7 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
             _clientBatch = default;
             _authorityBatch = default;
             _lagCompensationTelemetry = null;
+            _lagCompensationEvaluation = null;
             _hasAuthorityBatch = false;
             _clientProjectionSink.Clear();
             _authorityProjectionSink.Clear();
@@ -141,6 +144,9 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
 
         /// <summary>Gets the latest lag compensation telemetry cached from PlayMode frames.</summary>
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry => _lagCompensationTelemetry;
+
+        /// <summary>Gets the latest lag compensation shot evaluation cached from PlayMode frames.</summary>
+        public ShooterLagCompensationEvaluation? LagCompensationEvaluation => _lagCompensationEvaluation;
 
         private void ApplyProjectedViewState(ShooterViewEntityStore store, bool isAuthority)
         {
@@ -250,6 +256,10 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
             {
                 DrawBullet(pos, data.VelocityX, data.VelocityY, data.OwnerEntityId, data.RemainingFrames, isAuthority);
             }
+            else if (data.Kind == ShooterViewEntityKind.Enemy)
+            {
+                DrawEnemy(pos, data.VelocityX, data.VelocityY, data.Hp, data.EntityId, isAuthority);
+            }
         }
 
         private static void DrawPlayer(
@@ -319,6 +329,39 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
             {
                 HandlesColor = new Color(1f, 0.9f, 0.2f, 0.6f);
                 DrawLabel(pos + Vector3.up * 0.3f, $"B(owner:{ownerId} f:{remainingFrames})");
+            }
+
+            HandlesColor = prevColor;
+        }
+
+        private static void DrawEnemy(
+            Vector3 pos, float velX, float velY, int hp, int enemyId, bool isAuthority)
+        {
+            var prevColor = HandlesColor;
+
+            if (isAuthority)
+            {
+                HandlesColor = new Color(1f, 0.25f, 0.25f, 0.35f);
+            }
+            else
+            {
+                HandlesColor = hp > 0 ? new Color(1f, 0.15f, 0.15f, 0.85f) : new Color(0.45f, 0.2f, 0.2f, 0.4f);
+            }
+
+            DrawDiamond(pos, 0.34f);
+            HandlesColor = isAuthority ? new Color(1f, 0.5f, 0.5f, 0.55f) : Color.white;
+            DrawDiamondOutline(pos, 0.34f);
+
+            var vel = new Vector3(velX, 0f, velY);
+            if (vel.magnitude > 0.01f)
+            {
+                DrawLine(pos, pos + vel.normalized * 0.45f);
+            }
+
+            if (!isAuthority)
+            {
+                HandlesColor = new Color(1f, 0.85f, 0.85f, 0.9f);
+                DrawLabel(pos + Vector3.up * 0.65f, $"E{enemyId} HP:{hp}");
             }
 
             HandlesColor = prevColor;
@@ -420,6 +463,32 @@ namespace AbilityKit.Demo.Shooter.Editor.Sink
         private static void DrawDiscOutline(Vector3 center, float radius)
         {
             Handles.DrawWireDisc(center, Vector3.up, radius);
+        }
+
+        private static void DrawDiamond(Vector3 center, float radius)
+        {
+            var points = GetDiamondPoints(center, radius);
+            Handles.DrawAAConvexPolygon(points);
+        }
+
+        private static void DrawDiamondOutline(Vector3 center, float radius)
+        {
+            var points = GetDiamondPoints(center, radius);
+            Handles.DrawLine(points[0], points[1]);
+            Handles.DrawLine(points[1], points[2]);
+            Handles.DrawLine(points[2], points[3]);
+            Handles.DrawLine(points[3], points[0]);
+        }
+
+        private static Vector3[] GetDiamondPoints(Vector3 center, float radius)
+        {
+            return new[]
+            {
+                center + new Vector3(0f, 0f, radius),
+                center + new Vector3(radius, 0f, 0f),
+                center + new Vector3(0f, 0f, -radius),
+                center + new Vector3(-radius, 0f, 0f)
+            };
         }
 
         private static void DrawLabel(Vector3 position, string text)

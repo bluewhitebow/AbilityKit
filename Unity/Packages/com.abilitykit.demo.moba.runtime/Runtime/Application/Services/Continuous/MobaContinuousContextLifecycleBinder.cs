@@ -1,0 +1,94 @@
+using System;
+using AbilityKit.Ability.Triggering.Runtime;
+using AbilityKit.Core.Continuous;
+using AbilityKit.Core.Logging;
+using AbilityKit.Trace;
+
+namespace AbilityKit.Demo.Moba.Services
+{
+    internal sealed class MobaContinuousContextLifecycleBinder : IContinuousLifecycleBinder
+    {
+        private readonly MobaTraceRegistry _trace;
+        private readonly ITriggerActionRunner _actionRunner;
+
+        public MobaContinuousContextLifecycleBinder(MobaTraceRegistry trace, ITriggerActionRunner actionRunner)
+        {
+            _trace = trace;
+            _actionRunner = actionRunner;
+        }
+
+        public void OnRegistered(IContinuous continuous, IContinuousManager manager)
+        {
+        }
+
+        public void OnActivated(IContinuous continuous, IContinuousManager manager)
+        {
+            if (continuous is not IMobaContinuousExecutionContextProvider provider) return;
+            if (provider.TryGetCombatExecutionContext(out var context) && context.HasExecutionSource) return;
+
+            Log.Warning($"[MobaContinuousContextLifecycle] continuous activated without execution context. type={continuous.GetType().FullName}");
+        }
+
+        public void OnPaused(IContinuous continuous, IContinuousManager manager)
+        {
+        }
+
+        public void OnResumed(IContinuous continuous, IContinuousManager manager)
+        {
+        }
+
+        public void OnEnded(IContinuous continuous, ContinuousEndReason reason, IContinuousManager manager)
+        {
+            EndExecutionContext(continuous, reason);
+        }
+
+        public void OnUnregistered(IContinuous continuous, ContinuousEndReason reason, IContinuousManager manager)
+        {
+        }
+
+        private void EndExecutionContext(IContinuous continuous, ContinuousEndReason reason)
+        {
+            if (continuous is not IMobaContinuousExecutionContextProvider provider) return;
+            if (!provider.TryGetCombatExecutionContext(out var context) || !context.HasExecutionSource) return;
+
+            var ownerKey = context.OwnerContextId != 0 ? context.OwnerContextId : context.ParentContextId;
+            if (ownerKey != 0)
+            {
+                try
+                {
+                    _actionRunner?.CancelByOwnerKey(ownerKey);
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex, $"[MobaContinuousContextLifecycle] CancelByOwnerKey exception (ownerKey={ownerKey})");
+                }
+            }
+
+            var contextId = context.ParentContextId;
+            if (contextId == 0) return;
+
+            try
+            {
+                _trace?.EndContext(contextId, ToTraceReason(reason));
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex, $"[MobaContinuousContextLifecycle] Trace.End exception (contextId={contextId}, reason={reason})");
+            }
+        }
+
+        private static TraceLifecycleReason ToTraceReason(ContinuousEndReason reason)
+        {
+            switch (reason)
+            {
+                case ContinuousEndReason.Completed:
+                    return TraceLifecycleReason.Completed;
+                case ContinuousEndReason.Interrupted:
+                    return TraceLifecycleReason.Interrupted;
+                case ContinuousEndReason.CleanedUp:
+                default:
+                    return TraceLifecycleReason.Expired;
+            }
+        }
+    }
+}

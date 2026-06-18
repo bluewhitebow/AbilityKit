@@ -14,6 +14,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
     [WorldService(typeof(IShooterSnapshotReadPort), WorldLifetime.Singleton)]
     [WorldService(typeof(IShooterStateHashProvider), WorldLifetime.Singleton)]
     [WorldService(typeof(IShooterPackedSnapshotPort), WorldLifetime.Singleton)]
+    [WorldService(typeof(IShooterPureStateSnapshotPort), WorldLifetime.Singleton)]
     public sealed class ShooterBattleRuntimePort : IShooterBattleRuntimePort
     {
         private readonly ShooterBattleState _state;
@@ -25,6 +26,10 @@ namespace AbilityKit.Demo.Shooter.Runtime
         private readonly ShooterPackedSnapshotExporter _packedSnapshotExporter;
         private readonly ShooterPackedSnapshotImporter _packedSnapshotImporter;
         private readonly ShooterPackedSnapshotBytesCodec _bytesCodec;
+        private readonly ShooterPureStateSnapshotExporter _pureStateSnapshotExporter;
+        private readonly ShooterBotAiSystem _botAiSystem;
+        private readonly ShooterBattleServiceContext _services;
+        private readonly ShooterBattleSveltoStepEngine _battleStepEngine;
 
         public ShooterBattleRuntimePort()
             : this(ShooterEntityLimitOptions.Default)
@@ -67,6 +72,17 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _packedSnapshotExporter = new ShooterPackedSnapshotExporter(_state, _entities, _rules, this);
             _packedSnapshotImporter = new ShooterPackedSnapshotImporter(_state, _entities);
             _bytesCodec = new ShooterPackedSnapshotBytesCodec();
+            _pureStateSnapshotExporter = new ShooterPureStateSnapshotExporter(_state, this, this);
+            _botAiSystem = new ShooterBotAiSystem(_state, _entities);
+            _services = CreateServiceContext();
+            _battleStepEngine = new ShooterBattleSveltoStepEngine(new IShooterBattleSystem[]
+            {
+                new ShooterFrameBeginBattleSystem(_services),
+                new ShooterPlayerBotAiBattleSystem(_services),
+                new ShooterSimulationBattleSystem(_services),
+                new ShooterEnemyWaveBattleSystem(_services)
+            });
+            _services.EnginesRoot.AddEngine(_battleStepEngine);
         }
 
         public bool IsStarted => _state.IsStarted;
@@ -78,6 +94,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
         public bool StartGame(in ShooterStartGamePayload spec)
         {
             _state.Reset(in spec);
+            _botAiSystem.ClearBotAi();
 
             var players = spec.Players ?? Array.Empty<ShooterStartPlayer>();
             for (int i = 0; i < players.Length; i++)
@@ -130,10 +147,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 return false;
             }
 
-            _state.CurrentFrame++;
-            _state.Events.Clear();
-
-            _simulation.Tick(deltaTime);
+            _battleStepEngine.Step(in deltaTime);
             return true;
         }
 
@@ -157,6 +171,17 @@ namespace AbilityKit.Demo.Shooter.Runtime
             return _packedSnapshotImporter.Import(in snapshot);
         }
 
+        public ShooterPureStateSnapshotPayload ExportPureStateSnapshot(
+            ulong worldId,
+            bool isFullBaseline = true,
+            ShooterPureStateSyncSettings? settings = null,
+            int baselineFrame = 0,
+            uint baselineHash = 0,
+            ShooterPureStateInterestScope? interestScope = null)
+        {
+            return _pureStateSnapshotExporter.Export(worldId, isFullBaseline, settings, baselineFrame, baselineHash, interestScope);
+        }
+
         public bool TryGetPlayer(int playerId, out ShooterSveltoPlayerComponent player)
         {
             return _entities.TryGetPlayer(playerId, out player);
@@ -167,6 +192,23 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _entities.SetPlayer(in player);
         }
 
+        public int BotAiCount => _botAiSystem.BotAiCount;
+
+        public bool MountBotAi(in ShooterBotAiMountOptions options)
+        {
+            return _botAiSystem.MountBotAi(in options);
+        }
+
+        public bool UnmountBotAi(int playerId)
+        {
+            return _botAiSystem.UnmountBotAi(playerId);
+        }
+
+        public void ClearBotAi()
+        {
+            _botAiSystem.ClearBotAi();
+        }
+
         public byte[] ExportPackedSnapshotBytes(ulong worldId, bool isFullSnapshot = true, bool authorityOverride = false)
         {
             return _bytesCodec.Export(this, worldId, isFullSnapshot, authorityOverride);
@@ -175,6 +217,26 @@ namespace AbilityKit.Demo.Shooter.Runtime
         public bool ImportPackedSnapshotBytes(byte[] payload)
         {
             return _bytesCodec.Import(this, payload);
+        }
+
+        private ShooterBattleServiceContext CreateServiceContext()
+        {
+            return new ShooterBattleServiceContext(_entities.SveltoContext)
+                .Add(_state)
+                .Add(_entities)
+                .Add(_rules)
+                .Add(_simulation)
+                .Add(_botAiSystem)
+                .Add<IShooterSveltoWorld>(new ShooterSveltoWorld(_entities.SveltoContext))
+                .Add<IShooterBotAiPort>(_botAiSystem)
+                .Add<IShooterBattleRuntimePort>(this)
+                .Add<IShooterGameStartPort>(this)
+                .Add<IShooterInputPort>(this)
+                .Add<IShooterSimulationClock>(this)
+                .Add<IShooterSnapshotReadPort>(this)
+                .Add<IShooterStateHashProvider>(this)
+                .Add<IShooterPackedSnapshotPort>(this)
+                .Add<IShooterPureStateSnapshotPort>(this);
         }
 
         private static IShooterEntityManager CreateDefaultEntityManager(ShooterEntityLimitOptions entityLimits)

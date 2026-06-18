@@ -89,7 +89,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
     {
     }
 
-    public sealed class ShooterSveltoGameplayShooterDescriptor : GenericEntityDescriptor<ShooterSveltoTransformComponent, ShooterSveltoWeaponComponent, ShooterSveltoCooldownComponent, ShooterSveltoTargetComponent>
+    public sealed class ShooterSveltoGameplayShooterDescriptor : GenericEntityDescriptor<ShooterSveltoTransformComponent, ShooterSveltoHealthComponent, ShooterSveltoWeaponComponent, ShooterSveltoCooldownComponent, ShooterSveltoTargetComponent>
     {
     }
 

@@ -44,6 +44,12 @@ namespace AbilityKit.Demo.Shooter.View
 
         public ShooterSnapshotApplyResult ApplyGatewaySnapshot(in ShooterGatewaySnapshot snapshot)
         {
+            if (snapshot.PureStateSnapshot.HasValue)
+            {
+                var pureStateResult = _presentation.ApplyPureStateGatewaySnapshot(in snapshot);
+                return ToSnapshotApplyResult(pureStateResult);
+            }
+
             var snapshotFrame = snapshot.PackedSnapshot.HasValue
                 ? snapshot.PackedSnapshot.Value.Frame
                 : snapshot.Frame;
@@ -53,9 +59,8 @@ namespace AbilityKit.Demo.Shooter.View
                 return ShooterSnapshotApplyResult.IgnoredStaleSnapshot;
             }
 
-            // Authoritative snapshots should not overwrite the locally predicted actor when the
-            // prediction path is already healthy; the runtime publish that follows reconciliation
-            // will refresh the local actor from the corrected simulation state.
+            // 当预测路径已经健康时，权威快照不应覆盖本地预测 actor；
+            // 校正后的运行时发布会从修正后的模拟状态刷新本地 actor。
             if (!snapshot.PackedSnapshot.HasValue)
             {
                 _presentation.ApplyInterpolatedGatewaySnapshot(in snapshot);
@@ -79,6 +84,23 @@ namespace AbilityKit.Demo.Shooter.View
             _presentation.ApplyInterpolatedGatewaySnapshot(in snapshot);
             return ShooterSnapshotApplyResult.AppliedPackedSnapshot;
         }
+
+        internal static ShooterSnapshotApplyResult ToSnapshotApplyResult(ShooterPureStateSnapshotApplyResult result)
+        {
+            switch (result)
+            {
+                case ShooterPureStateSnapshotApplyResult.AppliedFullBaseline:
+                case ShooterPureStateSnapshotApplyResult.AppliedDelta:
+                    return ShooterSnapshotApplyResult.AppliedActorSnapshot;
+                case ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot:
+                    return ShooterSnapshotApplyResult.IgnoredStaleSnapshot;
+                case ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync:
+                    return ShooterSnapshotApplyResult.PureStateBaselineResyncNeeded;
+                case ShooterPureStateSnapshotApplyResult.Ignored:
+                default:
+                    return ShooterSnapshotApplyResult.Ignored;
+            }
+        }
     }
 
     public enum ShooterSnapshotApplyResult
@@ -87,6 +109,7 @@ namespace AbilityKit.Demo.Shooter.View
         AppliedActorSnapshot = 1,
         AppliedPackedSnapshot = 2,
         ImportFailed = 3,
-        IgnoredStaleSnapshot = 4
+        IgnoredStaleSnapshot = 4,
+        PureStateBaselineResyncNeeded = 5
     }
 }

@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
 using AbilityKit.Core.Logging;
+using AbilityKit.Demo.Moba.Components;
+using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
+using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Trace;
 
 namespace AbilityKit.Demo.Moba.Services
@@ -17,17 +21,21 @@ namespace AbilityKit.Demo.Moba.Services
             Remove = 1,
         }
 
-        private sealed class BuffCommand
+        private struct BuffCommand
         {
             public long Seq;
             public BuffCommandKind Kind;
             public BuffApplyRequest ApplyRequest;
             public BuffRemoveRequest RemoveRequest;
 
-            public int BuffId => ApplyRequest != null ? ApplyRequest.BuffId : RemoveRequest != null ? RemoveRequest.BuffId : 0;
+            public int BuffId => Kind == BuffCommandKind.Apply ? ApplyRequest.BuffId : RemoveRequest.BuffId;
+            public int TargetActorId => Kind == BuffCommandKind.Apply ? ApplyRequest.TargetActorId : RemoveRequest.TargetActorId;
         }
 
         [WorldInject] private MobaActorLookupService _actors = null;
+        [WorldInject(required: false)] private MobaConfigDatabase _configs = null;
+        [WorldInject(required: false)] private IMobaEffectiveTagQueryService _tags = null;
+        [WorldInject(required: false)] private IMobaContinuousTagTemplateRegistry _tagTemplates = null;
         [WorldInject(required: false)] private IMobaBattleDiagnosticsService _diagnostics = null;
         [WorldInject(required: false)] private IMobaBattleExceptionPolicy _exceptions = null;
         private BuffLifecycleExecutor _lifecycle;
@@ -62,7 +70,19 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool ApplyBuffImmediate(int targetActorId, int buffId, int sourceActorId, int durationOverrideMs, in BuffOriginContext origin)
         {
-            if (!EnqueueApply(targetActorId, buffId, sourceActorId, durationOverrideMs, origin))
+            if (!EnqueueApply(targetActorId, buffId, sourceActorId, durationOverrideMs, origin, sourceContextId: 0L, forceNewInstance: false))
+            {
+                return false;
+            }
+
+            DrainPending(maxCommands: 256);
+            return true;
+        }
+
+        public bool ApplyBuffInstanceImmediate(int targetActorId, int buffId, int sourceActorId, int durationOverrideMs, long sourceContextId, in BuffOriginContext origin)
+        {
+            if (sourceContextId == 0L) return false;
+            if (!EnqueueApply(targetActorId, buffId, sourceActorId, durationOverrideMs, origin, sourceContextId, forceNewInstance: true))
             {
                 return false;
             }
@@ -79,7 +99,19 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool RemoveBuffImmediate(int targetActorId, int buffId, int sourceActorId, TraceLifecycleReason reason)
         {
-            if (!EnqueueRemove(targetActorId, buffId, sourceActorId, reason))
+            if (!EnqueueRemove(targetActorId, buffId, sourceActorId, sourceContextId: 0L, reason: reason))
+            {
+                return false;
+            }
+
+            DrainPending(maxCommands: 256);
+            return true;
+        }
+
+        public bool RemoveBuffInstanceImmediate(int targetActorId, int buffId, int sourceActorId, long sourceContextId, TraceLifecycleReason reason)
+        {
+            if (sourceContextId == 0L) return false;
+            if (!EnqueueRemove(targetActorId, buffId, sourceActorId, sourceContextId, reason))
             {
                 return false;
             }
@@ -108,7 +140,7 @@ namespace AbilityKit.Demo.Moba.Services
                 if (sourceActorId > 0 && runtime.SourceId != sourceActorId) continue;
 
                 var removeSourceId = sourceActorId > 0 ? sourceActorId : runtime.SourceId;
-                if (!EnqueueRemove(targetActorId, runtime.BuffId, removeSourceId, reason)) continue;
+                if (!EnqueueRemove(targetActorId, runtime.BuffId, removeSourceId, runtime.SourceContextId, reason)) continue;
 
                 queued++;
                 if (!removeAll) break;
@@ -120,6 +152,69 @@ namespace AbilityKit.Demo.Moba.Services
             }
 
             return queued;
+        }
+
+        public void ReconcileActorBuffLifecycles(global::ActorEntity target)
+        {
+            if (target == null || !target.hasActorId || !target.hasBuffs) return;
+
+            var list = target.buffs.Active;
+            if (list == null || list.Count == 0) return;
+
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                var runtime = list[i];
+                if (runtime == null)
+                {
+                    list.RemoveAt(i);
+                    BuffRepository.MarkDirty(list);
+                    continue;
+                }
+
+                var endedByTags = ShouldEndByTags(target.actorId.Value, runtime);
+                if (endedByTags)
+                {
+                    runtime.Remaining = 0f;
+                }
+                else
+                {
+                    SyncFromContinuous(runtime);
+                }
+
+                if (!ShouldEndRuntime(runtime, endedByTags)) continue;
+
+                var reason = endedByTags ? TraceLifecycleReason.Interrupted : TraceLifecycleReason.Expired;
+                _lifecycle?.EndRuntime(target, list, i, runtime, runtime.SourceId, reason);
+            }
+        }
+
+        private bool ShouldEndByTags(int targetActorId, BuffRuntime runtime)
+        {
+            if (runtime == null || _configs == null) return false;
+            if (!_configs.TryGetBuff(runtime.BuffId, out BuffMO buff) || buff == null) return false;
+
+            if (runtime.TagRequirements == null)
+            {
+                runtime.TagRequirements = BuffTagLifecycle.ResolveRequirements(buff, _tagTemplates);
+            }
+
+            return BuffTagLifecycle.ShouldEnd(_tags, targetActorId, runtime.TagRequirements);
+        }
+
+        private static void SyncFromContinuous(BuffRuntime runtime)
+        {
+            if (runtime == null || runtime.Continuous == null) return;
+
+            runtime.Remaining = runtime.Continuous.RemainingSeconds;
+            runtime.IntervalRemainingSeconds = runtime.Continuous.IntervalRemainingSeconds;
+        }
+
+        private static bool ShouldEndRuntime(BuffRuntime runtime, bool endedByTags)
+        {
+            if (runtime == null) return false;
+            if (endedByTags) return true;
+            if (runtime.Continuous != null) return runtime.Continuous.IsTerminated;
+            return runtime.Remaining <= 0f;
         }
 
         public void DrainPending(int maxCommands)
@@ -156,7 +251,6 @@ namespace AbilityKit.Demo.Moba.Services
                     }
 
                     var cmd = _pending[cursor++];
-                    if (cmd == null) continue;
 
                     try
                     {
@@ -180,7 +274,7 @@ namespace AbilityKit.Demo.Moba.Services
                                 new MobaBattleExceptionContext(
                                     MobaBattleExceptionDomain.Buff,
                                     "command.execute",
-                                    actorId: cmd.ApplyRequest != null ? cmd.ApplyRequest.TargetActorId : cmd.RemoveRequest != null ? cmd.RemoveRequest.TargetActorId : 0,
+                                    actorId: cmd.TargetActorId,
                                     detail: $"kind={cmd.Kind} buffId={cmd.BuffId}"),
                                 MobaBattleExceptionSeverity.Recoverable);
                         }
@@ -217,103 +311,105 @@ namespace AbilityKit.Demo.Moba.Services
                     diagnostics.RecordDuration(
                         MobaBattleDiagnosticMetric.BuffDrain,
                         start,
-                        MobaBattleDiagnosticsDefaults.BuffDrainWarnMs,
-                        $"pending={pendingAtStart} executed={executed} remaining={_pending.Count}");
+                        MobaBattleDiagnosticsDefaults.BuffDrainWarnMs);
                 }
             }
         }
 
-        private bool EnqueueApply(int targetActorId, int buffId, int sourceActorId, int durationOverrideMs, in BuffOriginContext origin)
+        private bool EnqueueApply(int targetActorId, int buffId, int sourceActorId, int durationOverrideMs, in BuffOriginContext origin, long sourceContextId, bool forceNewInstance)
         {
             if (targetActorId <= 0) return false;
             if (buffId <= 0) return false;
-
-            var request = BuffApplyRequestBuilder.Create()
-                .WithTarget(targetActorId)
-                .WithBuff(buffId)
-                .WithSource(sourceActorId)
-                .WithDurationOverride(durationOverrideMs)
-                .WithOrigin(in origin)
-                .Build();
 
             _pending.Add(new BuffCommand
             {
                 Seq = ++_nextCommandSeq,
                 Kind = BuffCommandKind.Apply,
-                ApplyRequest = request,
+                ApplyRequest = new BuffApplyRequest
+                {
+                    TargetActorId = targetActorId,
+                    BuffId = buffId,
+                    SourceActorId = sourceActorId,
+                    DurationOverrideMs = durationOverrideMs,
+                    SourceContextId = sourceContextId,
+                    ForceNewInstance = forceNewInstance,
+                    Origin = origin,
+                },
             });
             return true;
         }
 
-        private bool EnqueueRemove(int targetActorId, int buffId, int sourceActorId, TraceLifecycleReason reason)
+        private bool EnqueueRemove(int targetActorId, int buffId, int sourceActorId, long sourceContextId, TraceLifecycleReason reason)
         {
             if (targetActorId <= 0) return false;
             if (buffId <= 0) return false;
-
-            var request = BuffRemoveRequestBuilder.Create()
-                .WithTarget(targetActorId)
-                .WithBuff(buffId)
-                .WithSource(sourceActorId)
-                .WithReason(reason)
-                .Build();
 
             _pending.Add(new BuffCommand
             {
                 Seq = ++_nextCommandSeq,
                 Kind = BuffCommandKind.Remove,
-                RemoveRequest = request,
+                RemoveRequest = new BuffRemoveRequest
+                {
+                    TargetActorId = targetActorId,
+                    BuffId = buffId,
+                    SourceActorId = sourceActorId,
+                    SourceContextId = sourceContextId,
+                    Reason = reason,
+                },
             });
             return true;
         }
 
-        private bool ExecuteApply(BuffApplyRequest request)
+        private bool ExecuteApply(in BuffApplyRequest request)
         {
-            if (request == null || !request.IsValid)
+            if (!request.IsValid)
             {
-                ReportRejected("buff.apply.invalidRequest", "Apply buff request rejected: request is null or invalid.", request?.TargetActorId ?? 0, request?.BuffId ?? 0, request?.SourceActorId ?? 0);
+                ReportRejected("buff.apply.invalidRequest", () => "Apply buff request rejected: request is invalid.", request.TargetActorId, request.BuffId, request.SourceActorId);
                 return false;
             }
 
-            var target = TryGetActorEntity(request.TargetActorId);
-            if (target != null && target.hasApplyBuffRequest && target.applyBuffRequest != null && target.applyBuffRequest.BuffId == request.BuffId)
-            {
-                target.RemoveApplyBuffRequest();
-            }
-
-            var ok = _lifecycle != null && _lifecycle.Apply(request);
+            var ok = _lifecycle != null && _lifecycle.Apply(in request);
             if (!ok)
             {
                 var reject = _lifecycle != null ? _lifecycle.LastReject : BuffLifecycleRejectResult.None;
                 var rejectCode = FormatRejectCode(reject.Code);
-                ReportRejected(rejectCode, $"Apply buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} durationOverrideMs={request.DurationOverrideMs} hasLifecycle={_lifecycle != null} rejectCode={rejectCode} reason={FormatRejectReason(reject.Message)}", request.TargetActorId, request.BuffId, request.SourceActorId);
+                var hasLifecycle = _lifecycle != null;
+                var requestSnapshot = request;
+                ReportRejected(rejectCode, () => FormatApplyRejectedMessage(requestSnapshot, hasLifecycle, rejectCode, reject.Message), request.TargetActorId, request.BuffId, request.SourceActorId);
             }
 
             return ok;
         }
 
-        private bool ExecuteRemove(BuffRemoveRequest request)
+        private bool ExecuteRemove(in BuffRemoveRequest request)
         {
-            if (request == null || !request.IsValid)
+            if (!request.IsValid)
             {
-                ReportRejected("buff.remove.invalidRequest", "Remove buff request rejected: request is null or invalid.", request?.TargetActorId ?? 0, request?.BuffId ?? 0, request?.SourceActorId ?? 0);
+                ReportRejected("buff.remove.invalidRequest", () => "Remove buff request rejected: request is invalid.", request.TargetActorId, request.BuffId, request.SourceActorId);
                 return false;
             }
 
-            var target = TryGetActorEntity(request.TargetActorId);
-            if (target != null && target.hasApplyBuffRequest && target.applyBuffRequest != null && target.applyBuffRequest.BuffId == request.BuffId)
-            {
-                target.RemoveApplyBuffRequest();
-            }
-
-            var ok = _lifecycle != null && _lifecycle.Remove(request);
+            var ok = _lifecycle != null && _lifecycle.Remove(in request);
             if (!ok)
             {
                 var reject = _lifecycle != null ? _lifecycle.LastReject : BuffLifecycleRejectResult.None;
                 var rejectCode = FormatRejectCode(reject.Code);
-                ReportRejected(rejectCode, $"Remove buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} reason={request.Reason} hasLifecycle={_lifecycle != null} rejectCode={rejectCode} lifecycleReason={FormatRejectReason(reject.Message)}", request.TargetActorId, request.BuffId, request.SourceActorId);
+                var hasLifecycle = _lifecycle != null;
+                var requestSnapshot = request;
+                ReportRejected(rejectCode, () => FormatRemoveRejectedMessage(requestSnapshot, hasLifecycle, rejectCode, reject.Message), request.TargetActorId, request.BuffId, request.SourceActorId);
             }
 
             return ok;
+        }
+
+        private static string FormatApplyRejectedMessage(BuffApplyRequest request, bool hasLifecycle, string rejectCode, string rejectReason)
+        {
+            return $"Apply buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} sourceContextId={request.SourceContextId} forceNewInstance={request.ForceNewInstance} durationOverrideMs={request.DurationOverrideMs} hasLifecycle={hasLifecycle} rejectCode={rejectCode} reason={FormatRejectReason(rejectReason)}";
+        }
+
+        private static string FormatRemoveRejectedMessage(BuffRemoveRequest request, bool hasLifecycle, string rejectCode, string rejectReason)
+        {
+            return $"Remove buff rejected by lifecycle. target={request.TargetActorId} buffId={request.BuffId} source={request.SourceActorId} sourceContextId={request.SourceContextId} reason={request.Reason} hasLifecycle={hasLifecycle} rejectCode={rejectCode} lifecycleReason={FormatRejectReason(rejectReason)}";
         }
 
         private static string FormatRejectReason(string reason)
@@ -326,16 +422,17 @@ namespace AbilityKit.Demo.Moba.Services
             return string.IsNullOrEmpty(code) ? "buff.lifecycle.rejected" : code;
         }
 
-        private void ReportRejected(string key, string message, int targetActorId, int buffId, int sourceActorId)
+        private void ReportRejected(string key, Func<string> messageFactory, int targetActorId, int buffId, int sourceActorId)
         {
             var diagnostics = _diagnostics;
             if (diagnostics != null)
             {
-                diagnostics.Warning(key, message);
+                diagnostics.Warning(key, messageFactory);
                 diagnostics.Counter("moba.buff.command.rejected");
                 return;
             }
 
+            var message = messageFactory != null ? messageFactory() : key;
             Log.Warning($"[MobaBuffService] {message} target={targetActorId} buffId={buffId} source={sourceActorId}");
         }
 

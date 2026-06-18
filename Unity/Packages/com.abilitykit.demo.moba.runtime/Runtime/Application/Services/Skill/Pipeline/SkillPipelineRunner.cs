@@ -846,8 +846,7 @@ namespace AbilityKit.Demo.Moba.Services
                 diagnostics.RecordDuration(
                     MobaBattleDiagnosticMetric.SkillRunnerStep,
                     start,
-                    MobaBattleDiagnosticsDefaults.SkillRunnerStepWarnMs,
-                    $"actor={_actorId} running={runningAtStart} ticked={ticked} ended={ended} remaining={_running.Count}");
+                    MobaBattleDiagnosticsDefaults.SkillRunnerStepWarnMs);
             }
         }
 

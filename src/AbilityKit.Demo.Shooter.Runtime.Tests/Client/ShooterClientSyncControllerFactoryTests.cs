@@ -1,6 +1,7 @@
 using AbilityKit.Demo.Shooter.Runtime;
 using AbilityKit.Demo.Shooter.View;
 using AbilityKit.Network.Runtime;
+using AbilityKit.Network.Runtime.Sync;
 using Xunit;
 
 namespace AbilityKit.Demo.Shooter.Runtime.Tests;
@@ -41,6 +42,21 @@ public sealed class ShooterClientSyncControllerFactoryTests
     }
 
     [Fact]
+    public void DefaultRegistryCreatesControllerFromSyncProfile()
+    {
+        var controller = ShooterClientSyncControllerFactory.Create(
+            NetworkSyncProfiles.HybridHeroPrediction,
+            new ShooterBattleRuntimePort(),
+            new ShooterPresentationFacade(),
+            tickRate: 30,
+            decoder: null,
+            gateway: null);
+
+        Assert.IsType<ShooterClientHybridHeroPredictionSyncController>(controller);
+        Assert.Equal(NetworkSyncModel.HybridHeroPrediction, controller.SyncModel);
+    }
+
+    [Fact]
     public void DefaultRegistryCreatesAuthoritativeInterpolationController()
     {
         var config = new InterpolationConfig(
@@ -74,17 +90,21 @@ public sealed class ShooterClientSyncControllerFactoryTests
             gateway: null));
     }
 
-    [Fact]
-    public void RegisterOverridesModelBuilderUntilReset()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RegisterOverridesProfileBuilderUntilReset(bool useLegacyModelRegistration)
     {
         try
         {
             var builderCalled = false;
-            ShooterClientSyncControllerFactory.Register(
-                NetworkSyncModel.Lockstep,
+            var lockstepProfile = NetworkSyncProfiles.Lockstep;
+            ShooterClientSyncControllerFactory.ShooterClientSyncControllerBuilder builder =
                 (in ShooterClientSyncControllerFactoryContext context) =>
                 {
                     builderCalled = true;
+                    Assert.Equal(lockstepProfile, context.SyncProfile);
+                    Assert.Equal(NetworkSyncModel.Lockstep, context.SyncModel);
                     Assert.Equal(45, context.TickRate);
                     Assert.NotNull(context.Runtime);
                     Assert.NotNull(context.Presentation);
@@ -94,10 +114,19 @@ public sealed class ShooterClientSyncControllerFactoryTests
                         context.TickRate,
                         context.Decoder,
                         context.Gateway);
-                });
+                };
+
+            if (useLegacyModelRegistration)
+            {
+                ShooterClientSyncControllerFactory.Register(NetworkSyncModel.Lockstep, builder);
+            }
+            else
+            {
+                ShooterClientSyncControllerFactory.Register(lockstepProfile, builder);
+            }
 
             var controller = ShooterClientSyncControllerFactory.Create(
-                NetworkSyncModel.Lockstep,
+                lockstepProfile,
                 new ShooterBattleRuntimePort(),
                 new ShooterPresentationFacade(),
                 tickRate: 45,
@@ -113,7 +142,7 @@ public sealed class ShooterClientSyncControllerFactoryTests
         }
 
         Assert.Throws<System.NotSupportedException>(() => ShooterClientSyncControllerFactory.Create(
-            NetworkSyncModel.Lockstep,
+            NetworkSyncProfiles.Lockstep,
             new ShooterBattleRuntimePort(),
             new ShooterPresentationFacade(),
             tickRate: 30,
