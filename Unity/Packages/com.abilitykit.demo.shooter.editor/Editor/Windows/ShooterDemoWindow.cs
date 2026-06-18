@@ -987,6 +987,8 @@ namespace AbilityKit.Demo.Shooter.Editor.Windows
                     default,
                     null,
                     null,
+                    default,
+                    default,
                     false,
                     ShooterPureStateResyncReason.None,
                     0,

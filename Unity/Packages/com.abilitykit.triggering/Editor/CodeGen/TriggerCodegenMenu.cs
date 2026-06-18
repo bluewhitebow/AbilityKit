@@ -51,6 +51,11 @@ namespace AbilityKit.Triggering.Editor.CodeGen
                     .Where(x => !string.IsNullOrEmpty(x.Name))
                     .ToList();
 
+                ValidateUniqueNames("action", actions);
+                ValidateUniqueNames("function", functions);
+                ValidateUniqueNames("field", fields);
+                ValidateUniqueNames("condition", conditions);
+
                 var code = Emit(actions, functions, fields, conditions);
 
                 var full = Path.GetFullPath(OutputPath);
@@ -58,10 +63,11 @@ namespace AbilityKit.Triggering.Editor.CodeGen
                 File.WriteAllText(full, code);
 
                 AssetDatabase.Refresh();
-                Debug.Log($"[TriggerCodegen] Generated: {full}\nActions={actions.Count}, Functions={functions.Count}, Fields={fields.Count}, Conditions={conditions.Count}");
+                Debug.Log($"[TriggerCodegen] Generated: {full}\nActions={actions.Count}, Functions={functions.Count}, Fields={fields.Count}, Conditions={conditions.Count}\nMenuPath=AbilityKit/Triggering/Codegen/Generate Ids");
             }
             catch (Exception e)
             {
+                Debug.LogError($"[TriggerCodegen] Generate Ids failed: {e.Message}");
                 Debug.LogException(e);
                 throw;
             }
@@ -371,9 +377,9 @@ namespace AbilityKit.Triggering.Editor.CodeGen
             code += "            {" + nl;
             for (int i = 0; i < actions.Count; i++)
             {
-                var name = actions[i].Name;
-                var idv = StableStringId.Get("action:" + name);
-                code += $"                case {idv}: parameters = Params_Action_{ToIdent(name)}; return true;" + nl;
+                var item = actions[i];
+                var id = StableStringId.Get("action:" + item.Name);
+                code += $"                case {id}: parameters = {ToIdent(item.Name)}_Params; return true;" + nl;
             }
             code += "                default: parameters = null; return false;" + nl;
             code += "            }" + nl;
@@ -386,9 +392,9 @@ namespace AbilityKit.Triggering.Editor.CodeGen
             code += "            {" + nl;
             for (int i = 0; i < functions.Count; i++)
             {
-                var name = functions[i].Name;
-                var idv = StableStringId.Get("func:" + name);
-                code += $"                case {idv}: parameters = Params_Function_{ToIdent(name)}; return true;" + nl;
+                var item = functions[i];
+                var id = StableStringId.Get("func:" + item.Name);
+                code += $"                case {id}: parameters = {ToIdent(item.Name)}_Params; return true;" + nl;
             }
             code += "                default: parameters = null; return false;" + nl;
             code += "            }" + nl;
@@ -397,60 +403,76 @@ namespace AbilityKit.Triggering.Editor.CodeGen
             code += nl;
             code += "        public static bool TryGetConditionParams(string type, out TriggerParamDesc[] parameters)" + nl;
             code += "        {" + nl;
-            code += "            if (type == null) { parameters = null; return false; }" + nl;
+            code += "            switch (type)" + nl;
+            code += "            {" + nl;
             for (int i = 0; i < conditions.Count; i++)
             {
-                var type = conditions[i].Name;
-                code += $"            if (string.Equals(type, \"{type}\", StringComparison.Ordinal)) {{ parameters = Params_Condition_{ToIdent(type)}; return true; }}" + nl;
+                var item = conditions[i];
+                code += $"                case \"{item.Name}\": parameters = {ToIdent(item.Name)}_Params; return true;" + nl;
             }
-            code += "            parameters = null; return false;" + nl;
+            code += "                default: parameters = null; return false;" + nl;
+            code += "            }" + nl;
             code += "        }" + nl;
-
             code += "    }" + nl;
-
             code += "}" + nl;
             return code;
         }
 
+        private static void ValidateUniqueNames(string category, IReadOnlyList<Item> items)
+        {
+            var seen = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (seen.TryGetValue(item.Name, out var existing))
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate TriggerCodegen {category} name '{item.Name}'. Existing={FormatMember(existing)}, Duplicate={FormatMember(item.Member)}");
+                }
+
+                seen.Add(item.Name, item.Member);
+            }
+        }
+
         private static void EmitParamArray(ref string code, string nl, string kind, Item item)
         {
-            var name = item.Name;
-            var ident = ToIdent(name);
-            var ps = item.Params;
-            if (ps == null || ps.Length == 0)
-            {
-                code += $"        private static readonly TriggerParamDesc[] Params_{kind}_{ident} = new TriggerParamDesc[0];" + nl;
-                return;
-            }
-
-            ps = ps.OrderBy(p => p.Index).ToArray();
-
-            code += $"        private static readonly TriggerParamDesc[] Params_{kind}_{ident} = new TriggerParamDesc[]" + nl;
+            var ident = ToIdent(item.Name);
+            code += $"        public static readonly TriggerParamDesc[] {ident}_Params = new TriggerParamDesc[]" + nl;
             code += "        {" + nl;
-            for (int i = 0; i < ps.Length; i++)
+            for (int i = 0; i < item.Params.Length; i++)
             {
-                var p = ps[i];
-                code += $"            new TriggerParamDesc({p.Index}, \"{p.Name}\", ETriggerParamType.{p.Type}, (ETriggerParamSource){(int)p.AllowedSources})," + nl;
+                var p = item.Params[i];
+                code += $"            new TriggerParamDesc(\"{p.Name}\", \"{p.Name}\", \"{kind}\")," + nl;
             }
             code += "        };" + nl;
+            code += nl;
+        }
+
+        private static string FormatMember(MemberInfo member)
+        {
+            return member == null ? "<unknown>" : $"{member.DeclaringType?.FullName}.{member.Name}";
         }
 
         private static string ToIdent(string name)
         {
-            if (string.IsNullOrEmpty(name)) return "_";
-
-            // Very small sanitizer: keep letters/digits/underscore, replace others with underscore.
-            var chars = name.ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
+            if (string.IsNullOrEmpty(name))
             {
-                var c = chars[i];
-                var ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
-                if (!ok) chars[i] = '_';
+                return "Unnamed";
             }
 
-            var s = new string(chars);
-            if (s.Length > 0 && (s[0] >= '0' && s[0] <= '9')) s = "_" + s;
-            return s;
+            var chars = new char[name.Length];
+            for (int i = 0; i < name.Length; i++)
+            {
+                var c = name[i];
+                chars[i] = char.IsLetterOrDigit(c) ? c : '_';
+            }
+
+            if (char.IsDigit(chars[0]))
+            {
+                return "_" + new string(chars);
+            }
+
+            return new string(chars);
         }
     }
 }

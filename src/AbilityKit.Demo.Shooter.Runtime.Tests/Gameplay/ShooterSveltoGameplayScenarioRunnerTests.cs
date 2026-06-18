@@ -185,5 +185,39 @@ public sealed class ShooterSveltoGameplayScenarioRunnerTests
         Assert.True(result.Deterministic);
         Assert.Equal(result.FirstResult.StateHash, result.LastResult.StateHash);
         Assert.True(result.LastResult.ProjectilesSpawned > 0);
+        Assert.Equal(ShooterEntityLimitOptions.DefaultMaxEntityCount, result.EntityBudget.MaxEntityCount);
+        Assert.Equal(ShooterEntityLimitOptions.DefaultMaxEntityCount, result.EntityBudget.ActiveSyncBudget);
+        Assert.Equal(result.InitialEntityCount, result.EntityBudget.RequestedInitialEntityCount);
+        Assert.Equal(result.InitialEntityCount, result.EntityBudget.ClampedInitialEntityCount);
+        Assert.Equal(result.EntityBudget.MaxEntityCount - result.InitialEntityCount, result.EntityBudget.InitialEntityBudgetHeadroom);
+        Assert.True(result.EntityBudget.InitialEntitiesWithinBudget);
+        Assert.Equal(result.TotalFrames * result.EntityBudget.ActiveSyncBudget, result.EntityBudget.TotalActiveSyncBudgetFrames);
+    }
+
+    [Fact]
+    public void LargeScaleEntityBudgetProfileRunsWithExplicitBudgetDiagnostics()
+    {
+        var container = new WorldContainerBuilder()
+            .AddModule(new ShooterWorldModule())
+            .Build();
+
+        var runner = container.Resolve<IShooterSveltoGameplayScenarioRunner>();
+        var profile = ShooterSveltoGameplayBenchmarkProfiles.LargeScaleEntityBudget;
+        var result = ShooterSveltoGameplayBenchmark.Run(runner, in profile);
+
+        Assert.Equal("svelto-large-scale-entity-budget", result.ProfileId);
+        Assert.Equal(profile.Scenario.Id, result.ScenarioId);
+        Assert.Equal(2, result.Iterations);
+        Assert.Equal(4352, result.InitialEntityCount);
+        Assert.Equal(ShooterEntityLimitOptions.DefaultMaxEntityCount, result.EntityBudget.MaxEntityCount);
+        Assert.Equal(2048, result.EntityBudget.ActiveSyncBudget);
+        Assert.Equal(result.InitialEntityCount, result.EntityBudget.RequestedInitialEntityCount);
+        Assert.Equal(result.InitialEntityCount, result.EntityBudget.ClampedInitialEntityCount);
+        Assert.Equal(5648, result.EntityBudget.InitialEntityBudgetHeadroom);
+        Assert.True(result.EntityBudget.InitialEntitiesWithinBudget);
+        Assert.Equal(result.TotalFrames * 2048, result.EntityBudget.TotalActiveSyncBudgetFrames);
+        Assert.True(result.Deterministic);
+        Assert.Equal(result.FirstResult.StateHash, result.LastResult.StateHash);
+        Assert.True(result.LastResult.ProjectilesSpawned > 0);
     }
 }

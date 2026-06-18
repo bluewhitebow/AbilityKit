@@ -60,6 +60,8 @@ namespace AbilityKit.Demo.Shooter.View
 
         public uint LastPureStateResyncStateHash => _pureStateSync.LastResyncStateHash;
 
+        public ShooterPureStateSyncDiagnostics LastPureStateSyncDiagnostics => _pureStateSync.LastDiagnostics;
+
         public int ControlledPlayerId
         {
             get => _controlledPlayerId;

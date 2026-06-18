@@ -52,11 +52,14 @@ namespace AbilityKit.Demo.Shooter.View
 
         public uint LastResyncStateHash { get; private set; }
 
+        public ShooterPureStateSyncDiagnostics LastDiagnostics { get; private set; }
+
         public ShooterPureStateSnapshotApplyResult TryApplyGatewayPush(uint opCode, ArraySegment<byte> payload)
         {
             if (!_decoder.IsSnapshotPush(opCode))
             {
                 ClearHealthEvents();
+                LastDiagnostics = ShooterPureStateSyncDiagnostics.Ignored(LastAppliedFrame, LastAppliedStateHash, NeedsFullBaselineResync, LastResyncReason);
                 return ShooterPureStateSnapshotApplyResult.Ignored;
             }
 
@@ -69,6 +72,7 @@ namespace AbilityKit.Demo.Shooter.View
             if (!snapshot.PureStateSnapshot.HasValue)
             {
                 ClearHealthEvents();
+                LastDiagnostics = ShooterPureStateSyncDiagnostics.Ignored(LastAppliedFrame, LastAppliedStateHash, NeedsFullBaselineResync, LastResyncReason);
                 return ShooterPureStateSnapshotApplyResult.Ignored;
             }
 
@@ -77,6 +81,16 @@ namespace AbilityKit.Demo.Shooter.View
             {
                 LastIgnoredFrame = pureState.Frame;
                 SetHealthEvents(SyncHealthEvent.Warning(SyncHealthEventKind.SnapshotStale, pureState.Frame, LastAppliedFrame));
+                LastDiagnostics = ShooterPureStateSyncDiagnostics.FromSnapshot(
+                    ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot,
+                    in pureState,
+                    LastAppliedFrame,
+                    LastAppliedStateHash,
+                    NeedsFullBaselineResync,
+                    LastResyncReason,
+                    LastResyncFrame,
+                    LastResyncStateHash,
+                    LastIgnoredFrame);
                 return ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot;
             }
 
@@ -87,6 +101,16 @@ namespace AbilityKit.Demo.Shooter.View
                 LastResyncFrame = pureState.Frame;
                 LastResyncStateHash = pureState.StateHash;
                 SetHealthEvents(SyncHealthEvent.Info(SyncHealthEventKind.FullSnapshotRequested, pureState.Frame, (long)LastResyncReason));
+                LastDiagnostics = ShooterPureStateSyncDiagnostics.FromSnapshot(
+                    ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync,
+                    in pureState,
+                    LastAppliedFrame,
+                    LastAppliedStateHash,
+                    NeedsFullBaselineResync,
+                    LastResyncReason,
+                    LastResyncFrame,
+                    LastResyncStateHash,
+                    LastIgnoredFrame);
                 return ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync;
             }
 
@@ -112,9 +136,20 @@ namespace AbilityKit.Demo.Shooter.View
             }
 
             _hasAppliedSnapshot = true;
-            return isFullBaseline
+            var result = isFullBaseline
                 ? ShooterPureStateSnapshotApplyResult.AppliedFullBaseline
                 : ShooterPureStateSnapshotApplyResult.AppliedDelta;
+            LastDiagnostics = ShooterPureStateSyncDiagnostics.FromSnapshot(
+                result,
+                in pureState,
+                LastAppliedFrame,
+                LastAppliedStateHash,
+                NeedsFullBaselineResync,
+                LastResyncReason,
+                LastResyncFrame,
+                LastResyncStateHash,
+                LastIgnoredFrame);
+            return result;
         }
 
         private bool CanApplyDelta(in ShooterPureStateSnapshotPayload pureState)
@@ -142,6 +177,115 @@ namespace AbilityKit.Demo.Shooter.View
         private void SetHealthEvents(params SyncHealthEvent[] events)
         {
             _lastHealthEvents = events == null || events.Length == 0 ? EmptyHealthEvents : events;
+        }
+    }
+    
+    public readonly struct ShooterPureStateSyncDiagnostics
+    {
+        public ShooterPureStateSyncDiagnostics(
+            ShooterPureStateSnapshotApplyResult lastApplyResult,
+            int sourceFrame,
+            int sourceSnapshotKind,
+            int sourceEntityCount,
+            int sourceVisibilityHintCount,
+            int sourceBaselineFrame,
+            uint sourceBaselineHash,
+            uint sourceStateHash,
+            long sourceServerTick,
+            int appliedFrame,
+            uint appliedStateHash,
+            bool needsFullBaselineResync,
+            ShooterPureStateResyncReason lastResyncReason,
+            int lastResyncFrame,
+            uint lastResyncStateHash,
+            int lastIgnoredFrame)
+        {
+            LastApplyResult = lastApplyResult;
+            SourceFrame = sourceFrame;
+            SourceSnapshotKind = sourceSnapshotKind;
+            SourceEntityCount = sourceEntityCount;
+            SourceVisibilityHintCount = sourceVisibilityHintCount;
+            SourceBaselineFrame = sourceBaselineFrame;
+            SourceBaselineHash = sourceBaselineHash;
+            SourceStateHash = sourceStateHash;
+            SourceServerTick = sourceServerTick;
+            AppliedFrame = appliedFrame;
+            AppliedStateHash = appliedStateHash;
+            NeedsFullBaselineResync = needsFullBaselineResync;
+            LastResyncReason = lastResyncReason;
+            LastResyncFrame = lastResyncFrame;
+            LastResyncStateHash = lastResyncStateHash;
+            LastIgnoredFrame = lastIgnoredFrame;
+        }
+
+        public ShooterPureStateSnapshotApplyResult LastApplyResult { get; }
+        public int SourceFrame { get; }
+        public int SourceSnapshotKind { get; }
+        public int SourceEntityCount { get; }
+        public int SourceVisibilityHintCount { get; }
+        public int SourceBaselineFrame { get; }
+        public uint SourceBaselineHash { get; }
+        public uint SourceStateHash { get; }
+        public long SourceServerTick { get; }
+        public int AppliedFrame { get; }
+        public uint AppliedStateHash { get; }
+        public bool NeedsFullBaselineResync { get; }
+        public ShooterPureStateResyncReason LastResyncReason { get; }
+        public int LastResyncFrame { get; }
+        public uint LastResyncStateHash { get; }
+        public int LastIgnoredFrame { get; }
+        public bool HasSourceSnapshot => SourceFrame > 0 || SourceEntityCount > 0 || SourceVisibilityHintCount > 0;
+        public bool AppliedPresentation => LastApplyResult == ShooterPureStateSnapshotApplyResult.AppliedFullBaseline || LastApplyResult == ShooterPureStateSnapshotApplyResult.AppliedDelta;
+
+        public static ShooterPureStateSyncDiagnostics Ignored(int appliedFrame, uint appliedStateHash, bool needsFullBaselineResync, ShooterPureStateResyncReason lastResyncReason)
+        {
+            return new ShooterPureStateSyncDiagnostics(
+                ShooterPureStateSnapshotApplyResult.Ignored,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0u,
+                0u,
+                0L,
+                appliedFrame,
+                appliedStateHash,
+                needsFullBaselineResync,
+                lastResyncReason,
+                0,
+                0u,
+                -1);
+        }
+
+        public static ShooterPureStateSyncDiagnostics FromSnapshot(
+            ShooterPureStateSnapshotApplyResult result,
+            in ShooterPureStateSnapshotPayload snapshot,
+            int appliedFrame,
+            uint appliedStateHash,
+            bool needsFullBaselineResync,
+            ShooterPureStateResyncReason lastResyncReason,
+            int lastResyncFrame,
+            uint lastResyncStateHash,
+            int lastIgnoredFrame)
+        {
+            return new ShooterPureStateSyncDiagnostics(
+                result,
+                snapshot.Frame,
+                snapshot.SnapshotKind,
+                snapshot.Entities?.Length ?? 0,
+                snapshot.VisibilityHints?.Length ?? 0,
+                snapshot.BaselineFrame,
+                snapshot.BaselineHash,
+                snapshot.StateHash,
+                snapshot.ServerTick,
+                appliedFrame,
+                appliedStateHash,
+                needsFullBaselineResync,
+                lastResyncReason,
+                lastResyncFrame,
+                lastResyncStateHash,
+                lastIgnoredFrame);
         }
     }
 

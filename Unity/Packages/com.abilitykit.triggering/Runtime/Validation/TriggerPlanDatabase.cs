@@ -71,6 +71,11 @@ namespace AbilityKit.Triggering.Validation
         public readonly string ScopePath;
 
         /// <summary>
+        /// 可选的正式执行树根节点。
+        /// </summary>
+        public readonly ITriggerPlanExecutable ExecutionRoot;
+
+        /// <summary>
         /// 额外元数据
         /// </summary>
         public readonly object Metadata;
@@ -82,7 +87,8 @@ namespace AbilityKit.Triggering.Validation
             string source = null,
             int lineNumber = 0,
             string scopePath = null,
-            object metadata = null)
+            object metadata = null,
+            ITriggerPlanExecutable executionRoot = null)
         {
             Id = id ?? eventKey.StringId ?? eventKey.IntId.ToString();
             EventKey = eventKey;
@@ -91,6 +97,7 @@ namespace AbilityKit.Triggering.Validation
             LineNumber = lineNumber;
             ScopePath = scopePath ?? "/";
             Metadata = metadata;
+            ExecutionRoot = executionRoot;
         }
 
         /// <summary>
@@ -117,9 +124,10 @@ namespace AbilityKit.Triggering.Validation
             string id = null,
             string source = null,
             int lineNumber = 0,
-            string scopePath = null)
+            string scopePath = null,
+            ITriggerPlanExecutable executionRoot = null)
         {
-            _entries.Add(new TriggerPlanEntry<TCtx>(eventKey, plan, id, source, lineNumber, scopePath));
+            _entries.Add(new TriggerPlanEntry<TCtx>(eventKey, plan, id, source, lineNumber, scopePath, executionRoot: executionRoot));
             return this;
         }
 

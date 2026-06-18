@@ -7,6 +7,8 @@ namespace AbilityKit.Triggering.Runtime.Plan
         private readonly ActionCallPlan _action;
         private readonly TriggerPlan<object> _plan;
 
+        public ActionCallPlan Action => _action;
+
         public override string Name => "ActionCall";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Action;
 

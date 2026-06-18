@@ -198,6 +198,11 @@ namespace AbilityKit.Triggering.Validation
         public const string INVALID_ACTION_RETRY = "INVALID_ACTION_RETRY";
         public const string INVALID_RULE_SCHEDULE = "INVALID_RULE_SCHEDULE";
         public const string AMBIGUOUS_RULE_SCHEDULE = "AMBIGUOUS_RULE_SCHEDULE";
+        public const string INVALID_EXECUTION_NODE = "INVALID_EXECUTION_NODE";
+        public const string EMPTY_EXECUTION_NODE = "EMPTY_EXECUTION_NODE";
+        public const string AMBIGUOUS_EXECUTION_NODE = "AMBIGUOUS_EXECUTION_NODE";
+        public const string RUNTIME_COMPATIBILITY_ENTRY_MISSING = "RUNTIME_COMPATIBILITY_ENTRY_MISSING";
+        public const string RUNTIME_COMPATIBILITY_ENTRY_STALE = "RUNTIME_COMPATIBILITY_ENTRY_STALE";
 
         // 警告
         public const string HIGH_COMPLEXITY = "HIGH_COMPLEXITY";

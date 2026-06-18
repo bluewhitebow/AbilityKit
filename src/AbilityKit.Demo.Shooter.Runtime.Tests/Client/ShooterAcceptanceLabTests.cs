@@ -277,6 +277,9 @@ public sealed class ShooterAcceptanceLabTests
             ShooterHybridDemoHarnessCarrier.DefaultCarrierName,
             NetworkSyncModel.HybridHeroPrediction,
             DemoHarnessRunStatus.Completed));
+        Assert.True(batch.AllCompleted);
+        Assert.Equal(0, batch.FailedCount);
+        Assert.Equal(0, batch.UnsupportedCount);
     }
 
     [Fact]

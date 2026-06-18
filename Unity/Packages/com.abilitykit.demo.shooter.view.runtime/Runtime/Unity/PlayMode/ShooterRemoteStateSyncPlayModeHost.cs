@@ -37,8 +37,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         private static Exception? _lastError;
         private static long _stepCount;
         private static long _renderCount;
-        private static SyncClock? _localClock;
-        private static SyncTimeAnchor _lastLocalTimeAnchor;
+        private static ShooterTimeAnchorCoordinator? _timeAnchors;
+        private static SyncTimeAnchor _lastRemoteTimeAnchor;
+        private static ShooterRemoteLatencyCompensationDiagnostics _lastRemoteLatencyCompensationDiagnostics;
 
         public static event Action? StateChanged;
 
@@ -67,7 +68,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         public static long GatewayInputResyncRequestedCount => _gatewayInputQueue?.ResyncRequestedCount ?? 0L;
         public static long StepCount => _stepCount;
         public static long RenderCount => _renderCount;
-        public static SyncTimeAnchor LastLocalTimeAnchor => _lastLocalTimeAnchor;
+        public static SyncTimeAnchor LastLocalTimeAnchor => _timeAnchors?.LastLocalAnchor ?? default;
+        public static SyncTimeAnchor LastRemoteTimeAnchor => _lastRemoteTimeAnchor;
+        public static ShooterRemoteLatencyCompensationDiagnostics LastRemoteLatencyCompensationDiagnostics => _lastRemoteLatencyCompensationDiagnostics;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
@@ -108,8 +111,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 _lastTickResult = default;
                 _stepCount = 0;
                 _renderCount = 0;
-                _localClock = new SyncClock(1d / _options.SessionOptions.TickRate, timelineTicksPerStep: 1L);
-                _lastLocalTimeAnchor = default;
+                _timeAnchors = ShooterTimeAnchorCoordinator.CreateLocal(_options.SessionOptions.TickRate);
+                _lastRemoteTimeAnchor = state.Launch.Flow.RemoteTimeAnchorProjection.TimeAnchor;
+                _lastRemoteLatencyCompensationDiagnostics = default;
                 _lastError = null;
                 return state.Launch;
             }
@@ -215,7 +219,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
             _gatewayInputQueue?.CompleteIfFinished();
 
-            _lastLocalTimeAnchor = (_localClock ??= new SyncClock(1d / _options.SessionOptions.TickRate, timelineTicksPerStep: 1L)).Advance();
+            var localTimeAnchor = (_timeAnchors ??= ShooterTimeAnchorCoordinator.CreateLocal(_options.SessionOptions.TickRate)).AdvanceLocal();
+            _lastRemoteTimeAnchor = state.Launch.Flow.RemoteTimeAnchorProjection.TimeAnchor;
             var input = InputSource.ReadInput(_options.SessionOptions.ControlledPlayerId);
             _lastInput = input;
             _stepCount++;
@@ -234,6 +239,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _lastTickResult = state.Launch.Session.Tick(deltaSeconds);
             state.Launcher.Tick(deltaSeconds);
             _gatewayInputQueue?.CompleteIfFinished();
+            _lastRemoteLatencyCompensationDiagnostics = CreateRemoteLatencyCompensationDiagnostics();
 
             var frame = new ShooterHostPresentationFrame(
                 state.Launch.Session.Presentation.ViewModel.Current,
@@ -243,10 +249,12 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 _options.SessionOptions.WorldScale,
                 null,
                 state.Launch.GatewayConnection.LastPushResult,
-                default,
-                _lastLocalTimeAnchor,
+                _lastRemoteTimeAnchor,
+                localTimeAnchor,
                 null,
                 null,
+                _lastRemoteLatencyCompensationDiagnostics,
+                state.Launch.Session.Presentation.LastPureStateSyncDiagnostics,
                 state.Launch.Session.Presentation.NeedsPureStateFullBaselineResync,
                 state.Launch.Session.Presentation.LastPureStateResyncReason,
                 state.Launch.Session.Presentation.LastPureStateAppliedFrame,
@@ -255,6 +263,26 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 state.Launch.Session.Presentation.LastPureStateResyncStateHash);
             ViewSink.Render(in frame);
             _renderCount++;
+        }
+
+        private static ShooterRemoteLatencyCompensationDiagnostics CreateRemoteLatencyCompensationDiagnostics()
+        {
+            var queue = _gatewayInputQueue;
+            if (queue == null)
+            {
+                return default;
+            }
+
+            return ShooterRemoteLatencyCompensationDiagnostics.FromGatewayInput(
+                queue.LastResult,
+                queue.HasPending,
+                queue.HasQueued,
+                queue.SubmittedCount,
+                queue.QueuedCount,
+                queue.ReplacedCount,
+                queue.CompletedCount,
+                queue.FailedCount,
+                queue.ResyncRequestedCount);
         }
 
         private static void StopRunningSession()
@@ -269,8 +297,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _lastTickResult = default;
             _stepCount = 0;
             _renderCount = 0;
-            _localClock = null;
-            _lastLocalTimeAnchor = default;
+            _timeAnchors = null;
+            _lastRemoteTimeAnchor = default;
+            _lastRemoteLatencyCompensationDiagnostics = default;
             _isStarting = false;
         }
 

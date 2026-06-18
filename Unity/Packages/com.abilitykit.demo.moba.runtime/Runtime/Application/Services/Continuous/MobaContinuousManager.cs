@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.Demo.Moba.Services.Buffs;
+using AbilityKit.Demo.Moba.Services.Buffs.Presentation;
+using AbilityKit.Demo.Moba.Services.Buffs.Runtime;
 using AbilityKit.Ability.Triggering.Runtime;
 using AbilityKit.Core.Continuous;
 using AbilityKit.Demo.Moba.Config.Core;
@@ -13,42 +16,34 @@ namespace AbilityKit.Demo.Moba.Services
     /// </summary>
     [WorldService(typeof(IContinuousManager), WorldLifetime.Scoped)]
     [WorldService(typeof(MobaContinuousManager), WorldLifetime.Scoped)]
-    public sealed class MobaContinuousManager : DefaultContinuousManager, IWorldInitializable
+    public sealed class MobaContinuousManager : DefaultContinuousManager, IWorldInitializable, System.IDisposable
     {
         private readonly List<IMobaContinuousIntervalHandler> _intervalHandlers = new List<IMobaContinuousIntervalHandler>();
         private MobaContinuousModifierProjectorRegistry _modifierProjectors;
         private MobaContinuousLifecycleBinder _lifecycleBinder;
         private MobaContinuousContextLifecycleBinder _contextLifecycleBinder;
-        private IMobaEffectiveTagQueryService _effectiveTags;
-        private IMobaContinuousTagRuleService _tagRules;
-        private IWorldResolver _services;
-        private IMobaBattleDiagnosticsService _diagnostics;
+        private BuffContinuousIntervalHandler _buffIntervalHandler;
 
         public void OnInit(IWorldResolver services)
         {
-            if (services == null) return;
-
-            _services = services;
-            services.TryResolve(out _diagnostics);
-            RegisterDefaultModifierProjectors(services);
-            RegisterDefaultIntervalHandlers(services);
-        }
-
-        public void RegisterIntervalHandler(IMobaContinuousIntervalHandler handler)
-        {
-            if (handler == null) return;
-            if (_intervalHandlers.Contains(handler)) return;
- 
-            _intervalHandlers.Add(handler);
+            services.TryResolve(out MobaConfigDatabase configs);
+            services.TryResolve(out AbilityKit.Triggering.Eventing.IEventBus eventBus);
+            services.TryResolve(out MobaEffectExecutionService effects);
+            services.TryResolve(out MobaTraceRegistry trace);
+            services.TryResolve(out AbilityKit.Ability.Triggering.Runtime.ITriggerActionRunner actionRunner);
+            _modifierProjectors = new MobaContinuousModifierProjectorRegistry();
+            _modifierProjectors.OnInit(services);
+            _lifecycleBinder = new MobaContinuousLifecycleBinder(_modifierProjectors);
+            AddLifecycleBinder(_lifecycleBinder);
+            _contextLifecycleBinder = new MobaContinuousContextLifecycleBinder(trace, actionRunner);
+            AddLifecycleBinder(_contextLifecycleBinder);
+            _buffIntervalHandler = new BuffContinuousIntervalHandler(configs, null, null, null);
+            _intervalHandlers.Add(_buffIntervalHandler);
         }
 
         public void Reproject(IContinuous continuous)
         {
-            if (continuous == null || continuous.IsTerminated) return;
-            SyncManagedState(continuous);
-            ReprojectModifiers(continuous);
-            MarkEffectiveTagsDirty(continuous);
-            ResolveTagRules()?.ReconcileOwnerFor(continuous);
+            _lifecycleBinder?.Reproject(continuous);
         }
 
         public void Tick(float deltaTimeSeconds)
@@ -56,192 +51,49 @@ namespace AbilityKit.Demo.Moba.Services
             if (deltaTimeSeconds <= 0f) return;
 
             var active = GetAllActiveContinuous();
-            if (active == null || active.Count == 0) return;
-
-            var diagnostics = _diagnostics;
-            var start = diagnostics != null ? diagnostics.GetTimestamp() : 0L;
-            var ticked = 0;
-            var intervalCandidates = 0;
-
-            for (int i = 0; i < active.Count; i++)
+            for (var i = 0; i < active.Count; i++)
             {
                 var continuous = active[i];
-                if (continuous == null || !continuous.IsActive || continuous.IsTerminated) continue;
+                if (continuous == null || continuous.IsTerminated || !continuous.IsActive || continuous.IsPaused) continue;
 
-                ticked++;
                 if (continuous is IMobaTickableContinuous tickable)
                 {
                     tickable.TickManaged(deltaTimeSeconds);
                 }
 
-                if (continuous.IsTerminated) continue;
-                if (continuous.Config is IMobaContinuousPeriodicConfig) intervalCandidates++;
-                TickInterval(continuous, deltaTimeSeconds);
-            }
+                for (var handlerIndex = 0; handlerIndex < _intervalHandlers.Count; handlerIndex++)
+                {
+                    var handler = _intervalHandlers[handlerIndex];
+                    if (handler == null || !handler.CanHandle(continuous)) continue;
+                    if (!(continuous.Config is IMobaContinuousPeriodicConfig periodicConfig)) continue;
+                    if (periodicConfig.IntervalSeconds <= 0f || periodicConfig.IntervalEffectIds == null || periodicConfig.IntervalEffectIds.Count == 0) continue;
+                    if (!(continuous is IMobaContinuousIntervalState intervalState)) continue;
 
-            if (diagnostics != null)
-            {
-                diagnostics.Gauge("moba.continuous.active", active.Count);
-                diagnostics.Sample("moba.continuous.ticked", ticked);
-                diagnostics.Sample("moba.continuous.intervalCandidates", intervalCandidates);
-                diagnostics.RecordDuration(
-                    MobaBattleDiagnosticMetric.ContinuousTick,
-                    start,
-                    MobaBattleDiagnosticsDefaults.ContinuousTickWarnMs);
-            }
-        }
+                    intervalState.IntervalRemainingSeconds -= deltaTimeSeconds;
+                    if (intervalState.IntervalRemainingSeconds > 0f) continue;
 
-        private void TickInterval(IContinuous continuous, float deltaTimeSeconds)
-        {
-            if (continuous == null) return;
-            if (!(continuous.Config is IMobaContinuousPeriodicConfig periodic)) return;
-            if (!(continuous is IMobaContinuousIntervalState state)) return;
+                    if (continuous is IMobaContinuousExecutionContextProvider contextProvider && contextProvider.TryGetCombatExecutionContext(out var executionContext))
+                    {
+                        handler.OnInterval(continuous, periodicConfig, in executionContext);
+                    }
 
-            var intervalSeconds = periodic.IntervalSeconds;
-            var triggerIds = periodic.IntervalEffectIds;
-            if (intervalSeconds <= 0f || triggerIds == null || triggerIds.Count == 0)
-            {
-                state.IntervalRemainingSeconds = 0f;
-                SyncManagedState(continuous);
-                return;
-            }
+                    intervalState.IntervalRemainingSeconds = periodicConfig.IntervalSeconds;
+                }
 
-            if (state.IntervalRemainingSeconds <= 0f || state.IntervalRemainingSeconds > intervalSeconds)
-            {
-                state.IntervalRemainingSeconds = intervalSeconds;
-            }
-
-            state.IntervalRemainingSeconds -= deltaTimeSeconds;
-            var guard = 0;
-            while (state.IntervalRemainingSeconds <= 0f && guard++ < 16)
-            {
-                if (continuous.IsTerminated) break;
-
-                state.IntervalRemainingSeconds += intervalSeconds;
-                SyncManagedState(continuous);
-                DispatchInterval(continuous, periodic);
-            }
-
-            SyncManagedState(continuous);
-        }
-
-        private void DispatchInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodic)
-        {
-            var executionContext = ResolveExecutionContext(continuous);
-            for (int i = 0; i < _intervalHandlers.Count; i++)
-            {
-                var handler = _intervalHandlers[i];
-                if (handler == null || !handler.CanHandle(continuous)) continue;
-
-                handler.OnInterval(continuous, periodic, in executionContext);
+                if (continuous is IMobaContinuousRuntimeStateSync stateSync)
+                {
+                    stateSync.SyncManagedState();
+                }
             }
         }
 
-        private static MobaCombatExecutionContext ResolveExecutionContext(IContinuous continuous)
-        {
-            if (continuous is IMobaContinuousExecutionContextProvider provider
-                && provider.TryGetCombatExecutionContext(out var context))
-            {
-                return context;
-            }
-
-            return default;
-        }
-
-        private void RegisterDefaultIntervalHandlers(IWorldResolver services)
-        {
-            services.TryResolve(out MobaConfigDatabase configs);
-            services.TryResolve(out AbilityKit.Triggering.Eventing.IEventBus eventBus);
-            services.TryResolve(out MobaEffectExecutionService effects);
-            services.TryResolve(out MobaPresentationCueSnapshotService cueSnapshots);
- 
-            var buffEvents = new BuffEventPublisher(eventBus);
-            var stageEffects = new BuffStageEffectExecutor(effects);
-            var presentationCues = new MobaBuffPresentationCueReporter(configs, cueSnapshots);
-            RegisterIntervalHandler(new BuffContinuousIntervalHandler(configs, buffEvents, stageEffects, presentationCues));
-        }
-
-        private void RegisterDefaultModifierProjectors(IWorldResolver services)
-        {
-            _modifierProjectors = new MobaContinuousModifierProjectorRegistry();
-            _modifierProjectors.Register(new MobaAttributeContinuousModifierProjector());
-            _modifierProjectors.Register(new MobaSkillParamContinuousModifierProjector());
-            _modifierProjectors.OnInit(services);
-
-            _lifecycleBinder = new MobaContinuousLifecycleBinder(_modifierProjectors);
-            AddLifecycleBinder(_lifecycleBinder);
-
-            services.TryResolve(out MobaTraceRegistry trace);
-            services.TryResolve(out AbilityKit.Ability.Triggering.Runtime.ITriggerActionRunner actionRunner);
-            _contextLifecycleBinder = new MobaContinuousContextLifecycleBinder(trace, actionRunner);
-            AddLifecycleBinder(_contextLifecycleBinder);
-        }
-
-        private void ReprojectModifiers(IContinuous continuous)
-        {
-            if (_lifecycleBinder == null || continuous == null) return;
-            _lifecycleBinder.Reproject(continuous);
-        }
-
-        private static void SyncManagedState(IContinuous continuous)
-        {
-            if (continuous is IMobaContinuousRuntimeStateSync sync)
-            {
-                sync.SyncManagedState();
-            }
-        }
-
-        private void MarkEffectiveTagsDirty(IContinuous continuous)
-        {
-            var ownerId = continuous?.Config?.OwnerId ?? 0L;
-            if (ownerId <= 0 || ownerId > int.MaxValue) return;
-
-            ResolveEffectiveTags()?.MarkDirty((int)ownerId);
-        }
-
-        /// <summary>
-        /// Releases all registered continuous behaviors when the MOBA world scope is disposed.
-        /// </summary>
         public void Dispose()
         {
-            if (_lifecycleBinder != null)
-            {
-                RemoveLifecycleBinder(_lifecycleBinder);
-                _lifecycleBinder = null;
-            }
-
-            if (_contextLifecycleBinder != null)
-            {
-                RemoveLifecycleBinder(_contextLifecycleBinder);
-                _contextLifecycleBinder = null;
-            }
-
             _intervalHandlers.Clear();
+            _buffIntervalHandler = null;
+            _contextLifecycleBinder = null;
+            _lifecycleBinder = null;
             _modifierProjectors = null;
-            _effectiveTags = null;
-            _tagRules = null;
-            _services = null;
-            Clear();
-        }
-
-        private IMobaEffectiveTagQueryService ResolveEffectiveTags()
-        {
-            if (_effectiveTags == null)
-            {
-                _services?.TryResolve(out _effectiveTags);
-            }
-
-            return _effectiveTags;
-        }
-
-        private IMobaContinuousTagRuleService ResolveTagRules()
-        {
-            if (_tagRules == null)
-            {
-                _services?.TryResolve(out _tagRules);
-            }
-
-            return _tagRules;
         }
     }
 }

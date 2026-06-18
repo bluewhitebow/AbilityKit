@@ -29,6 +29,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
     internal sealed class UnityShooterGameObjectViewSink : IShooterHostViewSink
     {
+        private const string PlayerViewPrefabName = "ShooterPlayerViewPrefab";
+        private const string BulletViewPrefabName = "ShooterBulletViewPrefab";
+        private const string EnemyViewPrefabName = "ShooterEnemyViewPrefab";
         private readonly Dictionary<int, GameObject> _playerViews = new();
         private readonly Dictionary<int, GameObject> _bulletViews = new();
         private readonly Dictionary<int, GameObject> _enemyViews = new();
@@ -40,13 +43,26 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
         private readonly HashSet<int> _seenPlayers = new();
         private readonly HashSet<int> _seenBullets = new();
         private readonly HashSet<int> _seenEnemies = new();
+        private readonly Queue<GameObject> _playerPool = new();
+        private readonly Queue<GameObject> _bulletPool = new();
+        private readonly Queue<GameObject> _enemyPool = new();
+        private readonly MaterialPropertyBlock _tintPropertyBlock = new();
         private Transform? _viewRoot;
         private Transform? _clientRoot;
         private Transform? _authorityRoot;
         private Camera? _camera;
         private Light? _light;
+        private HudBehaviour? _hudBehaviour;
+        private GameObject? _playerPrefab;
+        private GameObject? _bulletPrefab;
+        private GameObject? _enemyPrefab;
         private int _lastControlledPlayerId;
         private float _lastWorldScale = 1f;
+        private int _lastPlayerCount;
+        private int _lastBulletCount;
+        private int _lastEnemyCount;
+        private int _lastControlledHp = -1;
+        private bool _hasHudData;
         private bool _hasAuthorityProjection;
 
         public void Render(in ShooterHostPresentationFrame frame)
@@ -54,6 +70,7 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             EnsureViewRoot();
             _lastControlledPlayerId = frame.ControlledPlayerId;
             _lastWorldScale = frame.WorldScale;
+            CaptureHudData(in frame);
 
             var clientBatch = frame.ClientBatch;
             _clientProjection.Apply(in clientBatch);
@@ -86,21 +103,62 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             {
                 _hasAuthorityProjection = false;
                 _authorityProjection.Clear();
-                ClearViews(_authorityPlayerViews);
-                ClearViews(_authorityBulletViews);
-                ClearViews(_authorityEnemyViews);
+                ClearViews(_authorityPlayerViews, _playerPool);
+                ClearViews(_authorityBulletViews, _bulletPool);
+                ClearViews(_authorityEnemyViews, _enemyPool);
             }
+        }
+
+        private void CaptureHudData(in ShooterHostPresentationFrame frame)
+        {
+            _lastPlayerCount = CountEntities(frame.ClientBatch, ShooterViewEntityKind.Player);
+            _lastBulletCount = CountEntities(frame.ClientBatch, ShooterViewEntityKind.Bullet);
+            _lastEnemyCount = CountEntities(frame.ClientBatch, ShooterViewEntityKind.Enemy);
+            _lastControlledHp = TryGetControlledPlayerHp(frame.ClientBatch, frame.ControlledPlayerId);
+            _hasHudData = true;
+        }
+
+        private static int CountEntities(in ShooterSnapshotViewBatch batch, ShooterViewEntityKind kind)
+        {
+            var count = 0;
+            foreach (var entity in batch.EntityChanges)
+            {
+                if (entity.Alive && entity.Kind == kind)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static int TryGetControlledPlayerHp(in ShooterSnapshotViewBatch batch, int controlledPlayerId)
+        {
+            if (controlledPlayerId <= 0)
+            {
+                return -1;
+            }
+
+            foreach (var change in batch.HealthChanges)
+            {
+                if (change.Key.Kind == ShooterViewEntityKind.Player && change.Key.EntityId == controlledPlayerId)
+                {
+                    return change.Hp;
+                }
+            }
+
+            return -1;
         }
 
         public void RebuildAll()
         {
             EnsureViewRoot();
-            ClearViews(_playerViews);
-            ClearViews(_bulletViews);
-            ClearViews(_enemyViews);
-            ClearViews(_authorityPlayerViews);
-            ClearViews(_authorityBulletViews);
-            ClearViews(_authorityEnemyViews);
+            ClearViews(_playerViews, _playerPool);
+            ClearViews(_bulletViews, _bulletPool);
+            ClearViews(_enemyViews, _enemyPool);
+            ClearViews(_authorityPlayerViews, _playerPool);
+            ClearViews(_authorityBulletViews, _bulletPool);
+            ClearViews(_authorityEnemyViews, _enemyPool);
 
             RenderStore(
                 _clientProjection.Store,
@@ -128,16 +186,21 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
         public void Clear()
         {
-            ClearViews(_playerViews);
-            ClearViews(_bulletViews);
-            ClearViews(_enemyViews);
-            ClearViews(_authorityPlayerViews);
-            ClearViews(_authorityBulletViews);
-            ClearViews(_authorityEnemyViews);
+            ClearViews(_playerViews, _playerPool);
+            ClearViews(_bulletViews, _bulletPool);
+            ClearViews(_enemyViews, _enemyPool);
+            ClearViews(_authorityPlayerViews, _playerPool);
+            ClearViews(_authorityBulletViews, _bulletPool);
+            ClearViews(_authorityEnemyViews, _enemyPool);
 
             _clientProjection.Clear();
             _authorityProjection.Clear();
             _hasAuthorityProjection = false;
+            _hasHudData = false;
+            _lastPlayerCount = 0;
+            _lastBulletCount = 0;
+            _lastEnemyCount = 0;
+            _lastControlledHp = -1;
 
             if (_viewRoot != null)
             {
@@ -147,7 +210,33 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 _authorityRoot = null;
                 _camera = null;
                 _light = null;
+                _hudBehaviour = null;
             }
+
+            DestroyPrefab(ref _playerPrefab);
+            DestroyPrefab(ref _bulletPrefab);
+            DestroyPrefab(ref _enemyPrefab);
+            _playerPool.Clear();
+            _bulletPool.Clear();
+            _enemyPool.Clear();
+        }
+
+        private void DrawHud()
+        {
+            if (!_hasHudData)
+            {
+                return;
+            }
+
+            GUI.Box(new Rect(12f, 12f, 320f, 196f), "Shooter HUD");
+            GUILayout.BeginArea(new Rect(24f, 40f, 296f, 164f));
+            GUILayout.Label($"战场 玩家/子弹/怪物: {_lastPlayerCount}/{_lastBulletCount}/{_lastEnemyCount}");
+            GUILayout.Label(_lastControlledHp >= 0 ? $"主控HP: {_lastControlledHp}" : "主控HP: N/A");
+            GUILayout.Label($"客户端视图 玩家/子弹/怪物: {_playerViews.Count}/{_bulletViews.Count}/{_enemyViews.Count}");
+            GUILayout.Label($"权威视图 玩家/子弹/怪物: {_authorityPlayerViews.Count}/{_authorityBulletViews.Count}/{_authorityEnemyViews.Count}");
+            GUILayout.Label($"池化 玩家/子弹/怪物: {_playerPool.Count}/{_bulletPool.Count}/{_enemyPool.Count}");
+            GUILayout.Label($"权威投影: {(_hasAuthorityProjection ? "开启" : "关闭")}");
+            GUILayout.EndArea();
         }
 
         private void RenderStore(
@@ -194,9 +283,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 }
             }
 
-            PruneViews(playerViews, _seenPlayers);
-            PruneViews(bulletViews, _seenBullets);
-            PruneViews(enemyViews, _seenEnemies);
+            PruneViews(playerViews, _seenPlayers, _playerPool);
+            PruneViews(bulletViews, _seenBullets, _bulletPool);
+            PruneViews(enemyViews, _seenEnemies, _enemyPool);
         }
 
         private GameObject GetOrCreatePlayerView(
@@ -211,9 +300,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 return existing;
             }
 
-            var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            var go = GetOrCreatePooledView(_playerPool, GetOrCreatePlayerPrefab(), parent);
             go.name = isAuthority ? $"ShooterAuthorityPlayer_{id}" : $"ShooterPlayer_{id}";
-            go.transform.SetParent(parent, false);
+            go.transform.localScale = new Vector3(0.75f, 1.1f, 0.75f);
             TintRenderer(go, isAuthority ? new Color(1f, 0.35f, 0.35f, 0.55f) : id == controlledPlayerId ? Color.green : Color.cyan);
             views[id] = go;
             return go;
@@ -226,10 +315,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 return existing;
             }
 
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var go = GetOrCreatePooledView(_bulletPool, GetOrCreateBulletPrefab(), parent);
             go.name = isAuthority ? $"ShooterAuthorityBullet_{id}" : $"ShooterBullet_{id}";
             go.transform.localScale = Vector3.one * (isAuthority ? 0.45f : 0.35f);
-            go.transform.SetParent(parent, false);
             TintRenderer(go, isAuthority ? new Color(1f, 0.65f, 0.15f, 0.55f) : Color.yellow);
             views[id] = go;
             return go;
@@ -242,10 +330,9 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
                 return existing;
             }
 
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var go = GetOrCreatePooledView(_enemyPool, GetOrCreateEnemyPrefab(), parent);
             go.name = isAuthority ? $"ShooterAuthorityEnemy_{id}" : $"ShooterEnemy_{id}";
             go.transform.localScale = new Vector3(0.75f, 0.75f, 0.75f);
-            go.transform.SetParent(parent, false);
             TintRenderer(go, isAuthority ? new Color(1f, 0f, 0.65f, 0.55f) : Color.red);
             views[id] = go;
             return go;
@@ -261,6 +348,8 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             var root = new GameObject("ShooterPlayModeViews");
             Object.DontDestroyOnLoad(root);
             _viewRoot = root.transform;
+            _hudBehaviour = root.AddComponent<HudBehaviour>();
+            _hudBehaviour.Initialize(this);
             _clientRoot = new GameObject("Client").transform;
             _clientRoot.SetParent(_viewRoot, false);
             _authorityRoot = new GameObject("Authority").transform;
@@ -284,20 +373,59 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             _light.intensity = 1.2f;
         }
 
-        private static void ClearViews(Dictionary<int, GameObject> views)
+        private void ClearViews(Dictionary<int, GameObject> views, Queue<GameObject> pool)
         {
             foreach (var kvp in views)
             {
-                if (kvp.Value != null)
-                {
-                    Object.Destroy(kvp.Value);
-                }
+                ReleaseView(kvp.Value, pool);
             }
 
             views.Clear();
         }
 
-        private static void PruneViews(Dictionary<int, GameObject> views, HashSet<int> alive)
+        private GameObject GetOrCreatePlayerPrefab()
+        {
+            if (_playerPrefab != null)
+            {
+                return _playerPrefab;
+            }
+
+            _playerPrefab = CreateViewPrefab(PlayerViewPrefabName, PrimitiveType.Capsule);
+            return _playerPrefab;
+        }
+
+        private GameObject GetOrCreateBulletPrefab()
+        {
+            if (_bulletPrefab != null)
+            {
+                return _bulletPrefab;
+            }
+
+            _bulletPrefab = CreateViewPrefab(BulletViewPrefabName, PrimitiveType.Sphere);
+            return _bulletPrefab;
+        }
+
+        private GameObject GetOrCreateEnemyPrefab()
+        {
+            if (_enemyPrefab != null)
+            {
+                return _enemyPrefab;
+            }
+
+            _enemyPrefab = CreateViewPrefab(EnemyViewPrefabName, PrimitiveType.Cube);
+            return _enemyPrefab;
+        }
+
+        private static GameObject CreateViewPrefab(string name, PrimitiveType primitiveType)
+        {
+            var prefab = GameObject.CreatePrimitive(primitiveType);
+            prefab.name = name;
+            prefab.hideFlags = HideFlags.HideAndDontSave;
+            prefab.SetActive(false);
+            return prefab;
+        }
+
+        private void PruneViews(Dictionary<int, GameObject> views, HashSet<int> alive, Queue<GameObject> pool)
         {
             if (views.Count == 0)
             {
@@ -315,13 +443,23 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
 
             for (var i = 0; i < stale.Count; i++)
             {
-                var go = views[stale[i]];
-                if (go != null)
-                {
-                    Object.Destroy(go);
-                }
-
+                ReleaseView(views[stale[i]], pool);
                 views.Remove(stale[i]);
+            }
+        }
+
+        private sealed class HudBehaviour : MonoBehaviour
+        {
+            private UnityShooterGameObjectViewSink? _sink;
+
+            public void Initialize(UnityShooterGameObjectViewSink sink)
+            {
+                _sink = sink;
+            }
+
+            private void OnGUI()
+            {
+                _sink?.DrawHud();
             }
         }
 
@@ -334,12 +472,56 @@ namespace AbilityKit.Demo.Shooter.View.PlayMode
             }
         }
 
-        private static void TintRenderer(GameObject go, Color color)
+        private GameObject GetOrCreatePooledView(Queue<GameObject> pool, GameObject prefab, Transform? parent)
+        {
+            while (pool.Count > 0)
+            {
+                var pooled = pool.Dequeue();
+                if (pooled == null)
+                {
+                    continue;
+                }
+
+                pooled.transform.SetParent(parent, false);
+                pooled.SetActive(true);
+                return pooled;
+            }
+
+            var go = Object.Instantiate(prefab, parent);
+            go.SetActive(true);
+            return go;
+        }
+
+        private void ReleaseView(GameObject? go, Queue<GameObject> pool)
+        {
+            if (go == null)
+            {
+                return;
+            }
+
+            go.SetActive(false);
+            go.transform.SetParent(_viewRoot, false);
+            pool.Enqueue(go);
+        }
+
+        private static void DestroyPrefab(ref GameObject? prefab)
+        {
+            if (prefab != null)
+            {
+                Object.Destroy(prefab);
+                prefab = null;
+            }
+        }
+
+        private void TintRenderer(GameObject go, Color color)
         {
             var renderer = go.GetComponent<Renderer>();
-            if (renderer != null && renderer.material != null)
+            if (renderer != null && renderer.sharedMaterial != null)
             {
-                renderer.material.color = color;
+                renderer.GetPropertyBlock(_tintPropertyBlock);
+                _tintPropertyBlock.SetColor("_Color", color);
+                renderer.SetPropertyBlock(_tintPropertyBlock);
+                _tintPropertyBlock.Clear();
             }
         }
     }

@@ -1,6 +1,7 @@
 param(
     [switch]$NoBuild,
-    [string]$Configuration = 'Debug'
+    [string]$Configuration = 'Debug',
+    [int]$TcpPort = 41001
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,7 +24,7 @@ if (-not $NoBuild) {
     dotnet build $project -c $Configuration @commonArgs
 }
 
-Write-Host "Running Shooter TCP Gateway smoke..."
+Write-Host "Running Shooter TCP Gateway smoke on 127.0.0.1:$TcpPort..."
 $runArgs = @(
     'run',
     '--project', $project,
@@ -35,4 +36,5 @@ if ($NoBuild) {
 }
 
 $runArgs += $commonArgs
+$runArgs += @('--', '--tcp-port', $TcpPort)
 & dotnet @runArgs

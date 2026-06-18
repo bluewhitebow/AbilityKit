@@ -297,6 +297,24 @@ public sealed class ShooterPlaySessionRunnerTests
             localTimeAnchor: default,
             lagCompensationTelemetry: null,
             lagCompensationEvaluation: null,
+            remoteLatencyCompensationDiagnostics: default,
+            pureStateSyncDiagnostics: new ShooterPureStateSyncDiagnostics(
+                ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync,
+                sourceFrame: 18,
+                sourceSnapshotKind: ShooterPureStateSnapshotKinds.Delta,
+                sourceEntityCount: 2,
+                sourceVisibilityHintCount: 1,
+                sourceBaselineFrame: 12,
+                sourceBaselineHash: 0x1234u,
+                sourceStateHash: 0x5678u,
+                sourceServerTick: 99L,
+                appliedFrame: 12,
+                appliedStateHash: 0x1234u,
+                needsFullBaselineResync: true,
+                lastResyncReason: ShooterPureStateResyncReason.BaselineMismatch,
+                lastResyncFrame: 18,
+                lastResyncStateHash: 0x5678u,
+                lastIgnoredFrame: -1),
             needsPureStateBaselineResync: true,
             lastPureStateResyncReason: ShooterPureStateResyncReason.BaselineMismatch,
             lastPureStateAppliedFrame: 12,
@@ -312,6 +330,84 @@ public sealed class ShooterPlaySessionRunnerTests
         Assert.Equal(0x1234u, diagnostics.LastPureStateAppliedStateHash);
         Assert.Equal(18, diagnostics.LastPureStateResyncFrame);
         Assert.Equal(0x5678u, diagnostics.LastPureStateResyncStateHash);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, diagnostics.PureStateSyncDiagnostics.LastApplyResult);
+        Assert.Equal(18, diagnostics.PureStateSyncDiagnostics.SourceFrame);
+        Assert.Equal(ShooterPureStateSnapshotKinds.Delta, diagnostics.PureStateSyncDiagnostics.SourceSnapshotKind);
+        Assert.Equal(2, diagnostics.PureStateSyncDiagnostics.SourceEntityCount);
+        Assert.Equal(1, diagnostics.PureStateSyncDiagnostics.SourceVisibilityHintCount);
+        Assert.Equal(12, diagnostics.PureStateSyncDiagnostics.SourceBaselineFrame);
+        Assert.Equal(0x1234u, diagnostics.PureStateSyncDiagnostics.SourceBaselineHash);
+        Assert.Equal(0x5678u, diagnostics.PureStateSyncDiagnostics.SourceStateHash);
+        Assert.Equal(99L, diagnostics.PureStateSyncDiagnostics.SourceServerTick);
+        Assert.Equal(12, diagnostics.PureStateSyncDiagnostics.AppliedFrame);
+        Assert.Equal(0x1234u, diagnostics.PureStateSyncDiagnostics.AppliedStateHash);
+        Assert.True(diagnostics.PureStateSyncDiagnostics.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.BaselineMismatch, diagnostics.PureStateSyncDiagnostics.LastResyncReason);
+        Assert.Equal(18, diagnostics.PureStateSyncDiagnostics.LastResyncFrame);
+        Assert.Equal(0x5678u, diagnostics.PureStateSyncDiagnostics.LastResyncStateHash);
+        Assert.True(diagnostics.PureStateSyncDiagnostics.HasSourceSnapshot);
+        Assert.False(diagnostics.PureStateSyncDiagnostics.AppliedPresentation);
+    }
+
+    [Fact]
+    public void RemoteLatencyCompensationDiagnosticsAreProjectedFromHostFrame()
+    {
+        var remoteInput = new ShooterClientGatewayInputSubmitResult(
+            new ShooterClientInputSubmitResult(1, 10, default),
+            new ShooterGatewayBattleInputResult(
+                success: false,
+                acceptedFrame: 12,
+                message: "Input frame is too far ahead.",
+                currentFrame: 8,
+                status: "RejectedTooFarFuture",
+                shouldResync: true,
+                serverTicks: 987654321L));
+        var remoteDiagnostics = ShooterRemoteLatencyCompensationDiagnostics.FromGatewayInput(
+            in remoteInput,
+            hasPendingInput: true,
+            hasQueuedInput: false,
+            submittedCount: 5,
+            queuedCount: 2,
+            replacedCount: 1,
+            completedCount: 4,
+            failedCount: 0,
+            resyncRequestedCount: 1);
+        var frame = new ShooterHostPresentationFrame(
+            ShooterSnapshotViewBatch.Empty,
+            ShooterSnapshotViewBatch.Empty,
+            false,
+            controlledPlayerId: 1,
+            worldScale: 1f,
+            carrierNetworkStats: null,
+            lastCarrierSnapshotApplyResult: ShooterSnapshotApplyResult.Ignored,
+            lastCarrierTimeAnchor: default,
+            localTimeAnchor: default,
+            lagCompensationTelemetry: null,
+            lagCompensationEvaluation: null,
+            remoteLatencyCompensationDiagnostics: remoteDiagnostics,
+            pureStateSyncDiagnostics: default,
+            needsPureStateBaselineResync: false,
+            lastPureStateResyncReason: ShooterPureStateResyncReason.None,
+            lastPureStateAppliedFrame: 0,
+            lastPureStateAppliedStateHash: 0,
+            lastPureStateResyncFrame: 0,
+            lastPureStateResyncStateHash: 0);
+
+        var diagnostics = ShooterHostDiagnosticsProjector.ProjectFromFrame(in frame, previousTotalEvents: 0);
+
+        Assert.True(diagnostics.RemoteLatencyCompensationDiagnostics.HasResult);
+        Assert.Equal(10, diagnostics.RemoteLatencyCompensationDiagnostics.RequestedFrame);
+        Assert.Equal(12, diagnostics.RemoteLatencyCompensationDiagnostics.AcceptedFrame);
+        Assert.Equal(8, diagnostics.RemoteLatencyCompensationDiagnostics.AuthoritativeFrame);
+        Assert.Equal(2, diagnostics.RemoteLatencyCompensationDiagnostics.InputDelayFrames);
+        Assert.Equal(-2, diagnostics.RemoteLatencyCompensationDiagnostics.AuthoritativeFrameGap);
+        Assert.True(diagnostics.RemoteLatencyCompensationDiagnostics.ShouldResync);
+        Assert.Equal("RejectedTooFarFuture", diagnostics.RemoteLatencyCompensationDiagnostics.Status);
+        Assert.Equal(987654321L, diagnostics.RemoteLatencyCompensationDiagnostics.ServerTicks);
+        Assert.True(diagnostics.RemoteLatencyCompensationDiagnostics.HasPendingInput);
+        Assert.False(diagnostics.RemoteLatencyCompensationDiagnostics.HasQueuedInput);
+        Assert.Equal(5, diagnostics.RemoteLatencyCompensationDiagnostics.SubmittedCount);
+        Assert.Equal(1, diagnostics.RemoteLatencyCompensationDiagnostics.ResyncRequestedCount);
     }
 
     private static bool TryGetTransformX(in ShooterSnapshotViewBatch batch, ShooterViewEntityKey key, out float x)
@@ -432,5 +528,41 @@ public sealed class ShooterPlaySessionRunnerTests
         {
             _frames.Clear();
         }
+    }
+
+    [Fact]
+    public void RecordingViewSinkCollectsFramesAndCanBeCleared()
+    {
+        var sink = new RecordingViewSink();
+        var frame = new ShooterHostPresentationFrame(
+            ShooterSnapshotViewBatch.Empty,
+            ShooterSnapshotViewBatch.Empty,
+            false,
+            controlledPlayerId: 7,
+            worldScale: 1.25f,
+            carrierNetworkStats: null,
+            lastCarrierSnapshotApplyResult: ShooterSnapshotApplyResult.Ignored,
+            lastCarrierTimeAnchor: default,
+            localTimeAnchor: default,
+            lagCompensationTelemetry: null,
+            lagCompensationEvaluation: null,
+            remoteLatencyCompensationDiagnostics: default,
+            pureStateSyncDiagnostics: default,
+            needsPureStateBaselineResync: false,
+            lastPureStateResyncReason: ShooterPureStateResyncReason.None,
+            lastPureStateAppliedFrame: 0,
+            lastPureStateAppliedStateHash: 0,
+            lastPureStateResyncFrame: 0,
+            lastPureStateResyncStateHash: 0);
+
+        sink.Render(in frame);
+
+        var recordedFrame = Assert.Single(sink.Frames);
+        Assert.Equal(7, recordedFrame.ControlledPlayerId);
+        Assert.Equal(1.25f, recordedFrame.WorldScale);
+
+        sink.Clear();
+
+        Assert.Empty(sink.Frames);
     }
 }

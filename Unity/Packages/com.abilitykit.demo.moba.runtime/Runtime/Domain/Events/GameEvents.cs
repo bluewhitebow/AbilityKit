@@ -1,4 +1,4 @@
-using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Services.Buffs.Triggering;
 
 namespace AbilityKit.Demo.Moba.Events
 {

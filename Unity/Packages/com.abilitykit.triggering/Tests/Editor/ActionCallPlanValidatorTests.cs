@@ -88,6 +88,28 @@ namespace AbilityKit.Triggering.Tests
         }
 
         [Test]
+        public void Validate_RejectsTimelineScheduleAsUnsupportedMainlinePlan()
+        {
+            var actionId = new ActionId(StableStringId.Get("test:action_plan_validator:timeline_schedule"));
+            var call = new ActionCallPlan(
+                actionId,
+                0,
+                default,
+                default,
+                null,
+                EActionScheduleMode.Timeline,
+                0,
+                -1,
+                true,
+                EActionExecutionPolicy.Immediate);
+
+            var result = Validate(call);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.UNSUPPORTED_ACTION_SCHEDULE));
+        }
+
+        [Test]
         public void MinimalCompositeValidator_IncludesActionCallPlanValidation()
         {
             var actionId = new ActionId(StableStringId.Get("test:action_plan_validator:minimal_composite"));

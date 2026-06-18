@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AbilityKit.Orleans.Grains.Gameplay;
-using AbilityKit.Orleans.Grains.Gameplays.Moba.Rooms;
-using AbilityKit.Orleans.Grains.Gameplays.Shooter.Rooms;
 
 namespace AbilityKit.Orleans.Grains.Rooms.Gameplay;
 
@@ -13,13 +11,7 @@ internal sealed class RoomGameplayRegistry
     private readonly IRoomGameplayAdapter _defaultAdapter;
 
     public RoomGameplayRegistry()
-        : this(
-            new IRoomGameplayAdapter[]
-            {
-                new MobaRoomGameplayAdapter(),
-                new ShooterRoomGameplayAdapter()
-            },
-            ServerGameplayCatalog.Default)
+        : this(ServerGameplayModuleCatalog.Default.CreateRoomAdapters(), ServerGameplayCatalog.Default)
     {
     }
 

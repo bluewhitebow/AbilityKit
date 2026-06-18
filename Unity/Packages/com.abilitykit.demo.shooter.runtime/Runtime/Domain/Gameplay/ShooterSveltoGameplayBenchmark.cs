@@ -7,6 +7,16 @@ namespace AbilityKit.Demo.Shooter.Runtime
     public readonly struct ShooterSveltoGameplayBenchmarkProfile
     {
         public ShooterSveltoGameplayBenchmarkProfile(string id, string displayName, ShooterSveltoGameplayScenarioConfig scenario, int iterations)
+            : this(id, displayName, scenario, iterations, ShooterSveltoGameplayEntityBudgetProfile.Default)
+        {
+        }
+
+        public ShooterSveltoGameplayBenchmarkProfile(
+            string id,
+            string displayName,
+            ShooterSveltoGameplayScenarioConfig scenario,
+            int iterations,
+            ShooterSveltoGameplayEntityBudgetProfile entityBudget)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Profile id is required.", nameof(id));
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Profile display name is required.", nameof(displayName));
@@ -15,12 +25,59 @@ namespace AbilityKit.Demo.Shooter.Runtime
             DisplayName = displayName;
             Scenario = scenario;
             Iterations = iterations < 1 ? 1 : iterations;
+            EntityBudget = entityBudget.MaxEntityCount <= 0
+                ? ShooterSveltoGameplayEntityBudgetProfile.Default
+                : entityBudget;
         }
 
         public string Id { get; }
         public string DisplayName { get; }
         public ShooterSveltoGameplayScenarioConfig Scenario { get; }
         public int Iterations { get; }
+        public ShooterSveltoGameplayEntityBudgetProfile EntityBudget { get; }
+    }
+
+    public readonly struct ShooterSveltoGameplayEntityBudgetProfile
+    {
+        public ShooterSveltoGameplayEntityBudgetProfile(int maxEntityCount, int activeSyncBudget)
+        {
+            var limits = new ShooterEntityLimitOptions(maxEntityCount);
+            MaxEntityCount = limits.MaxEntityCount;
+            ActiveSyncBudget = activeSyncBudget < 1 ? MaxEntityCount : Math.Min(activeSyncBudget, MaxEntityCount);
+        }
+
+        public int MaxEntityCount { get; }
+        public int ActiveSyncBudget { get; }
+        public static ShooterSveltoGameplayEntityBudgetProfile Default => new ShooterSveltoGameplayEntityBudgetProfile(ShooterEntityLimitOptions.DefaultMaxEntityCount, ShooterEntityLimitOptions.DefaultMaxEntityCount);
+    }
+
+    public readonly struct ShooterSveltoGameplayEntityBudgetDiagnostics
+    {
+        public ShooterSveltoGameplayEntityBudgetDiagnostics(
+            int maxEntityCount,
+            int activeSyncBudget,
+            int requestedInitialEntityCount,
+            int clampedInitialEntityCount,
+            int initialEntityBudgetHeadroom,
+            bool initialEntitiesWithinBudget,
+            long totalActiveSyncBudgetFrames)
+        {
+            MaxEntityCount = maxEntityCount;
+            ActiveSyncBudget = activeSyncBudget;
+            RequestedInitialEntityCount = requestedInitialEntityCount;
+            ClampedInitialEntityCount = clampedInitialEntityCount;
+            InitialEntityBudgetHeadroom = initialEntityBudgetHeadroom;
+            InitialEntitiesWithinBudget = initialEntitiesWithinBudget;
+            TotalActiveSyncBudgetFrames = totalActiveSyncBudgetFrames;
+        }
+
+        public int MaxEntityCount { get; }
+        public int ActiveSyncBudget { get; }
+        public int RequestedInitialEntityCount { get; }
+        public int ClampedInitialEntityCount { get; }
+        public int InitialEntityBudgetHeadroom { get; }
+        public bool InitialEntitiesWithinBudget { get; }
+        public long TotalActiveSyncBudgetFrames { get; }
     }
 
     public readonly struct ShooterSveltoGameplayBenchmarkResult
@@ -35,7 +92,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
             long totalInitialEntityFrames,
             bool deterministic,
             ShooterSveltoGameplayScenarioResult firstResult,
-            ShooterSveltoGameplayScenarioResult lastResult)
+            ShooterSveltoGameplayScenarioResult lastResult,
+            ShooterSveltoGameplayEntityBudgetDiagnostics entityBudget)
         {
             ProfileId = profileId;
             ScenarioId = scenarioId;
@@ -47,6 +105,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             Deterministic = deterministic;
             FirstResult = firstResult;
             LastResult = lastResult;
+            EntityBudget = entityBudget;
         }
 
         public string ProfileId { get; }
@@ -59,6 +118,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
         public bool Deterministic { get; }
         public ShooterSveltoGameplayScenarioResult FirstResult { get; }
         public ShooterSveltoGameplayScenarioResult LastResult { get; }
+        public ShooterSveltoGameplayEntityBudgetDiagnostics EntityBudget { get; }
     }
 
     public static class ShooterSveltoGameplayBenchmarkProfiles
@@ -74,6 +134,33 @@ namespace AbilityKit.Demo.Shooter.Runtime
             "Svelto Wave Survival Baseline",
             ShooterSveltoGameplayScenarioCatalog.WaveSurvival,
             iterations: 3);
+
+        public static ShooterSveltoGameplayBenchmarkProfile LargeScaleEntityBudget { get; } = new ShooterSveltoGameplayBenchmarkProfile(
+            "svelto-large-scale-entity-budget",
+            "Svelto Large Scale Entity Budget",
+            new ShooterSveltoGameplayScenarioConfig(
+                "svelto-large-scale-entity-budget",
+                "Svelto Large Scale Entity Budget",
+                "大规模 Shooter 实体预算压测入口，复用 Svelto gameplay runner 输出预算诊断。",
+                shooterCount: 256,
+                targetCount: 4096,
+                tickCount: 60,
+                tickDeltaTime: 1f / 30f,
+                arenaRadius: 64f,
+                loadout: ShooterSveltoGameplayScenarioCatalog.DefaultLoadout,
+                battleFlow: new ShooterSveltoGameplayBattleFlowConfig(
+                    durationFrames: 60,
+                    victoryTargetDefeats: 4096,
+                    maxActiveEnemies: 512,
+                    waves: new[]
+                    {
+                        new ShooterSveltoGameplayWaveConfig(1, 0, 1, 512, 2, 32f),
+                        new ShooterSveltoGameplayWaveConfig(2, 15, 1, 512, 3, 40f)
+                    })),
+            iterations: 2,
+            entityBudget: new ShooterSveltoGameplayEntityBudgetProfile(
+                ShooterEntityLimitOptions.DefaultMaxEntityCount,
+                activeSyncBudget: 2048));
     }
 
     public static class ShooterSveltoGameplayBenchmark
@@ -103,17 +190,37 @@ namespace AbilityKit.Demo.Shooter.Runtime
             }
 
             var initialEntityCount = profile.Scenario.ShooterCount + profile.Scenario.TargetCount;
+            var totalFrames = (long)profile.Iterations * profile.Scenario.TickCount;
+            var entityBudget = CreateEntityBudgetDiagnostics(in profile, initialEntityCount, totalFrames);
             return new ShooterSveltoGameplayBenchmarkResult(
                 profile.Id,
                 profile.Scenario.Id,
                 profile.Iterations,
                 profile.Scenario.TickCount,
                 initialEntityCount,
-                (long)profile.Iterations * profile.Scenario.TickCount,
-                (long)profile.Iterations * profile.Scenario.TickCount * initialEntityCount,
+                totalFrames,
+                totalFrames * initialEntityCount,
                 deterministic,
                 first,
-                last);
+                last,
+                entityBudget);
+        }
+
+        private static ShooterSveltoGameplayEntityBudgetDiagnostics CreateEntityBudgetDiagnostics(
+            in ShooterSveltoGameplayBenchmarkProfile profile,
+            int requestedInitialEntityCount,
+            long totalFrames)
+        {
+            var limits = new ShooterEntityLimitOptions(profile.EntityBudget.MaxEntityCount);
+            var clampedInitialEntityCount = limits.ClampRequestedCount(requestedInitialEntityCount);
+            return new ShooterSveltoGameplayEntityBudgetDiagnostics(
+                limits.MaxEntityCount,
+                profile.EntityBudget.ActiveSyncBudget,
+                requestedInitialEntityCount,
+                clampedInitialEntityCount,
+                limits.MaxEntityCount - clampedInitialEntityCount,
+                requestedInitialEntityCount <= limits.MaxEntityCount,
+                totalFrames * profile.EntityBudget.ActiveSyncBudget);
         }
 
         private static bool HasSameDeterministicOutcome(

@@ -6,27 +6,30 @@ using AbilityKit.Orleans.Contracts.Rooms;
 
 namespace AbilityKit.Orleans.Grains.Gameplay;
 
+internal static class ServerGameplayDescriptors
+{
+    public static GameplayRoomDescriptor Moba { get; } = new(
+        GameplayRoomTypes.Moba,
+        "MOBA Battle",
+        DefaultMaxPlayers: 10,
+        RequiresPlayerLoadout: true,
+        DefaultWorldType: GameplayRoomTypes.Moba,
+        DefaultTickRate: 30,
+        DefaultSyncTemplateId: "state-sync-authority");
+
+    public static GameplayRoomDescriptor Shooter { get; } = new(
+        ShooterGameplay.RoomType,
+        "Shooter State Sync",
+        ShooterGameplay.DefaultMaxPlayers,
+        RequiresPlayerLoadout: false,
+        DefaultWorldType: ShooterGameplay.WorldType,
+        DefaultTickRate: ShooterGameplay.DefaultTickRate,
+        DefaultSyncTemplateId: "pure-state-authority");
+}
+
 internal sealed class ServerGameplayCatalog
 {
-    public static ServerGameplayCatalog Default { get; } = new(new[]
-    {
-        new GameplayRoomDescriptor(
-            GameplayRoomTypes.Moba,
-            "MOBA Battle",
-            DefaultMaxPlayers: 10,
-            RequiresPlayerLoadout: true,
-            DefaultWorldType: GameplayRoomTypes.Moba,
-            DefaultTickRate: 30,
-            DefaultSyncTemplateId: "state-sync-authority"),
-        new GameplayRoomDescriptor(
-            ShooterGameplay.RoomType,
-            "Shooter State Sync",
-            ShooterGameplay.DefaultMaxPlayers,
-            RequiresPlayerLoadout: false,
-            DefaultWorldType: ShooterGameplay.WorldType,
-            DefaultTickRate: ShooterGameplay.DefaultTickRate,
-            DefaultSyncTemplateId: "pure-state-authority")
-    });
+    public static ServerGameplayCatalog Default => ServerGameplayModuleCatalog.Default.GameplayCatalog;
 
     private readonly Dictionary<string, GameplayRoomDescriptor> _descriptors;
 

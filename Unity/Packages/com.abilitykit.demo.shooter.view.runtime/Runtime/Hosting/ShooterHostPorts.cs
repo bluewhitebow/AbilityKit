@@ -38,6 +38,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             SyncTimeAnchor localTimeAnchor,
             ShooterLagCompensationTelemetry? lagCompensationTelemetry,
             ShooterLagCompensationEvaluation? lagCompensationEvaluation,
+            ShooterRemoteLatencyCompensationDiagnostics remoteLatencyCompensationDiagnostics,
+            ShooterPureStateSyncDiagnostics pureStateSyncDiagnostics,
             bool needsPureStateBaselineResync,
             ShooterPureStateResyncReason lastPureStateResyncReason,
             int lastPureStateAppliedFrame,
@@ -56,6 +58,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             LocalTimeAnchor = localTimeAnchor;
             LagCompensationTelemetry = lagCompensationTelemetry;
             LagCompensationEvaluation = lagCompensationEvaluation;
+            RemoteLatencyCompensationDiagnostics = remoteLatencyCompensationDiagnostics;
+            PureStateSyncDiagnostics = pureStateSyncDiagnostics;
             NeedsPureStateBaselineResync = needsPureStateBaselineResync;
             LastPureStateResyncReason = lastPureStateResyncReason;
             LastPureStateAppliedFrame = lastPureStateAppliedFrame;
@@ -75,6 +79,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
         public SyncTimeAnchor LocalTimeAnchor { get; }
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry { get; }
         public ShooterLagCompensationEvaluation? LagCompensationEvaluation { get; }
+        public ShooterRemoteLatencyCompensationDiagnostics RemoteLatencyCompensationDiagnostics { get; }
+        public ShooterPureStateSyncDiagnostics PureStateSyncDiagnostics { get; }
         public bool NeedsPureStateBaselineResync { get; }
         public ShooterPureStateResyncReason LastPureStateResyncReason { get; }
         public int LastPureStateAppliedFrame { get; }

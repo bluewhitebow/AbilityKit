@@ -9,6 +9,8 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "Repeat";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Repeat;
+        public ITriggerPlanExecutable Child => _child;
+        public int Count => _count;
 
         public RepeatTriggerPlanExecutable(ITriggerPlanExecutable child, int count, ITriggerPlanCondition condition = null, float weight = 1f)
             : base(condition, weight)

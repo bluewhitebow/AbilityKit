@@ -1,0 +1,146 @@
+using AbilityKit.Triggering.Eventing;
+using AbilityKit.Triggering.Registry;
+using AbilityKit.Triggering.Runtime;
+using AbilityKit.Triggering.Runtime.Config;
+using AbilityKit.Triggering.Runtime.Plan;
+using AbilityKit.Triggering.Validation;
+using NUnit.Framework;
+
+namespace AbilityKit.Triggering.Tests
+{
+    public sealed class TriggerPlanExecutableTests
+    {
+        [Test]
+        public void Sequence_Repeat_And_Until_ExecuteWithExpectedCounts()
+        {
+            var first = new CountingExecutable();
+            var repeated = new CountingExecutable();
+            var untilChild = new CountingExecutable();
+            var untilCondition = new CountingCondition(false, false, true);
+            var root = TriggerPlanExecutableDsl.Sequence(
+                first,
+                TriggerPlanExecutableDsl.Repeat(repeated, 3),
+                TriggerPlanExecutableDsl.Until(untilChild, untilCondition, 5));
+
+            var result = root.Execute<object>(null, default);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.ExecutedCount, Is.EqualTo(6));
+            Assert.That(first.Count, Is.EqualTo(1));
+            Assert.That(repeated.Count, Is.EqualTo(3));
+            Assert.That(untilChild.Count, Is.EqualTo(2));
+            Assert.That(untilCondition.Count, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Validator_RejectsTimelineActionInsideExecutableTree()
+        {
+            var actionId = new ActionId(StableStringId.Get("test:trigger_plan_executable_validator:timeline"));
+            var timelineAction = new ActionCallPlan(
+                actionId,
+                0,
+                default,
+                default,
+                null,
+                EActionScheduleMode.Timeline,
+                100f,
+                -1,
+                true,
+                EActionExecutionPolicy.Immediate);
+            var root = TriggerPlanExecutableDsl.Sequence(TriggerPlanExecutableDsl.Action(timelineAction));
+            var validator = new TriggerPlanExecutableValidator();
+
+            var result = validator.Validate(root);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.UNSUPPORTED_ACTION_SCHEDULE));
+        }
+
+        [Test]
+        public void Validator_RejectsUntilWithoutCondition()
+        {
+            var root = TriggerPlanExecutableDsl.Until(new CountingExecutable(), null, 2);
+            var validator = new TriggerPlanExecutableValidator();
+
+            var result = validator.Validate(root);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.INVALID_EXECUTION_NODE));
+        }
+
+        [Test]
+        public void Validator_WarnsForEmptyCompositeNode()
+        {
+            var root = TriggerPlanExecutableDsl.Sequence();
+            var validator = new TriggerPlanExecutableValidator();
+
+            var result = validator.Validate(root);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(result.Warnings, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.EMPTY_EXECUTION_NODE));
+        }
+
+        [Test]
+        public void ScheduledExecutable_ExecutesWrappedChildSynchronously()
+        {
+            var child = new CountingExecutable();
+            var root = TriggerPlanExecutableDsl.Periodic(child, 250f, maxExecutions: 3);
+
+            var result = root.Execute<object>(null, default);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.ExecutedCount, Is.EqualTo(1));
+            Assert.That(child.Count, Is.EqualTo(1));
+            Assert.That(root.Kind, Is.EqualTo(ETriggerPlanExecutableKind.Scheduled));
+            Assert.That(root.ScheduleMode, Is.EqualTo(EScheduleMode.Periodic));
+            Assert.That(root.IntervalMs, Is.EqualTo(250f));
+            Assert.That(root.MaxExecutions, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Validator_RejectsInvalidScheduledExecutableConfig()
+        {
+            var root = TriggerPlanExecutableDsl.Periodic(null, 0f, maxExecutions: 0);
+            var validator = new TriggerPlanExecutableValidator();
+
+            var result = validator.Validate(root);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.INVALID_EXECUTION_NODE && issue.Path.EndsWith("intervalMs")));
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.INVALID_EXECUTION_NODE && issue.Path.EndsWith("maxExecutions")));
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.INVALID_EXECUTION_NODE && issue.Path.EndsWith("child")));
+        }
+
+        private sealed class CountingExecutable : ITriggerPlanExecutable
+        {
+            public int Count { get; private set; }
+            public string Name => "Counting";
+            public ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Succeed;
+            public float Weight => 1f;
+
+            public TriggerPlanExecutionResult Execute<TCtx>(object args, in ExecCtx<TCtx> ctx) where TCtx : class
+            {
+                Count++;
+                return TriggerPlanExecutionResult.Success();
+            }
+        }
+
+        private sealed class CountingCondition : ITriggerPlanCondition
+        {
+            private readonly bool[] _values;
+
+            public int Count { get; private set; }
+
+            public CountingCondition(params bool[] values)
+            {
+                _values = values;
+            }
+
+            public bool Evaluate<TCtx>(object args, in ExecCtx<TCtx> ctx) where TCtx : class
+            {
+                var index = Count++;
+                return _values != null && index < _values.Length && _values[index];
+            }
+        }
+    }
+}

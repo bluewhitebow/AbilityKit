@@ -8,6 +8,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "Invert";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Invert;
+        public ITriggerPlanExecutable Child => _child;
 
         public InvertTriggerPlanExecutable(ITriggerPlanExecutable child, ITriggerPlanCondition condition = null, float weight = 1f)
             : base(condition, weight)

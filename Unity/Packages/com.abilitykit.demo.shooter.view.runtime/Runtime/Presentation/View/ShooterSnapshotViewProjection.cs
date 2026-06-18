@@ -32,7 +32,7 @@ namespace AbilityKit.Demo.Shooter.View
         public ShooterViewProjectionApplyResult Apply(in ShooterSnapshotViewBatch batch)
         {
             var missingEntityRemovals = 0;
-            if (batch.ShouldReplaceMissingEntities)
+            if (ShouldReplaceMissingEntities(in batch))
             {
                 missingEntityRemovals = RemoveEntitiesMissingFromFullSnapshot(in batch);
             }
@@ -64,6 +64,21 @@ namespace AbilityKit.Demo.Shooter.View
             return LastApplyResult;
         }
  
+        public bool HasEntity(ShooterViewEntityKey key)
+        {
+            return _store.ContainsEntity(key);
+        }
+
+        public bool TryGetEntity(ShooterViewEntityKey key, out ShooterViewEntityState state)
+        {
+            return _store.TryGetEntity(key, out state);
+        }
+
+        private static bool ShouldReplaceMissingEntities(in ShooterSnapshotViewBatch batch)
+        {
+            return batch.ShouldReplaceMissingEntities && batch.EntityChangeCount > 0;
+        }
+
         private int RemoveEntitiesMissingFromFullSnapshot(in ShooterSnapshotViewBatch batch)
         {
             var present = new HashSet<ShooterViewEntityKey>();

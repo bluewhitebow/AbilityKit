@@ -30,6 +30,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             SyncTimeAnchor localTimeAnchor,
             ShooterLagCompensationTelemetry? lagCompensationTelemetry,
             ShooterLagCompensationEvaluation? lagCompensationEvaluation,
+            ShooterRemoteLatencyCompensationDiagnostics remoteLatencyCompensationDiagnostics,
+            ShooterPureStateSyncDiagnostics pureStateSyncDiagnostics,
             bool needsPureStateBaselineResync,
             ShooterPureStateResyncReason lastPureStateResyncReason,
             int lastPureStateAppliedFrame,
@@ -51,6 +53,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
             LocalTimeAnchor = localTimeAnchor;
             LagCompensationTelemetry = lagCompensationTelemetry;
             LagCompensationEvaluation = lagCompensationEvaluation;
+            RemoteLatencyCompensationDiagnostics = remoteLatencyCompensationDiagnostics;
+            PureStateSyncDiagnostics = pureStateSyncDiagnostics;
             NeedsPureStateBaselineResync = needsPureStateBaselineResync;
             LastPureStateResyncReason = lastPureStateResyncReason;
             LastPureStateAppliedFrame = lastPureStateAppliedFrame;
@@ -86,6 +90,10 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
         public ShooterLagCompensationTelemetry? LagCompensationTelemetry { get; }
 
         public ShooterLagCompensationEvaluation? LagCompensationEvaluation { get; }
+
+        public ShooterRemoteLatencyCompensationDiagnostics RemoteLatencyCompensationDiagnostics { get; }
+
+        public ShooterPureStateSyncDiagnostics PureStateSyncDiagnostics { get; }
 
         public bool NeedsPureStateBaselineResync { get; }
 
@@ -129,6 +137,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 default,
                 session.LagCompensationTelemetry,
                 session.LastLagCompensationEvaluation,
+                default,
+                session.Presentation.LastPureStateSyncDiagnostics,
                 session.Presentation.NeedsPureStateFullBaselineResync,
                 session.Presentation.LastPureStateResyncReason,
                 session.Presentation.LastPureStateAppliedFrame,
@@ -159,6 +169,8 @@ namespace AbilityKit.Demo.Shooter.View.Hosting
                 frame.LocalTimeAnchor,
                 frame.LagCompensationTelemetry,
                 frame.LagCompensationEvaluation,
+                frame.RemoteLatencyCompensationDiagnostics,
+                frame.PureStateSyncDiagnostics,
                 frame.NeedsPureStateBaselineResync,
                 frame.LastPureStateResyncReason,
                 frame.LastPureStateAppliedFrame,

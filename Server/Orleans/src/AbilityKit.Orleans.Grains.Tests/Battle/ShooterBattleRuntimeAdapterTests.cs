@@ -128,6 +128,34 @@ public sealed class ShooterBattleRuntimeAdapterTests
     }
 
     [Fact]
+    public void JoinPlayer_WhenPlayerIsMissing_ReturnsSharedRejectedNullPlayerStatus()
+    {
+        using var worldManager = new ServerBattleWorldManager(NullLogger.Instance);
+        var adapter = new ShooterBattleRuntimeAdapter(worldManager);
+        using var session = adapter.CreateSession("shooter-null-player-status-test");
+        var initParams = CreateInitParams();
+        var start = session.Start(initParams);
+        Assert.True(start.Succeeded, start.Error);
+
+        var result = session.JoinPlayer(new BattlePlayerJoinRequest(initParams.WorldId, Player: null!), currentFrame: 12);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(BattleResultStatusCodes.RejectedNullPlayer, result.Status);
+        Assert.Equal(12, result.CurrentFrame);
+    }
+
+    [Fact]
+    public void BattleResultStatusCodes_KeepProtocolStatusStringsStable()
+    {
+        Assert.Equal("RejectedNotInitialized", BattleResultStatusCodes.RejectedNotInitialized);
+        Assert.Equal("RejectedWorldMismatch", BattleResultStatusCodes.RejectedWorldMismatch);
+        Assert.Equal("RejectedNullInput", BattleResultStatusCodes.RejectedNullInput);
+        Assert.Equal("RejectedByInputBuffer", BattleResultStatusCodes.RejectedByInputBuffer);
+        Assert.Equal("RejectedNullRequest", BattleResultStatusCodes.RejectedNullRequest);
+        Assert.Equal("RejectedNullPlayer", BattleResultStatusCodes.RejectedNullPlayer);
+    }
+
+    [Fact]
     public void CreateStateSyncPush_WhenPureStateUsesLimitedBandwidth_ReducesActiveBudget()
     {
         using var worldManager = new ServerBattleWorldManager(NullLogger.Instance);

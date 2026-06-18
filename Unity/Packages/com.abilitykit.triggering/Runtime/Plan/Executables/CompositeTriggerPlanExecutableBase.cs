@@ -7,7 +7,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
     {
         private readonly ITriggerPlanExecutable[] _children;
 
-        protected IReadOnlyList<ITriggerPlanExecutable> Children => _children;
+        public IReadOnlyList<ITriggerPlanExecutable> Children => _children;
 
         protected CompositeTriggerPlanExecutableBase(ITriggerPlanExecutable[] children, ITriggerPlanCondition condition = null, float weight = 1f)
             : base(condition, weight)

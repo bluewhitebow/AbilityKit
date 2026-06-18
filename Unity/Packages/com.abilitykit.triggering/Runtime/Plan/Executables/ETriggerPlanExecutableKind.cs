@@ -13,5 +13,6 @@ namespace AbilityKit.Triggering.Runtime.Plan
         Invert = 8,
         Succeed = 9,
         Fail = 10,
+        Scheduled = 11,
     }
 }

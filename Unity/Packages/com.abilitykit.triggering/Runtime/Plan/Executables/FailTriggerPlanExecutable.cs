@@ -9,6 +9,8 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "Fail";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Fail;
+        public ITriggerPlanExecutable Child => _child;
+        public string Reason => _reason;
 
         public FailTriggerPlanExecutable(ITriggerPlanExecutable child = null, string reason = null, ITriggerPlanCondition condition = null, float weight = 1f)
             : base(condition, weight)

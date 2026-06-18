@@ -15,6 +15,7 @@ namespace AbilityKit.Triggering.Runtime.Experimental.Todo.TriggerScheduler
     /// It documents the migration target for a future trigger execution strategy layer.
     /// The current stable runtime path remains TriggerRunner + PlannedTrigger + Plan/Executables.
     /// </summary>
+    [Obsolete("Experimental trigger scheduler mirror is migration tracking only. Do not wire it into production; use TriggerRunner + PlannedTrigger instead.")]
     public readonly struct ExperimentalTriggerExecutionContext<TCtx>
     {
         public readonly TCtx Context;
@@ -44,6 +45,7 @@ namespace AbilityKit.Triggering.Runtime.Experimental.Todo.TriggerScheduler
     /// - integrate with Plan/Executables rather than creating a parallel trigger runtime;
     /// - reuse ActionScheduler only for scheduled actions, not as a competing trigger dispatcher.
     /// </summary>
+    [Obsolete("Experimental trigger scheduler mirror is migration tracking only. Do not wire it into production; use TriggerRunner + PlannedTrigger instead.")]
     public interface IExperimentalTriggerExecutor<TCtx>
     {
         ExecutionResult Execute<TArgs>(TriggerPlan<TArgs> plan, ExperimentalTriggerExecutionContext<TCtx> ctx) where TArgs : class;
@@ -53,6 +55,7 @@ namespace AbilityKit.Triggering.Runtime.Experimental.Todo.TriggerScheduler
     /// Preserved value implementation for future migration.
     /// Not wired into the stable runtime yet.
     /// </summary>
+    [Obsolete("ExperimentalDefaultTriggerExecutor is not a stable runtime entry. Resolve actions through ActionRegistry/PlannedTrigger before promoting this path.")]
     public sealed class ExperimentalDefaultTriggerExecutor<TCtx> : IExperimentalTriggerExecutor<TCtx>
     {
         private readonly IActionExecutor _defaultActionExecutor;
@@ -99,8 +102,8 @@ namespace AbilityKit.Triggering.Runtime.Experimental.Todo.TriggerScheduler
             return (_, _) =>
             {
                 throw new InvalidOperationException(
-                    $"Experimental TriggerScheduler action [{actionId}] is unresolved. " +
-                    "Migrate this path to ActionRegistry/PlannedTrigger resolution before wiring it into mainline.");
+                    $"Experimental TriggerScheduler action [{actionId}] is unresolved and must not be treated as a production execution path. " +
+                    "Migrate this path to TriggerRunner + PlannedTrigger with ActionRegistry resolution before wiring it into mainline.");
             };
         }
 

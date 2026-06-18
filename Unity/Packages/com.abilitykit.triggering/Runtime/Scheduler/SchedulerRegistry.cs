@@ -7,8 +7,10 @@ namespace AbilityKit.Triggering.Runtime.Scheduler
     /// 旧版调度器注册中心。
     /// 提供统一的调度器生命周期管理和查询能力。
     ///
-    /// 【兼容层】保留给依赖 Runtime/Scheduler 的旧代码；新触发器 Action 调度优先使用 Runtime/ActionScheduler，通用业务调度优先使用 Runtime/Schedule。
+    /// 【兼容层】保留给依赖 Runtime/Scheduler 的旧代码；新触发器 Action 调度优先使用 Runtime.ActionScheduler，
+    /// 规则调度优先使用 Runtime.RuleScheduler。
     /// </summary>
+    [Obsolete("Runtime/Scheduler is a legacy compatibility layer. Use Runtime.ActionScheduler for TriggerPlan action scheduling or Runtime.RuleScheduler for formal rule scheduling.")]
     public sealed class SchedulerRegistry : ISchedulerRegistry
     {
         private readonly Dictionary<int, SchedulerEntry> _schedulers = new();

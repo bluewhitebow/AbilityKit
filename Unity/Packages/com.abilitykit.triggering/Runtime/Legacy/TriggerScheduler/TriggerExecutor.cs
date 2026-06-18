@@ -18,6 +18,7 @@ namespace AbilityKit.Triggering.Runtime.TriggerScheduler
     /// Trigger 执行上下文
     /// 封装单次 Trigger 激活时的执行环境
     /// </summary>
+    [Obsolete("Runtime.TriggerScheduler is a legacy compatibility layer. Use TriggerRunner + PlannedTrigger with ActionScheduler/RuleScheduler for formal runtime integration.")]
     public readonly struct TriggerExecutionContext<TCtx>
     {
         public readonly TCtx Context;
@@ -42,6 +43,7 @@ namespace AbilityKit.Triggering.Runtime.TriggerScheduler
     /// Trigger 执行器接口
     /// 负责单次 Trigger 激活时的执行策略
     /// </summary>
+    [Obsolete("Runtime.TriggerScheduler is a legacy compatibility layer. Use TriggerRunner + PlannedTrigger with ActionScheduler/RuleScheduler for formal runtime integration.")]
     public interface ITriggerExecutor<TCtx>
     {
         /// <summary>
@@ -54,6 +56,7 @@ namespace AbilityKit.Triggering.Runtime.TriggerScheduler
     /// 默认 Trigger 执行器
     /// 按照优先级顺序执行 Actions，支持打断和优先级抢占
     /// </summary>
+    [Obsolete("Runtime.TriggerScheduler.DefaultTriggerExecutor is not a formal mainline executor. Use TriggerRunner + PlannedTrigger and ActionRegistry resolution instead.")]
     public sealed class DefaultTriggerExecutor<TCtx> : ITriggerExecutor<TCtx>
     {
         private readonly IActionExecutor _defaultActionExecutor;
@@ -117,7 +120,8 @@ namespace AbilityKit.Triggering.Runtime.TriggerScheduler
             return (_, _) =>
             {
                 throw new NotSupportedException(
-                    $"TriggerScheduler.DefaultTriggerExecutor 未接入 ActionRegistry，无法执行 Action[{actionId.Value}]。请使用 PlannedTrigger 主线或提供正式 Action 委托解析。");
+                    $"TriggerScheduler.DefaultTriggerExecutor is legacy-only and is not wired to ActionRegistry. Action[{actionId.Value}] cannot be executed here. " +
+                    "Migrate to TriggerRunner + PlannedTrigger with ActionRegistry resolution, and use ActionScheduler/RuleScheduler only through the formal runtime path.");
             };
         }
 

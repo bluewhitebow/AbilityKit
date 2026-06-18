@@ -6,10 +6,6 @@ using AbilityKit.Orleans.Contracts.Battle;
 using AbilityKit.Orleans.Contracts.Rooms;
 using AbilityKit.Orleans.Grains.Battle.Gameplay;
 using AbilityKit.Orleans.Grains.Gameplay;
-using AbilityKit.Orleans.Grains.Gameplays.Moba.Battle;
-using AbilityKit.Orleans.Grains.Gameplays.Moba.Protocol;
-using AbilityKit.Orleans.Grains.Gameplays.Shooter.Battle;
-using AbilityKit.Orleans.Grains.Rooms.Gameplay;
 using Microsoft.Extensions.Logging;
 
 namespace AbilityKit.Orleans.Grains.Battle;
@@ -45,11 +41,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
     {
         _logger = logger;
         _runtimeRegistry = new BattleRuntimeRegistry(
-            new IBattleRuntimeAdapter[]
-            {
-                new MobaBattleRuntimeAdapter(worldManager, DefaultOrleansBattleProtocolMapper.Instance),
-                new ShooterBattleRuntimeAdapter(worldManager)
-            },
+            ServerGameplayModuleCatalog.Default.CreateBattleRuntimeAdapters(worldManager),
             ServerGameplayCatalog.Default);
         _tickDriver = new BattleTickDriver<BattleInputItem>(SubmitRuntimeInputs, TickBattleWorld);
         _snapshotPublisher = new BattleSnapshotPublisher<IStateSyncObserverGrain, StateSyncPush>(
@@ -128,19 +120,19 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         if (!_initialized)
         {
             _logger.LogWarning("[BattleLogicHost] SubmitInput called but not initialized");
-            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, "RejectedNotInitialized", "Battle is not initialized."));
+            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, BattleResultStatusCodes.RejectedNotInitialized, "Battle is not initialized."));
         }
 
         var currentFrame = _battleHostState.Frame;
         if (worldId != 0 && worldId != _worldId)
         {
             _logger.LogWarning("[BattleLogicHost] Input world mismatch. Expected: {ExpectedWorldId}, Actual: {ActualWorldId}", _worldId, worldId);
-            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, "RejectedWorldMismatch", "Input world does not match battle world."));
+            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, BattleResultStatusCodes.RejectedWorldMismatch, "Input world does not match battle world."));
         }
 
         if (input == null)
         {
-            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, "RejectedNullInput", "Input is required."));
+            return Task.FromResult(CreateInputSubmitResult(false, frame, frame, BattleResultStatusCodes.RejectedNullInput, "Input is required."));
         }
 
         var schedule = BattleInputFrameScheduler.Schedule(
@@ -162,7 +154,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
         if (!_inputBuffer.Enqueue(schedule.AcceptedFrame, input))
         {
             _logger.LogWarning("[BattleLogicHost] Input rejected by host input buffer. Frame: {Frame}, PlayerId: {PlayerId}", schedule.AcceptedFrame, input.PlayerId);
-            return Task.FromResult(CreateInputSubmitResult(false, frame, schedule.AcceptedFrame, "RejectedByInputBuffer", "Input buffer rejected the scheduled frame."));
+            return Task.FromResult(CreateInputSubmitResult(false, frame, schedule.AcceptedFrame, BattleResultStatusCodes.RejectedByInputBuffer, "Input buffer rejected the scheduled frame."));
         }
 
         _logger.LogDebug(
@@ -209,18 +201,18 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
                 false,
                 request?.Player?.PlayerId ?? 0u,
                 _battleHostState.Frame,
-                "RejectedNotInitialized",
+                BattleResultStatusCodes.RejectedNotInitialized,
                 "Battle is not initialized."));
         }
 
         if (request is null)
         {
-            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, "RejectedNullRequest", "Join request is required."));
+            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, BattleResultStatusCodes.RejectedNullRequest, "Join request is required."));
         }
 
         if (request.Player is null)
         {
-            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, "RejectedNullPlayer", "Player init info is required."));
+            return Task.FromResult(new BattlePlayerJoinResult(false, 0u, _battleHostState.Frame, BattleResultStatusCodes.RejectedNullPlayer, "Player init info is required."));
         }
 
         if (request.WorldId != 0 && request.WorldId != _worldId)
@@ -230,7 +222,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
                 false,
                 request.Player.PlayerId,
                 _battleHostState.Frame,
-                "RejectedWorldMismatch",
+                BattleResultStatusCodes.RejectedWorldMismatch,
                 "Join world does not match battle world."));
         }
 
@@ -266,13 +258,13 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
                 false,
                 request?.PlayerId ?? 0u,
                 _battleHostState.Frame,
-                "RejectedNotInitialized",
+                BattleResultStatusCodes.RejectedNotInitialized,
                 "Battle is not initialized."));
         }
 
         if (request is null)
         {
-            return Task.FromResult(new BattleBotAiMountResult(false, 0u, _battleHostState.Frame, "RejectedNullRequest", "Bot AI mount request is required."));
+            return Task.FromResult(new BattleBotAiMountResult(false, 0u, _battleHostState.Frame, BattleResultStatusCodes.RejectedNullRequest, "Bot AI mount request is required."));
         }
 
         if (request.WorldId != 0 && request.WorldId != _worldId)
@@ -282,7 +274,7 @@ public sealed class BattleLogicHostGrain : Grain, IBattleLogicHostGrain
                 false,
                 request.PlayerId,
                 _battleHostState.Frame,
-                "RejectedWorldMismatch",
+                BattleResultStatusCodes.RejectedWorldMismatch,
                 "Bot AI mount world does not match battle world."));
         }
 

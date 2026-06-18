@@ -111,6 +111,7 @@ namespace AbilityKit.Triggering.Validation
                 new CrossScopeCycleValidator<TCtx>(),
                 new ReferenceValidator<TCtx>(),
                 new ActionCallPlanValidator<TCtx>(),
+                new ExecutionRootValidator<TCtx>(),
                 new UgcLimitsValidator<TCtx>(
                     maxNestingDepth: 50,
                     maxNodeCount: 500,
@@ -135,6 +136,7 @@ namespace AbilityKit.Triggering.Validation
                 new SelfTriggerValidator<TCtx>(eventMapper),
                 new ReferenceValidator<TCtx>(),
                 new ActionCallPlanValidator<TCtx>(),
+                new ExecutionRootValidator<TCtx>(),
                 new UgcLimitsValidator<TCtx>(
                     maxNestingDepth: maxNestingDepth,
                     maxNodeCount: maxNodeCount,
@@ -154,7 +156,8 @@ namespace AbilityKit.Triggering.Validation
             {
                 new CycleDetectorValidator<TCtx>(),
                 new ReferenceValidator<TCtx>(),
-                new ActionCallPlanValidator<TCtx>()
+                new ActionCallPlanValidator<TCtx>(),
+                new ExecutionRootValidator<TCtx>()
             }, stopOnFirstCriticalError: true);
         }
 

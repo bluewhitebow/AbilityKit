@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
@@ -10,8 +10,19 @@ using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Trace;
 
-namespace AbilityKit.Demo.Moba.Services
-{
+using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Services.Buffs.Core;
+using AbilityKit.Demo.Moba.Services.Buffs.Lifecycle;
+using AbilityKit.Demo.Moba.Services.Buffs.Runtime;
+using AbilityKit.Demo.Moba.Services.Buffs.Presentation;
+using AbilityKit.Demo.Moba.Services.Buffs.Tagging;
+using AbilityKit.Demo.Moba.Services.Buffs.Triggering;
+
+namespace AbilityKit.Demo.Moba.Services.Buffs {
+    /// <summary>
+    /// Buff 对外入口服务：负责把外部 apply/remove 请求收敛成命令队列，并交给生命周期执行器统一处理。
+    /// 这里不直接改运行时细节，避免入口层和生命周期层职责交叉。
+    /// </summary>
     [WorldService(typeof(MobaBuffService))]
     public sealed class MobaBuffService : IWorldInitializable
     {
@@ -68,6 +79,9 @@ namespace AbilityKit.Demo.Moba.Services
             return ApplyBuffImmediate(targetActorId, buffId, sourceActorId, durationOverrideMs, default(BuffOriginContext));
         }
 
+        /// <summary>
+        /// 立即申请 Buff：先入队再主动 drain，保证和延迟命令走同一条生命周期路径。
+        /// </summary>
         public bool ApplyBuffImmediate(int targetActorId, int buffId, int sourceActorId, int durationOverrideMs, in BuffOriginContext origin)
         {
             if (!EnqueueApply(targetActorId, buffId, sourceActorId, durationOverrideMs, origin, sourceContextId: 0L, forceNewInstance: false))
@@ -154,6 +168,9 @@ namespace AbilityKit.Demo.Moba.Services
             return queued;
         }
 
+        /// <summary>
+        /// 每帧/定期对 Actor 上的 Buff 运行时做生命周期对账：同步持续行为时间、检查标签移除、触发过期清理。
+        /// </summary>
         public void ReconcileActorBuffLifecycles(global::ActorEntity target)
         {
             if (target == null || !target.hasActorId || !target.hasBuffs) return;
@@ -217,11 +234,14 @@ namespace AbilityKit.Demo.Moba.Services
             return runtime.Remaining <= 0f;
         }
 
+        /// <summary>
+        /// 消费待处理命令。执行过程中可能由效果再次申请 Buff，因此用 _draining 防止重入递归。
+        /// </summary>
         public void DrainPending(int maxCommands)
         {
             if (maxCommands <= 0) return;
 
-            // Protect against re-entrancy if drain triggers effects that call ApplyBuffImmediate again.
+            // 防止执行 Buff 效果时再次调用 ApplyBuffImmediate 导致重入递归；新命令留到下一轮 drain。
             if (_draining > 0) return;
 
             var diagnostics = _diagnostics;
@@ -442,3 +462,4 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 }
+

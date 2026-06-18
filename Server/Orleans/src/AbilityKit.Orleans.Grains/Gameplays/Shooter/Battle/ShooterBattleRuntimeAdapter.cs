@@ -99,7 +99,7 @@ internal sealed class ShooterBattleRuntimeAdapter : IBattleRuntimeAdapter
 
             if (request?.Player == null)
             {
-                return new BattlePlayerJoinResult(false, 0u, currentFrame, "RejectedNullPlayer", "Player init info is required.");
+                return new BattlePlayerJoinResult(false, 0u, currentFrame, BattleResultStatusCodes.RejectedNullPlayer, "Player init info is required.");
             }
 
             var playerId = request.Player.PlayerId == 0 ? 1 : (int)request.Player.PlayerId;

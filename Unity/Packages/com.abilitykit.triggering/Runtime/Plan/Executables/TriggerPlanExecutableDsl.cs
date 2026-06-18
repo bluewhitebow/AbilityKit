@@ -134,5 +134,27 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public static InvertTriggerPlanExecutable Not(ITriggerPlanExecutable child, ITriggerPlanCondition condition = null, float weight = 1f)
             => Invert(child, condition, weight);
+
+        public static ScheduledTriggerPlanExecutable Scheduled(
+            ITriggerPlanExecutable child,
+            EScheduleMode scheduleMode,
+            float intervalMs = 0f,
+            int maxExecutions = -1,
+            bool canBeInterrupted = true,
+            ITriggerPlanCondition condition = null,
+            float weight = 1f)
+            => new ScheduledTriggerPlanExecutable(child, scheduleMode, intervalMs, maxExecutions, canBeInterrupted, condition, weight);
+
+        public static ScheduledTriggerPlanExecutable Timed(ITriggerPlanExecutable child, float delayMs, ITriggerPlanCondition condition = null, float weight = 1f)
+            => Scheduled(child, EScheduleMode.Timed, delayMs, 1, true, condition, weight);
+
+        public static ScheduledTriggerPlanExecutable Periodic(ITriggerPlanExecutable child, float intervalMs, int maxExecutions = -1, bool canBeInterrupted = true, ITriggerPlanCondition condition = null, float weight = 1f)
+            => Scheduled(child, EScheduleMode.Periodic, intervalMs, maxExecutions, canBeInterrupted, condition, weight);
+
+        public static ScheduledTriggerPlanExecutable Continuous(ITriggerPlanExecutable child, float intervalMs = 0f, int maxExecutions = -1, bool canBeInterrupted = true, ITriggerPlanCondition condition = null, float weight = 1f)
+            => Scheduled(child, EScheduleMode.Continuous, intervalMs, maxExecutions, canBeInterrupted, condition, weight);
+
+        public static ScheduledTriggerPlanExecutable External(ITriggerPlanExecutable child, ITriggerPlanCondition condition = null, float weight = 1f)
+            => Scheduled(child, EScheduleMode.External, 0f, -1, true, condition, weight);
     }
 }

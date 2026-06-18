@@ -15,6 +15,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
         private readonly IShooterEntityManager _entities;
         private readonly ISveltoWorldContext _context;
         private readonly int[] _waveSpawned = new int[3];
+        private readonly ShooterSpatialTargetIndex _targetIndex = new();
         private int _nextEnemyId = FirstEnemyEntityId;
 
         public ShooterEnemyWaveBattleSystem(IShooterBattleServiceResolver services)
@@ -114,6 +115,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 return;
             }
 
+            _targetIndex.Rebuild(_entities, _state.CurrentFrame);
             var (transforms, healths, ids, count) = _context.EntitiesDB.QueryEntities<ShooterSveltoTransformComponent, ShooterSveltoHealthComponent>(ShooterSveltoGroups.GameplayTargets);
             for (var i = 0; i < count; i++)
             {
@@ -141,27 +143,12 @@ namespace AbilityKit.Demo.Shooter.Runtime
         private bool TryFindNearestAlivePlayer(in ShooterSveltoTransformComponent enemy, out ShooterSveltoPlayerComponent nearestPlayer)
         {
             nearestPlayer = default;
-            var bestDistance = float.MaxValue;
-            foreach (var playerId in _entities.PlayerIds)
+            if (!_targetIndex.TryFindNearestTarget(enemy.X, enemy.Y, selfPlayerId: 0, out var targetPlayerId, out _, out _, out _))
             {
-                if (!_entities.TryGetPlayer(playerId, out var player) || !player.Alive)
-                {
-                    continue;
-                }
-
-                var dx = player.X - enemy.X;
-                var dy = player.Y - enemy.Y;
-                var distance = dx * dx + dy * dy;
-                if (distance >= bestDistance)
-                {
-                    continue;
-                }
-
-                bestDistance = distance;
-                nearestPlayer = player;
+                return false;
             }
 
-            return bestDistance < float.MaxValue;
+            return _entities.TryGetPlayer(targetPlayerId, out nearestPlayer) && nearestPlayer.Alive;
         }
 
         private int CountAliveEnemies()

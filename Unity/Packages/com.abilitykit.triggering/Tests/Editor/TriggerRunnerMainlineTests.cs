@@ -12,6 +12,7 @@ using AbilityKit.Triggering.Runtime.RuleScheduler;
 using AbilityKit.Triggering.Runtime.Schedule;
 using AbilityKit.Triggering.Runtime.Schedule.Behavior;
 using AbilityKit.Triggering.Runtime.Schedule.Data;
+using AbilityKit.Triggering.Validation;
 using NUnit.Framework;
 
 namespace AbilityKit.Triggering.Tests
@@ -170,6 +171,49 @@ namespace AbilityKit.Triggering.Tests
         }
 
         [Test]
+        public void ScheduledPlannedTrigger_ImmediateAction_UsesLatestContextAtExecutionTime()
+        {
+            var bus = new EventBus();
+            var actions = new ActionRegistry();
+            var schedulerManager = new ActionSchedulerManager();
+            var contextSource = new MutableContextSource { Current = new TestContext(1) };
+            var observedContextValues = new List<int>();
+            var actionId = new ActionId(StableStringId.Get("test:trigger_runner:immediate_latest_context"));
+
+            actions.Register<NamedAction0<Ping, object, TestContext>>(
+                actionId,
+                (triggerArgs, actionArgs, ctx) => observedContextValues.Add(ctx.Context.Value),
+                isDeterministic: true);
+
+            var runner = new TriggerRunner<TestContext>(
+                bus,
+                new FunctionRegistry(),
+                actions,
+                contextSource: contextSource,
+                actionSchedulerManager: schedulerManager);
+
+            var key = new EventKey<Ping>(StableStringId.Get("test:trigger_runner:immediate_latest_context_event"));
+            var call = new ActionCallPlan(
+                actionId,
+                0,
+                default,
+                default,
+                null,
+                EActionScheduleMode.Immediate,
+                0f,
+                -1,
+                true,
+                EActionExecutionPolicy.Immediate);
+            var plan = new TriggerPlan<Ping>(phase: 0, priority: 0, triggerId: 1003, actions: new[] { call });
+
+            runner.RegisterPlan<Ping, TestContext>(key, in plan);
+            contextSource.Current = new TestContext(7);
+            bus.Publish(key, new Ping());
+
+            Assert.That(observedContextValues, Is.EqualTo(new[] { 7 }));
+        }
+
+        [Test]
         public void ScheduledPlannedTrigger_PeriodicAction_UsesScheduleSubPlanForIntervalsAndMaxExecutions()
         {
             var bus = new EventBus();
@@ -274,6 +318,67 @@ namespace AbilityKit.Triggering.Tests
             Assert.That(handle.DriverId, Is.EqualTo("custom:test"));
             Assert.That(customDriver.ScheduledCount, Is.EqualTo(1));
             Assert.That(defaultDriver.FindByGroup("custom rule"), Is.Empty);
+        }
+
+        [Test]
+        public void RuleScheduler_InvalidEveryPlan_ReportsValidationError()
+        {
+            var plan = RuleSchedulePlan.Every(0f, groupId: "rule:invalid");
+            var result = RuleSchedulePlanValidator.Validate(in plan);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Errors, Has.Some.Matches<ValidationIssue>(issue => issue.Code == ValidationErrorCodes.INVALID_RULE_SCHEDULE));
+        }
+
+        [Test]
+        public void RuleScheduler_PauseAndResume_PreservesElapsedTime()
+        {
+            var driver = new DefaultRuleSchedulerDriver();
+            var executed = 0;
+            var handle = driver.Schedule(
+                RuleSchedulePlan.Every(10f, groupId: "rule:pause"),
+                new DelegateRuleScheduleEffect(_ => executed++));
+
+            driver.Update(5f);
+            Assert.That(driver.Pause(handle), Is.True);
+            driver.Update(20f);
+            Assert.That(driver.Resume(handle), Is.True);
+            driver.Update(5f);
+            driver.Update(5f);
+
+            Assert.That(executed, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RuleScheduler_CancelGroup_CancelsOnlyActiveMatchingGroup()
+        {
+            var driver = new DefaultRuleSchedulerDriver();
+            var cancelledGroupExecuted = 0;
+            var otherGroupExecuted = 0;
+            var first = driver.Schedule(
+                RuleSchedulePlan.Every(10f, groupId: "rule:cancel_group", subjectId: "target:1"),
+                new DelegateRuleScheduleEffect(_ => cancelledGroupExecuted++));
+            var second = driver.Schedule(
+                RuleSchedulePlan.After(20f, groupId: "rule:cancel_group", subjectId: "target:2"),
+                new DelegateRuleScheduleEffect(_ => cancelledGroupExecuted++));
+            var other = driver.Schedule(
+                RuleSchedulePlan.Every(10f, groupId: "rule:other_group", subjectId: "target:3"),
+                new DelegateRuleScheduleEffect(_ => otherGroupExecuted++));
+
+            Assert.That(driver.CancelGroup("rule:cancel_group"), Is.EqualTo(2));
+            Assert.That(driver.TryGet(first, out var firstSnapshot), Is.True);
+            Assert.That(driver.TryGet(second, out var secondSnapshot), Is.True);
+            Assert.That(firstSnapshot.State, Is.EqualTo(ERuleScheduleState.Cancelled));
+            Assert.That(secondSnapshot.State, Is.EqualTo(ERuleScheduleState.Cancelled));
+
+            driver.Update(20f);
+
+            Assert.That(cancelledGroupExecuted, Is.EqualTo(0));
+            Assert.That(otherGroupExecuted, Is.EqualTo(1));
+            Assert.That(driver.TryGet(first, out _), Is.False);
+            Assert.That(driver.TryGet(second, out _), Is.False);
+            Assert.That(driver.TryGet(other, out var otherSnapshot), Is.True);
+            Assert.That(otherSnapshot.State, Is.Not.EqualTo(ERuleScheduleState.Cancelled));
         }
 
         [Test]

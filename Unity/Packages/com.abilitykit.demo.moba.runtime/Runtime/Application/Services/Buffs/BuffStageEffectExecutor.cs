@@ -3,8 +3,16 @@ using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Components;
 using AbilityKit.Trace;
 
-namespace AbilityKit.Demo.Moba.Services
-{
+using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Services.Buffs.Core;
+using AbilityKit.Demo.Moba.Services.Buffs.Runtime;
+using AbilityKit.Demo.Moba.Services.Buffs.Presentation;
+using AbilityKit.Demo.Moba.Services.Buffs.Triggering;
+
+namespace AbilityKit.Demo.Moba.Services.Buffs {
+    /// <summary>
+    /// Buff 阶段效果执行器：把 add/remove/interval 等阶段配置的 triggerId 转换成效果执行请求。
+    /// </summary>
     internal sealed class BuffStageEffectExecutor
     {
         private readonly MobaEffectExecutionService _effects;
@@ -14,6 +22,9 @@ namespace AbilityKit.Demo.Moba.Services
             _effects = effects;
         }
 
+        /// <summary>
+        /// 执行某个 Buff 阶段下的全部触发器。执行前会冻结来源快照，保证移除后仍能正确溯源。
+        /// </summary>
         public void Execute(IReadOnlyList<int> triggerIds, int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime, TraceLifecycleReason removeReason = TraceLifecycleReason.None, float durationSeconds = 0f)
         {
             if (_effects == null) return;
@@ -48,6 +59,9 @@ namespace AbilityKit.Demo.Moba.Services
             return true;
         }
 
+        /// <summary>
+        /// 捕获可持久化来源。移除阶段 runtime 可能马上被清理，因此效果 payload 不能只依赖活对象引用。
+        /// </summary>
         private static MobaPersistentContextSourceSnapshot CapturePersistentSource(int buffId, int sourceActorId, int targetActorId, long sourceContextId, string stage, BuffRuntime runtime)
         {
             var traceKind = BuffTriggerContext.ResolveTraceKind(stage);
@@ -128,6 +142,9 @@ namespace AbilityKit.Demo.Moba.Services
         bool TryGetBuffRuntime(out BuffRuntime runtime);
     }
 
+    /// <summary>
+    /// Buff 触发器上下文：同时提供 Actor、trace、runtime、技能运行时和持久来源视图。
+    /// </summary>
     internal sealed class BuffTriggerContext : IBuffTriggerContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaTriggerRuntimeContext<BuffRuntime>, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaTriggerStageSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
         public int TriggerId { get; set; }
@@ -315,3 +332,4 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 }
+

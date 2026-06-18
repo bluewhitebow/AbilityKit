@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using AbilityKit.Protocol.Shooter;
@@ -11,6 +13,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
     {
         private readonly ShooterBattleState _state;
         private readonly IShooterEntityManager _entities;
+        private readonly ShooterSpatialTargetIndex _targetIndex = new();
         private readonly Dictionary<int, ShooterBotAiController> _controllers = new Dictionary<int, ShooterBotAiController>();
 
         public ShooterBotAiSystem(ShooterBattleState state, IShooterEntityManager entities)
@@ -29,7 +32,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             }
 
             var config = ShooterBotAiProfileCatalog.Resolve(options.ProfileId);
-            _controllers[options.PlayerId] = ShooterBotAiController.Create(options.PlayerId, _state, _entities, config);
+            _controllers[options.PlayerId] = ShooterBotAiController.Create(options.PlayerId, _state, _entities, _targetIndex, config);
             return true;
         }
 
@@ -50,6 +53,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
                 return;
             }
 
+            _targetIndex.Rebuild(_entities, _state.CurrentFrame);
+
             foreach (var kv in _controllers)
             {
                 var controller = kv.Value;
@@ -69,16 +74,18 @@ namespace AbilityKit.Demo.Shooter.Runtime
     {
         private readonly ShooterBattleState _state;
         private readonly IShooterEntityManager _entities;
+        private readonly ShooterSpatialTargetIndex _targetIndex;
         private readonly ShooterBotAiConfig _config;
         private readonly StateMachine<string> _fsm;
         private float _deltaTime;
         private ShooterBotAiBlackboard _blackboard;
 
-        private ShooterBotAiController(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterBotAiConfig config)
+        private ShooterBotAiController(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterSpatialTargetIndex targetIndex, ShooterBotAiConfig config)
         {
             PlayerId = playerId;
             _state = state;
             _entities = entities;
+            _targetIndex = targetIndex;
             _config = config;
             _blackboard = new ShooterBotAiBlackboard(playerId, config);
             _fsm = ShooterBotAiRuntimeBuilder.Build(this, _blackboard, config);
@@ -92,9 +99,9 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
         public float UnscaledDeltaTime => _deltaTime;
 
-        public static ShooterBotAiController Create(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterBotAiConfig config)
+        public static ShooterBotAiController Create(int playerId, ShooterBattleState state, IShooterEntityManager entities, ShooterSpatialTargetIndex targetIndex, ShooterBotAiConfig config)
         {
-            return new ShooterBotAiController(playerId, state, entities, config ?? ShooterBotAiProfileCatalog.SimpleBattle);
+            return new ShooterBotAiController(playerId, state, entities, targetIndex, config ?? ShooterBotAiProfileCatalog.SimpleBattle);
         }
 
         public void Tick(float deltaTime)
@@ -120,29 +127,303 @@ namespace AbilityKit.Demo.Shooter.Runtime
             _blackboard.SelfX = self.X;
             _blackboard.SelfY = self.Y;
 
-            foreach (var id in _entities.PlayerIds)
+            if (_targetIndex.TryFindNearestTarget(self.X, self.Y, PlayerId, out var targetPlayerId, out var targetX, out var targetY, out var targetDistanceSq))
             {
-                if (id == PlayerId || !_entities.TryGetPlayer(id, out var candidate) || !candidate.Alive)
-                {
-                    continue;
-                }
-
-                var dx = candidate.X - self.X;
-                var dy = candidate.Y - self.Y;
-                var distanceSq = dx * dx + dy * dy;
-                if (distanceSq >= _blackboard.TargetDistance * _blackboard.TargetDistance)
-                {
-                    continue;
-                }
-
                 _blackboard.HasTarget = true;
-                _blackboard.TargetPlayerId = candidate.PlayerId;
-                _blackboard.TargetX = candidate.X;
-                _blackboard.TargetY = candidate.Y;
-                _blackboard.TargetDistance = MathF.Sqrt(distanceSq);
+                _blackboard.TargetPlayerId = targetPlayerId;
+                _blackboard.TargetX = targetX;
+                _blackboard.TargetY = targetY;
+                _blackboard.TargetDistance = MathF.Sqrt(targetDistanceSq);
             }
 
             _blackboard.InAttackRange = _blackboard.HasTarget && _blackboard.TargetDistance <= _config.AttackRange;
+        }
+    }
+
+    internal sealed class ShooterSpatialTargetIndex
+    {
+        private const float CellSize = 6f;
+        private const int MaxSearchRadius = 4;
+
+        private readonly Dictionary<int, ShooterSpatialTargetCell> _cells = new();
+        private readonly Dictionary<int, ShooterSpatialTargetRecord> _records = new();
+        private readonly List<int> _candidateBuffer = new(32);
+        private readonly SpatialSearchRing _searchRing = new(MaxSearchRadius);
+        private int _lastRebuildFrame = -1;
+
+        public void Rebuild(IShooterEntityManager entities, int frame)
+        {
+            if (_lastRebuildFrame == frame)
+            {
+                return;
+            }
+
+            _lastRebuildFrame = frame;
+            _cells.Clear();
+            _records.Clear();
+
+            foreach (var playerId in entities.PlayerIds)
+            {
+                if (!entities.TryGetPlayer(playerId, out var player) || !player.Alive)
+                {
+                    continue;
+                }
+
+                var record = new ShooterSpatialTargetRecord(player.PlayerId, player.X, player.Y);
+                _records[player.PlayerId] = record;
+                var cellKey = ComputeCellKey(player.X, player.Y);
+                if (!_cells.TryGetValue(cellKey, out var cell))
+                {
+                    cell = new ShooterSpatialTargetCell();
+                    _cells[cellKey] = cell;
+                }
+
+                cell.Add(player.PlayerId);
+            }
+        }
+
+        public bool TryFindNearestTarget(float selfX, float selfY, int selfPlayerId, out int targetPlayerId, out float targetX, out float targetY, out float targetDistanceSq)
+        {
+            targetPlayerId = 0;
+            targetX = 0f;
+            targetY = 0f;
+            targetDistanceSq = float.MaxValue;
+
+            if (_records.Count == 0)
+            {
+                return false;
+            }
+
+            var cellX = FloorToInt(selfX / CellSize);
+            var cellY = FloorToInt(selfY / CellSize);
+            var bestDistanceSq = float.MaxValue;
+            var maxRadius = _searchRing.MaxRadius;
+
+            for (var radius = 0; radius <= maxRadius; radius++)
+            {
+                _candidateBuffer.Clear();
+                _searchRing.Collect(_cells, cellX, cellY, radius, _candidateBuffer);
+                if (TryFindBestCandidate(selfX, selfY, selfPlayerId, _candidateBuffer, ref targetPlayerId, ref targetX, ref targetY, ref bestDistanceSq))
+                {
+                    targetDistanceSq = bestDistanceSq;
+                    return true;
+                }
+            }
+
+            foreach (var kv in _records)
+            {
+                if (kv.Value.PlayerId == selfPlayerId)
+                {
+                    continue;
+                }
+
+                var candidate = kv.Value;
+                var dx = candidate.X - selfX;
+                var dy = candidate.Y - selfY;
+                var distanceSq = dx * dx + dy * dy;
+                if (distanceSq >= bestDistanceSq)
+                {
+                    continue;
+                }
+
+                bestDistanceSq = distanceSq;
+                targetPlayerId = candidate.PlayerId;
+                targetX = candidate.X;
+                targetY = candidate.Y;
+            }
+
+            targetDistanceSq = bestDistanceSq;
+            return targetPlayerId != 0;
+        }
+
+        private bool TryFindBestCandidate(
+            float selfX,
+            float selfY,
+            int selfPlayerId,
+            List<int> candidateIds,
+            ref int targetPlayerId,
+            ref float targetX,
+            ref float targetY,
+            ref float bestDistanceSq)
+        {
+            var found = false;
+            for (var i = 0; i < candidateIds.Count; i++)
+            {
+                var candidateId = candidateIds[i];
+                if (candidateId == selfPlayerId || !_records.TryGetValue(candidateId, out var candidate))
+                {
+                    continue;
+                }
+
+                var dx = candidate.X - selfX;
+                var dy = candidate.Y - selfY;
+                var distanceSq = dx * dx + dy * dy;
+                if (distanceSq >= bestDistanceSq)
+                {
+                    continue;
+                }
+
+                bestDistanceSq = distanceSq;
+                targetPlayerId = candidate.PlayerId;
+                targetX = candidate.X;
+                targetY = candidate.Y;
+                found = true;
+            }
+
+            return found;
+        }
+
+        private static int ComputeCellKey(float x, float y)
+        {
+            var cellX = FloorToInt(x / CellSize);
+            var cellY = FloorToInt(y / CellSize);
+            return CombineCellKey(cellX, cellY);
+        }
+
+        private static int CombineCellKey(int cellX, int cellY)
+        {
+            unchecked
+            {
+                return (cellX * 73856093) ^ (cellY * 19349663);
+            }
+        }
+
+        private static int FloorToInt(float value)
+        {
+            return value >= 0f ? (int)value : (int)MathF.Floor(value);
+        }
+
+        private sealed class ShooterSpatialTargetCell
+        {
+            public int Count;
+            public int Id0;
+            public int Id1;
+            public int Id2;
+            public int Id3;
+            public int Id4;
+            public int Id5;
+            public int Id6;
+            public int Id7;
+            public List<int>? Overflow;
+
+            public void Add(int playerId)
+            {
+                switch (Count)
+                {
+                    case 0: Id0 = playerId; break;
+                    case 1: Id1 = playerId; break;
+                    case 2: Id2 = playerId; break;
+                    case 3: Id3 = playerId; break;
+                    case 4: Id4 = playerId; break;
+                    case 5: Id5 = playerId; break;
+                    case 6: Id6 = playerId; break;
+                    case 7: Id7 = playerId; break;
+                    default:
+                        Overflow ??= new List<int>(8);
+                        Overflow.Add(playerId);
+                        Count++;
+                        return;
+                }
+
+                Count++;
+            }
+
+            public void WriteTo(List<int> target)
+            {
+                if (Count > 0) target.Add(Id0);
+                if (Count > 1) target.Add(Id1);
+                if (Count > 2) target.Add(Id2);
+                if (Count > 3) target.Add(Id3);
+                if (Count > 4) target.Add(Id4);
+                if (Count > 5) target.Add(Id5);
+                if (Count > 6) target.Add(Id6);
+                if (Count > 7) target.Add(Id7);
+                if (Overflow != null)
+                {
+                    target.AddRange(Overflow);
+                }
+            }
+        }
+
+        private sealed class SpatialSearchRing
+        {
+            private readonly int _maxRadius;
+            private readonly List<SearchLayer> _layers = new();
+
+            public SpatialSearchRing(int maxRadius)
+            {
+                _maxRadius = maxRadius < 0 ? 0 : maxRadius;
+                BuildLayers();
+            }
+
+            public int MaxRadius => _maxRadius;
+
+            public void Collect(Dictionary<int, ShooterSpatialTargetCell> cells, int cellX, int cellY, int radius, List<int> target)
+            {
+                for (var i = 0; i < _layers.Count; i++)
+                {
+                    var layer = _layers[i];
+                    if (layer.Radius > radius)
+                    {
+                        return;
+                    }
+
+                    if (!cells.TryGetValue(CombineCellKey(cellX + layer.Dx, cellY + layer.Dy), out var cell))
+                    {
+                        continue;
+                    }
+
+                    cell.WriteTo(target);
+                }
+            }
+
+            private void BuildLayers()
+            {
+                _layers.Clear();
+                for (var radius = 0; radius <= _maxRadius; radius++)
+                {
+                    for (var y = -radius; y <= radius; y++)
+                    {
+                        for (var x = -radius; x <= radius; x++)
+                        {
+                            if (radius > 0 && Math.Max(Math.Abs(x), Math.Abs(y)) != radius)
+                            {
+                                continue;
+                            }
+
+                            _layers.Add(new SearchLayer(x, y, radius));
+                        }
+                    }
+                }
+            }
+
+            private readonly struct SearchLayer
+            {
+                public SearchLayer(int dx, int dy, int radius)
+                {
+                    Dx = dx;
+                    Dy = dy;
+                    Radius = radius;
+                }
+
+                public int Dx { get; }
+                public int Dy { get; }
+                public int Radius { get; }
+            }
+        }
+
+        private readonly struct ShooterSpatialTargetRecord
+        {
+            public ShooterSpatialTargetRecord(int playerId, float x, float y)
+            {
+                PlayerId = playerId;
+                X = x;
+                Y = y;
+            }
+
+            public int PlayerId { get; }
+            public float X { get; }
+            public float Y { get; }
         }
     }
 
@@ -399,8 +680,8 @@ namespace AbilityKit.Demo.Shooter.Runtime
             Id = string.IsNullOrWhiteSpace(id) ? ShooterBotAiProfileIds.SimpleBattle : id;
             StartState = string.IsNullOrWhiteSpace(startState) ? ShooterBotAiStateIds.Wander : startState;
             AttackRange = attackRange <= 0f ? 5.5f : attackRange;
-            States = states == null || states.Count == 0 ? ShooterBotAiDefaults.CreateStates() : states;
-            Transitions = transitions == null || transitions.Count == 0 ? ShooterBotAiDefaults.CreateTransitions() : transitions;
+            States = states == null || states.Count == 0 ? ShooterBotAiProfileCatalog.SimpleBattle.States : states;
+            Transitions = transitions == null || transitions.Count == 0 ? ShooterBotAiProfileCatalog.SimpleBattle.Transitions : transitions;
         }
 
         public string Id { get; }
@@ -439,9 +720,9 @@ namespace AbilityKit.Demo.Shooter.Runtime
             Type = string.IsNullOrWhiteSpace(type) ? ShooterBotAiActionTypes.Idle : type;
             MoveScale = moveScale;
             StrafeScale = strafeScale;
-            PhaseScale = phaseScale <= 0f ? 0.05f : phaseScale;
-            PhaseOffset = phaseOffset == 0 ? 1 : phaseOffset;
-            FireInterval = fireInterval < 1 ? 1 : fireInterval;
+            PhaseScale = phaseScale;
+            PhaseOffset = phaseOffset;
+            FireInterval = fireInterval;
         }
 
         public string Type { get; }
@@ -466,9 +747,9 @@ namespace AbilityKit.Demo.Shooter.Runtime
     {
         public ShooterBotAiTransitionConfig(string from, string to, string condition)
         {
-            From = from ?? string.Empty;
-            To = to ?? string.Empty;
-            Condition = condition ?? string.Empty;
+            From = string.IsNullOrWhiteSpace(from) ? ShooterBotAiStateIds.Wander : from;
+            To = string.IsNullOrWhiteSpace(to) ? ShooterBotAiStateIds.Wander : to;
+            Condition = string.IsNullOrWhiteSpace(condition) ? ShooterBotAiConditions.NoTarget : condition;
         }
 
         public string From { get; }
@@ -536,7 +817,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             var states = new List<ShooterBotAiStateConfig>();
             if (States != null)
             {
-                for (int i = 0; i < States.Count; i++)
+                for (var i = 0; i < States.Count; i++)
                 {
                     states.Add(States[i].ToConfig());
                 }
@@ -545,7 +826,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             var transitions = new List<ShooterBotAiTransitionConfig>();
             if (Transitions != null)
             {
-                for (int i = 0; i < Transitions.Count; i++)
+                for (var i = 0; i < Transitions.Count; i++)
                 {
                     transitions.Add(Transitions[i].ToConfig());
                 }
@@ -571,7 +852,7 @@ namespace AbilityKit.Demo.Shooter.Runtime
             var actions = new List<ShooterBotAiActionConfig>();
             if (Actions != null)
             {
-                for (int i = 0; i < Actions.Count; i++)
+                for (var i = 0; i < Actions.Count; i++)
                 {
                     actions.Add(Actions[i].ToConfig());
                 }
@@ -626,69 +907,42 @@ namespace AbilityKit.Demo.Shooter.Runtime
 
     internal static class ShooterBotAiJsonCatalog
     {
-        public const string SimpleBattleJson = @"
-{
-  ""id"": ""simple-battle"",
-  ""startState"": ""Wander"",
-  ""attackRange"": 5.5,
-  ""states"": [
-    {
-      ""id"": ""Wander"",
-      ""interval"": 0.2,
-      ""actions"": [
-        { ""type"": ""wander"", ""moveScale"": 0.55, ""phaseScale"": 0.035, ""phaseOffset"": 31 }
-      ]
-    },
-    {
-      ""id"": ""Chase"",
-      ""interval"": 0.05,
-      ""actions"": [
-        { ""type"": ""chaseTarget"", ""moveScale"": 0.8 }
-      ]
-    },
-    {
-      ""id"": ""Attack"",
-      ""interval"": 0.05,
-      ""actions"": [
-        { ""type"": ""attackTarget"", ""strafeScale"": 0.35, ""phaseScale"": 0.08, ""phaseOffset"": 11, ""fireInterval"": 10 }
-      ]
-    }
-  ],
-  ""transitions"": [
-    { ""from"": ""Wander"", ""to"": ""Chase"", ""condition"": ""outOfAttackRange"" },
-    { ""from"": ""Wander"", ""to"": ""Attack"", ""condition"": ""inAttackRange"" },
-    { ""from"": ""Chase"", ""to"": ""Wander"", ""condition"": ""noTarget"" },
-    { ""from"": ""Chase"", ""to"": ""Attack"", ""condition"": ""inAttackRange"" },
-    { ""from"": ""Attack"", ""to"": ""Wander"", ""condition"": ""noTarget"" },
-    { ""from"": ""Attack"", ""to"": ""Chase"", ""condition"": ""outOfAttackRange"" }
-  ]
-}";
-    }
-
-    internal static class ShooterBotAiDefaults
-    {
-        public static IReadOnlyList<ShooterBotAiStateConfig> CreateStates()
-        {
-            return new[]
-            {
-                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Wander, 0.2f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.Wander, 0.55f, 0f, 0.035f, 31, 1) }),
-                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Chase, 0.05f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.ChaseTarget, 0.8f, 0f, 0.05f, 1, 1) }),
-                new ShooterBotAiStateConfig(ShooterBotAiStateIds.Attack, 0.05f, new[] { new ShooterBotAiActionConfig(ShooterBotAiActionTypes.AttackTarget, 0f, 0.35f, 0.08f, 11, 10) })
-            };
-        }
-
-        public static IReadOnlyList<ShooterBotAiTransitionConfig> CreateTransitions()
-        {
-            return new[]
-            {
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Wander, ShooterBotAiStateIds.Chase, ShooterBotAiConditions.OutOfAttackRange),
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Wander, ShooterBotAiStateIds.Attack, ShooterBotAiConditions.InAttackRange),
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Chase, ShooterBotAiStateIds.Wander, ShooterBotAiConditions.NoTarget),
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Chase, ShooterBotAiStateIds.Attack, ShooterBotAiConditions.InAttackRange),
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Attack, ShooterBotAiStateIds.Wander, ShooterBotAiConditions.NoTarget),
-                new ShooterBotAiTransitionConfig(ShooterBotAiStateIds.Attack, ShooterBotAiStateIds.Chase, ShooterBotAiConditions.OutOfAttackRange)
-            };
-        }
+        public const string SimpleBattleJson = "{\n" +
+            "  \"id\": \"simple-battle\",\n" +
+            "  \"startState\": \"Wander\",\n" +
+            "  \"attackRange\": 5.5,\n" +
+            "  \"states\": [\n" +
+            "    {\n" +
+            "      \"id\": \"Wander\",\n" +
+            "      \"interval\": 0.2,\n" +
+            "      \"actions\": [\n" +
+            "        { \"type\": \"wander\", \"moveScale\": 0.55, \"phaseScale\": 0.035, \"phaseOffset\": 31, \"fireInterval\": 1 }\n" +
+            "      ]\n" +
+            "    },\n" +
+            "    {\n" +
+            "      \"id\": \"Chase\",\n" +
+            "      \"interval\": 0.05,\n" +
+            "      \"actions\": [\n" +
+            "        { \"type\": \"chaseTarget\", \"moveScale\": 0.8, \"phaseScale\": 0.05, \"phaseOffset\": 1, \"fireInterval\": 1 }\n" +
+            "      ]\n" +
+            "    },\n" +
+            "    {\n" +
+            "      \"id\": \"Attack\",\n" +
+            "      \"interval\": 0.05,\n" +
+            "      \"actions\": [\n" +
+            "        { \"type\": \"attackTarget\", \"strafeScale\": 0.35, \"phaseScale\": 0.08, \"phaseOffset\": 11, \"fireInterval\": 10 }\n" +
+            "      ]\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"transitions\": [\n" +
+            "    { \"from\": \"Wander\", \"to\": \"Chase\", \"condition\": \"outOfAttackRange\" },\n" +
+            "    { \"from\": \"Wander\", \"to\": \"Attack\", \"condition\": \"inAttackRange\" },\n" +
+            "    { \"from\": \"Chase\", \"to\": \"Wander\", \"condition\": \"noTarget\" },\n" +
+            "    { \"from\": \"Chase\", \"to\": \"Attack\", \"condition\": \"inAttackRange\" },\n" +
+            "    { \"from\": \"Attack\", \"to\": \"Wander\", \"condition\": \"noTarget\" },\n" +
+            "    { \"from\": \"Attack\", \"to\": \"Chase\", \"condition\": \"outOfAttackRange\" }\n" +
+            "  ]\n" +
+            "}";
     }
 
     internal static class ShooterBotAiProfileIds

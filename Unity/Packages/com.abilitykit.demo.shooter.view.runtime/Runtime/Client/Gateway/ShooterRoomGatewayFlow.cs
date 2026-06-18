@@ -326,6 +326,7 @@ namespace AbilityKit.Demo.Shooter.View
         public readonly long ServerNowTicks;
         public readonly int TargetFrame;
         public readonly int CatchUpFrames;
+        public readonly ShooterRemoteTimeAnchorProjection RemoteTimeAnchorProjection;
         public readonly ShooterRoomGatewayEntryKind EntryKind;
         public readonly bool CanStart;
         public readonly bool Started;
@@ -377,9 +378,9 @@ namespace AbilityKit.Demo.Shooter.View
             PlayerId = playerId;
             WorldStartAnchor = worldStartAnchor;
             ServerNowTicks = serverNowTicks;
-            var catchUp = WorldStartFrameCatchUpCalculator.Calculate(worldStartAnchor.ToFrameStartAnchor(), serverNowTicks);
-            TargetFrame = catchUp.TargetFrame;
-            CatchUpFrames = catchUp.CatchUpFrames;
+            RemoteTimeAnchorProjection = ShooterTimeAnchorCoordinator.ProjectRemote(in worldStartAnchor, serverNowTicks);
+            TargetFrame = RemoteTimeAnchorProjection.TargetFrame;
+            CatchUpFrames = RemoteTimeAnchorProjection.CatchUpFrames;
             EntryKind = entryKind;
             CanStart = canStart;
             Started = started;

@@ -10,6 +10,9 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "If";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.If;
+        public ITriggerPlanCondition BranchCondition => _branchCondition;
+        public ITriggerPlanExecutable ThenBranch => _thenBranch;
+        public ITriggerPlanExecutable ElseBranch => _elseBranch;
 
         public IfTriggerPlanExecutable(
             ITriggerPlanCondition branchCondition,

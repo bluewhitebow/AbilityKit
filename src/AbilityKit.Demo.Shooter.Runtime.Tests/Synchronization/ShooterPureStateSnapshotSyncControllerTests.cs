@@ -26,6 +26,21 @@ public sealed class ShooterPureStateSnapshotSyncControllerTests
         Assert.Equal(pureState.Frame, controller.LastAppliedFrame);
         Assert.Equal(pureState.StateHash, controller.LastAppliedStateHash);
         Assert.Equal(ShooterPureStateSnapshotKinds.FullBaseline, controller.LastAppliedSnapshotKind);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.AppliedFullBaseline, controller.LastDiagnostics.LastApplyResult);
+        Assert.Equal(pureState.Frame, controller.LastDiagnostics.SourceFrame);
+        Assert.Equal(ShooterPureStateSnapshotKinds.FullBaseline, controller.LastDiagnostics.SourceSnapshotKind);
+        Assert.Equal(pureState.Entities.Length, controller.LastDiagnostics.SourceEntityCount);
+        Assert.Equal(pureState.VisibilityHints.Length, controller.LastDiagnostics.SourceVisibilityHintCount);
+        Assert.Equal(pureState.BaselineFrame, controller.LastDiagnostics.SourceBaselineFrame);
+        Assert.Equal(pureState.BaselineHash, controller.LastDiagnostics.SourceBaselineHash);
+        Assert.Equal(pureState.StateHash, controller.LastDiagnostics.SourceStateHash);
+        Assert.Equal(pureState.ServerTick, controller.LastDiagnostics.SourceServerTick);
+        Assert.Equal(pureState.Frame, controller.LastDiagnostics.AppliedFrame);
+        Assert.Equal(pureState.StateHash, controller.LastDiagnostics.AppliedStateHash);
+        Assert.False(controller.LastDiagnostics.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.None, controller.LastDiagnostics.LastResyncReason);
+        Assert.True(controller.LastDiagnostics.HasSourceSnapshot);
+        Assert.True(controller.LastDiagnostics.AppliedPresentation);
         Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.SnapshotReceived && e.Frame == pureState.Frame);
         Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotApplied && e.Frame == pureState.Frame);
         Assert.Equal(pureState.Frame, presentation.ViewModel.Frame);
@@ -63,6 +78,12 @@ public sealed class ShooterPureStateSnapshotSyncControllerTests
         Assert.Equal(ShooterPureStateSnapshotApplyResult.AppliedDelta, applied);
         Assert.False(controller.NeedsFullBaselineResync);
         Assert.Equal(ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot, stale);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.IgnoredStaleSnapshot, controller.LastDiagnostics.LastApplyResult);
+        Assert.Equal(baseline.Frame, controller.LastDiagnostics.SourceFrame);
+        Assert.Equal(delta.Frame, controller.LastDiagnostics.AppliedFrame);
+        Assert.Equal(delta.StateHash, controller.LastDiagnostics.AppliedStateHash);
+        Assert.Equal(baseline.Frame, controller.LastDiagnostics.LastIgnoredFrame);
+        Assert.False(controller.LastDiagnostics.AppliedPresentation);
         Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.SnapshotStale && e.Frame == baseline.Frame);
         Assert.Equal(baseline.Frame, controller.LastIgnoredFrame);
         Assert.Equal(delta.Frame, presentation.ViewModel.Frame);
@@ -85,6 +106,17 @@ public sealed class ShooterPureStateSnapshotSyncControllerTests
         Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, result);
         Assert.True(controller.NeedsFullBaselineResync);
         Assert.Equal(ShooterPureStateResyncReason.MissingBaseline, controller.LastResyncReason);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, controller.LastDiagnostics.LastApplyResult);
+        Assert.Equal(delta.Frame, controller.LastDiagnostics.SourceFrame);
+        Assert.Equal(ShooterPureStateSnapshotKinds.Delta, controller.LastDiagnostics.SourceSnapshotKind);
+        Assert.Equal(delta.BaselineFrame, controller.LastDiagnostics.SourceBaselineFrame);
+        Assert.Equal(delta.BaselineHash, controller.LastDiagnostics.SourceBaselineHash);
+        Assert.Equal(0, controller.LastDiagnostics.AppliedFrame);
+        Assert.True(controller.LastDiagnostics.NeedsFullBaselineResync);
+        Assert.Equal(ShooterPureStateResyncReason.MissingBaseline, controller.LastDiagnostics.LastResyncReason);
+        Assert.Equal(delta.Frame, controller.LastDiagnostics.LastResyncFrame);
+        Assert.Equal(delta.StateHash, controller.LastDiagnostics.LastResyncStateHash);
+        Assert.False(controller.LastDiagnostics.AppliedPresentation);
         Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotRequested && e.Frame == delta.Frame);
         Assert.Equal(0, presentation.ViewModel.Frame);
     }
@@ -110,6 +142,15 @@ public sealed class ShooterPureStateSnapshotSyncControllerTests
         Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, result);
         Assert.True(controller.NeedsFullBaselineResync);
         Assert.Equal(ShooterPureStateResyncReason.BaselineMismatch, controller.LastResyncReason);
+        Assert.Equal(ShooterPureStateSnapshotApplyResult.NeedsFullBaselineResync, controller.LastDiagnostics.LastApplyResult);
+        Assert.Equal(delta.Frame, controller.LastDiagnostics.SourceFrame);
+        Assert.Equal(baseline.Frame, controller.LastDiagnostics.AppliedFrame);
+        Assert.Equal(baseline.StateHash, controller.LastDiagnostics.AppliedStateHash);
+        Assert.Equal(ShooterPureStateResyncReason.BaselineMismatch, controller.LastDiagnostics.LastResyncReason);
+        Assert.Equal(delta.Frame, controller.LastDiagnostics.LastResyncFrame);
+        Assert.Equal(delta.StateHash, controller.LastDiagnostics.LastResyncStateHash);
+        Assert.True(controller.LastDiagnostics.NeedsFullBaselineResync);
+        Assert.False(controller.LastDiagnostics.AppliedPresentation);
         Assert.Contains(controller.LastHealthEvents, e => e.Kind == SyncHealthEventKind.FullSnapshotRequested && e.Frame == delta.Frame);
         Assert.Equal(baseline.Frame, presentation.ViewModel.Frame);
     }

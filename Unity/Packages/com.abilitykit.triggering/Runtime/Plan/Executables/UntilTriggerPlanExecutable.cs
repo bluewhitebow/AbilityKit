@@ -10,6 +10,9 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "Until";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Until;
+        public ITriggerPlanExecutable Child => _child;
+        public ITriggerPlanCondition UntilCondition => _untilCondition;
+        public int MaxIterations => _maxIterations;
 
         public UntilTriggerPlanExecutable(
             ITriggerPlanExecutable child,

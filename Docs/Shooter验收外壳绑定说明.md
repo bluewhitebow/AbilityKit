@@ -154,6 +154,16 @@ var result = ShooterSveltoGameplayBenchmark.Run(runner, in profile);
 - TCP Gateway 冒烟入口：[`run_shooter_smoke.ps1`](../Server/Orleans/tools/run_shooter_smoke.ps1:1)，用于验证 Orleans ShooterSmoke 项目构建、启动、建房、开始、输入、快照订阅与退出闭环。
 - 服务端 World 生命周期现在由 [`ServerBattleWorldManager`](../Server/Orleans/src/AbilityKit.Orleans.Grains/Battle/ServerBattleWorldManager.cs:1) 管理，MOBA 与 Shooter 都只是注册到同一个中立 battle world manager 中。
 
+### Unity 自动化验收
+
+Unity 侧批处理或 CI 直接调用 [`ShooterAcceptanceAutomation.RunCatalogMatrixOrThrow()`](../Unity/Packages/com.abilitykit.demo.shooter.editor/Editor/Windows/ShooterAcceptanceAutomation.cs:1) 即可执行完整验收矩阵。典型命令如下：
+
+```bash
+Unity.exe -batchmode -quit -projectPath . -executeMethod AbilityKit.Demo.Shooter.Editor.Windows.ShooterAcceptanceAutomation.RunCatalogMatrixOrThrow
+```
+
+该入口复用 [`ShooterAcceptanceLab.RunCatalogMatrix()`](../Unity/Packages/com.abilitykit.demo.shooter.view.runtime/Runtime/Client/Synchronization/ShooterAcceptanceLab.cs:791)，因此 CI 与 Unity 菜单的判定完全一致；只要矩阵里出现 `Failed` / `Unsupported` / `Degraded`，方法就会抛异常并让批处理返回非零退出状态。
+
 ## 9. 扩展新同步模式的接入点
 
 新增模式时，纯 C# 层改三处即可，Unity 端零改动：

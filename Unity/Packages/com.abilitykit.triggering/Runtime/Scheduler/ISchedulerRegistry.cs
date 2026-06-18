@@ -7,14 +7,9 @@ namespace AbilityKit.Triggering.Runtime.Scheduler
     /// 调度器注册中心接口
     /// 提供统一的调度器生命周期管理和查询能力
     ///
-    /// 使用场景：
-    /// - Buff 系统：管理所有 Buff 相关的调度器
-    /// - 子弹系统：管理所有子弹的飞行调度器
-    /// - 技能系统：管理所有技能效果的调度器
-    /// - 项目特定调度：任何需要统一管理调度器的场景
-    ///
-    /// 【框架层】此接口定义在 Runtime 层，具体项目可自行实现或扩展
+    /// 【兼容层】保留给旧调度系统；正式主线请使用 Runtime.ActionScheduler 或 Runtime.RuleScheduler。
     /// </summary>
+    [Obsolete("Runtime/Scheduler is a legacy compatibility layer. Use Runtime.ActionScheduler for TriggerPlan action scheduling or Runtime.RuleScheduler for formal rule scheduling.")]
     public interface ISchedulerRegistry
     {
         #region 属性

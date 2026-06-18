@@ -213,7 +213,8 @@ namespace AbilityKit.Triggering.Runtime.Plan.Json
                     id: record.TriggerId.ToString(),
                     source: record.EventName,
                     lineNumber: i,
-                    scopePath: "/");
+                    scopePath: "/",
+                    executionRoot: record.ExecutionRoot);
                 entries.Add(entry);
             }
 

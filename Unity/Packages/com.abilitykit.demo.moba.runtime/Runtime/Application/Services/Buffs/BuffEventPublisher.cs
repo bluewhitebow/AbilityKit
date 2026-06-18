@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AbilityKit.Demo.Moba.Config.BattleDemo.MO;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Components;
@@ -7,8 +7,16 @@ using AbilityKit.Core.Eventing;
 using AbilityKit.Demo.Moba.Events.Buff;
 using AbilityKit.Trace;
 
-namespace AbilityKit.Demo.Moba.Services
-{
+using AbilityKit.Demo.Moba.Services;
+using AbilityKit.Demo.Moba.Services.Buffs.Core;
+using AbilityKit.Demo.Moba.Services.Buffs.Runtime;
+using AbilityKit.Demo.Moba.Services.Buffs.Presentation;
+using AbilityKit.Demo.Moba.Services.Buffs.Triggering;
+
+namespace AbilityKit.Demo.Moba.Services.Buffs {
+    /// <summary>
+    /// Buff 事件发布器：把生命周期阶段转换成 Triggering EventBus 可消费的 BuffEventArgs。
+    /// </summary>
     internal sealed class BuffEventPublisher
     {
         private readonly AbilityKit.Triggering.Eventing.IEventBus _eventBus;
@@ -34,6 +42,9 @@ namespace AbilityKit.Demo.Moba.Services
             PublishStageEvent(MobaBuffTriggering.Events.Remove, buff.OnRemoveEffects, MobaBuffTriggering.Stages.Remove, buff.Id, sourceActorId, targetActorId, runtime, reason);
         }
 
+        /// <summary>
+        /// 为每个配置效果额外发布带 effectId 后缀的事件，便于触发器按具体效果订阅。
+        /// </summary>
         public void PublishPerEffect(string baseEventId, IReadOnlyList<int> effectIds, string stage, int sourceActorId, int targetActorId, BuffRuntime runtime)
         {
             if (_eventBus == null) return;
@@ -100,6 +111,9 @@ namespace AbilityKit.Demo.Moba.Services
             };
         }
 
+        /// <summary>
+        /// 同时发布强类型和 object 事件，兼容不同触发器监听方式。
+        /// </summary>
         private void PublishEvent(BuffEventArgs args)
         {
             var eid = AbilityKit.Demo.Moba.Services.TriggeringIdUtil.GetEventEid(args.EventId);
@@ -114,3 +128,4 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 }
+

@@ -8,6 +8,7 @@ namespace AbilityKit.Triggering.Runtime.Plan
 
         public override string Name => "Succeed";
         public override ETriggerPlanExecutableKind Kind => ETriggerPlanExecutableKind.Succeed;
+        public ITriggerPlanExecutable Child => _child;
 
         public SucceedTriggerPlanExecutable(ITriggerPlanExecutable child, ITriggerPlanCondition condition = null, float weight = 1f)
             : base(condition, weight)
