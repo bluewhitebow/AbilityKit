@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using AbilityKit.Triggering.Registry;
-using AbilityKit.Triggering.Variables.Numeric;
 using AbilityKit.Core.Markers;
+using AbilityKit.Triggering.Registry;
+using AbilityKit.Triggering.Runtime.Config;
+using AbilityKit.Triggering.Runtime.Context;
+using AbilityKit.Triggering.Variables.Numeric;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
@@ -120,87 +122,73 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public bool TryGetConditionTypeIdByName(string typeName, out int typeId)
             => _conditionNameToId.TryGetValue(typeName, out typeId);
 
-        public IEnumerable<ExecutableDescriptor> GetAllExecutables()
-            => _executables.Values;
+        public int Count => _executables.Count + _conditions.Count;
 
-        public IEnumerable<ConditionDescriptor> GetAllConditions()
-            => _conditions.Values;
-
-        /// <summary>
-        /// 兼容旧扩展的 Attribute 扫描入口。主线与内建类型不依赖运行时扫描。
-        /// </summary>
-        public void ScanAssemblies(params Assembly[] assemblies)
+        public void Register(Type implType)
         {
-            if (assemblies == null || assemblies.Length == 0) return;
-            MarkerScanner<ExecutableTypeIdAttribute>.Scan(assemblies, this);
-            MarkerScanner<ConditionTypeIdAttribute>.Scan(assemblies, this);
-        }
-
-        /// <summary>
-        /// 扫描旧 Runtime/Executable 所在程序集。仅为兼容旧 Attribute 扩展保留。
-        /// </summary>
-        public void ScanRuntimeExecutableAssembly()
-        {
-            ScanAssemblies(typeof(SequenceExecutable).Assembly);
-        }
-
-        /// <summary>
-        /// 通过 Attribute 注册 Executable 类型（供 MarkerAttribute.OnScanned 调用）
-        /// </summary>
-        internal void RegisterByAttribute(ExecutableTypeIdAttribute attr, Type implType)
-        {
-            if (attr == null || implType == null) return;
-            var factory = CreateExecutableFactory(implType);
-            if (factory != null)
+            if (implType == null)
             {
-                _executables[attr.TypeId] = new ExecutableDescriptor
-                {
-                    TypeId = attr.TypeId,
-                    TypeName = attr.TypeName,
-                    Metadata = new ExecutableMetadata(attr.TypeId, attr.TypeName, isComposite: attr.IsComposite),
-                    Factory = factory
-                };
-                _nameToId[attr.TypeName] = attr.TypeId;
+                throw new ArgumentNullException(nameof(implType));
             }
+
+            RegisterExecutableAttribute(implType);
+            RegisterConditionAttribute(implType);
         }
 
-        /// <summary>
-        /// 通过 Attribute 注册 Condition 类型（供 MarkerAttribute.OnScanned 调用）
-        /// </summary>
-        internal void RegisterConditionByAttribute(ConditionTypeIdAttribute attr, Type implType)
+        public void RegisterMarker(Type markerType, Type implType)
         {
-            if (attr == null || implType == null) return;
-            var factory = CreateConditionFactory(implType);
-            if (factory != null)
-            {
-                _conditions[attr.TypeId] = new ConditionDescriptor
-                {
-                    TypeId = attr.TypeId,
-                    TypeName = attr.TypeName,
-                    Factory = factory
-                };
-                _conditionNameToId[attr.TypeName] = attr.TypeId;
-            }
+            Register(implType);
         }
 
-        private Func<IExecutable> CreateExecutableFactory(Type type)
+        private void RegisterExecutableAttribute(Type implType)
         {
-            var ctor = type.GetConstructor(Type.EmptyTypes);
-            if (ctor != null)
+            if (!typeof(IExecutable).IsAssignableFrom(implType))
             {
-                return () => (IExecutable)ctor.Invoke(null);
+                return;
             }
-            return null;
+
+            var attribute = implType.GetCustomAttribute<ExecutableTypeIdAttribute>();
+            if (attribute == null)
+            {
+                return;
+            }
+
+            _executables[attribute.TypeId] = new ExecutableDescriptor
+            {
+                TypeId = attribute.TypeId,
+                TypeName = attribute.TypeName,
+                Metadata = new ExecutableMetadata(
+                    attribute.TypeId,
+                    attribute.TypeName,
+                    attribute.IsComposite,
+                    attribute.IsScheduled,
+                    attribute.DefaultDurationMs > 0f ? attribute.DefaultDurationMs : null,
+                    attribute.DefaultPeriodMs > 0f ? attribute.DefaultPeriodMs : null),
+                Factory = () => (IExecutable)Activator.CreateInstance(implType)
+            };
+            _nameToId[attribute.TypeName] = attribute.TypeId;
         }
 
-        private Func<ICondition> CreateConditionFactory(Type type)
+        private void RegisterConditionAttribute(Type implType)
         {
-            var ctor = type.GetConstructor(Type.EmptyTypes);
-            if (ctor != null)
+            if (!typeof(ICondition).IsAssignableFrom(implType))
             {
-                return () => (ICondition)ctor.Invoke(null);
+                return;
             }
-            return null;
+
+            var attribute = implType.GetCustomAttribute<ConditionTypeIdAttribute>();
+            if (attribute == null)
+            {
+                return;
+            }
+
+            _conditions[attribute.TypeId] = new ConditionDescriptor
+            {
+                TypeId = attribute.TypeId,
+                TypeName = attribute.TypeName,
+                Factory = () => (ICondition)Activator.CreateInstance(implType)
+            };
+            _conditionNameToId[attribute.TypeName] = attribute.TypeId;
         }
 
         private void RegisterBuiltin()
@@ -211,63 +199,17 @@ namespace AbilityKit.Triggering.Runtime.Executable
             Register<IfExecutable>(TypeIdRegistry.Executable.If, "If", new ExecutableMetadata(TypeIdRegistry.Executable.If, "If", isComposite: true));
             Register<IfElseExecutable>(TypeIdRegistry.Executable.IfElse, "IfElse", new ExecutableMetadata(TypeIdRegistry.Executable.IfElse, "IfElse", isComposite: true));
             Register<SwitchExecutable>(TypeIdRegistry.Executable.Switch, "Switch", new ExecutableMetadata(TypeIdRegistry.Executable.Switch, "Switch", isComposite: true));
-            Register<RandomSelectorExecutable>(TypeIdRegistry.Executable.RandomSelector, "RandomSelector", new ExecutableMetadata(TypeIdRegistry.Executable.RandomSelector, "RandomSelector", isComposite: true));
             Register<RepeatExecutable>(TypeIdRegistry.Executable.Repeat, "Repeat", new ExecutableMetadata(TypeIdRegistry.Executable.Repeat, "Repeat", isComposite: true));
             Register<UntilExecutable>(TypeIdRegistry.Executable.Until, "Until", new ExecutableMetadata(TypeIdRegistry.Executable.Until, "Until", isComposite: true));
-            Register<ActionCallExecutable>(TypeIdRegistry.Executable.ActionCall, "ActionCall", new ExecutableMetadata(TypeIdRegistry.Executable.ActionCall, "ActionCall"));
-            Register<DelayExecutable>(TypeIdRegistry.Executable.Delay, "Delay", new ExecutableMetadata(TypeIdRegistry.Executable.Delay, "Delay"));
 
-            RegisterCondition<ConstCondition>(TypeIdRegistry.Condition.Const, "Const");
+            RegisterCondition<MultiCondition>(TypeIdRegistry.Condition.Multi, "Multi");
+            RegisterCondition<NotCondition>(TypeIdRegistry.Condition.Not, "Not");
             RegisterCondition<AndCondition>(TypeIdRegistry.Condition.And, "And");
             RegisterCondition<OrCondition>(TypeIdRegistry.Condition.Or, "Or");
-            RegisterCondition<NotCondition>(TypeIdRegistry.Condition.Not, "Not");
             RegisterCondition<NumericCompareCondition>(TypeIdRegistry.Condition.NumericCompare, "NumericCompare");
             RegisterCondition<PayloadCompareCondition>(TypeIdRegistry.Condition.PayloadCompare, "PayloadCompare");
             RegisterCondition<HasTargetCondition>(TypeIdRegistry.Condition.HasTarget, "HasTarget");
-            RegisterCondition<MultiCondition>(TypeIdRegistry.Condition.Multi, "Multi");
+            RegisterCondition<ConstCondition>(TypeIdRegistry.Condition.Const, "Const");
         }
-
-        #region IMarkerRegistry 实现
-
-        private readonly List<Type> _types = new();
-        public int Count => _types.Count;
-        public IReadOnlyList<Type> Types => _types;
-
-        public void Register(Type implType)
-        {
-            if (implType == null) return;
-            if (implType.IsAbstract) return;
-            if (implType.IsInterface) return;
-            _types.Add(implType);
-        }
-
-        public void ForEach(Action<Type> action)
-        {
-            for (int i = 0; i < _types.Count; i++)
-            {
-                action(_types[i]);
-            }
-        }
-
-        public IEnumerable<Type> Where(Func<Type, bool> predicate)
-        {
-            for (int i = 0; i < _types.Count; i++)
-            {
-                if (predicate(_types[i]))
-                    yield return _types[i];
-            }
-        }
-
-        public Type Find(Func<Type, bool> predicate)
-        {
-            for (int i = 0; i < _types.Count; i++)
-            {
-                if (predicate(_types[i]))
-                    return _types[i];
-            }
-            return null;
-        }
-
-        #endregion
     }
 }

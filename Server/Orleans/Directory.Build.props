@@ -1,0 +1,10 @@
+<Project>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'AbilityKit.Server.Analyzers'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src\AbilityKit.Server.Analyzers\AbilityKit.Server.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -3,14 +3,10 @@ using AbilityKit.Core.Mathematics;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
-    public sealed class ProjectileEventArgs : IMobaActorContextProvider, IMobaTriggerInvocationContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
+    public sealed class ProjectileEventArgs : MobaTriggerInvocationContextBase, IMobaActorContextProvider, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
-        public int TriggerId { get; set; }
-        public EffectContextKind Kind => EffectContextKind.Projectile;
+        public override EffectContextKind Kind => EffectContextKind.Projectile;
         public string EventId { get; set; }
-        public int SourceActorId { get; set; }
-        public int TargetActorId { get; set; }
-        public long SourceContextId { get; set; }
         public int SourceConfigId { get; set; }
         public int Frame { get; set; }
         public object Raw { get; set; }

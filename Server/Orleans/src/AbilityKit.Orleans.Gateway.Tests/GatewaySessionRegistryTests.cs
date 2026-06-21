@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
-using AbilityKit.Orleans.Gateway.Gateway.Core;
-using AbilityKit.Orleans.Gateway.Gateway.Abstractions;
+using AbilityKit.Orleans.Gateway.Core;
+using AbilityKit.Orleans.Gateway.Abstractions;
 using Xunit;
 
 namespace AbilityKit.Orleans.Gateway.Tests;
@@ -31,6 +31,10 @@ public sealed class GatewaySessionRegistryTests
         }
 
         public long ConnectionId { get; }
+
+        public string TransportName => "TestTransport";
+
+        public bool IsConnected => true;
 
         public GatewaySessionContext Context { get; } = new(7);
 

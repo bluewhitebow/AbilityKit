@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AbilityKit.Triggering.Runtime.Context;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
@@ -14,7 +15,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         /// <summary>行为句柄信息</summary>
         public long Start(
             IScheduledExecutable executable,
-            object ctx,
+            ActionContext ctx,
             Action<long> onCompleted = null,
             Action<long, string> onInterrupted = null)
         {
@@ -26,7 +27,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         /// </summary>
         public long StartComposable(
             IComposableExecutable executable,
-            object ctx,
+            ActionContext ctx,
             Action<long> onCompleted = null,
             Action<long, string> onInterrupted = null)
         {
@@ -35,7 +36,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         private long StartInternal(
             ISimpleExecutable executable,
-            object ctx,
+            ActionContext ctx,
             Action<long> onCompleted,
             Action<long, string> onInterrupted)
         {
@@ -52,7 +53,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
             else
             {
-                // 不支持调度的行为，创建一个虚拟控制器
                 controller = NullScheduleController.Instance;
             }
 
@@ -65,7 +65,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
                 OnInterrupted = onInterrupted
             };
 
-            // 初始化 DurationDecorator
             if (executable is IComposableExecutable comp)
             {
                 InitializeDecorators(comp, ctx, handleId);
@@ -74,9 +73,8 @@ namespace AbilityKit.Triggering.Runtime.Executable
             return handleId;
         }
 
-        private void InitializeDecorators(IComposableExecutable executable, object ctx, long handleId)
+        private void InitializeDecorators(IComposableExecutable executable, ActionContext ctx, long handleId)
         {
-            // 设置 DurationDecorator 的过期回调
             if (executable is IDurationDecorator durationDeco)
             {
                 durationDeco.OnExpired += _ =>
@@ -88,7 +86,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
                 };
             }
 
-            // 递归初始化内部行为
             if (executable.Inner is IComposableExecutable innerDeco)
             {
                 InitializeDecorators(innerDeco, ctx, handleId);
@@ -103,7 +100,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
             if (entry.Controller.IsCompleted || entry.Controller.IsInterrupted)
                 return false;
 
-            // 检查 CanBeInterrupted
             if (!CanBeInterrupted(entry.Executable))
                 return false;
 
@@ -147,10 +143,8 @@ namespace AbilityKit.Triggering.Runtime.Executable
                 }
                 else
                 {
-                    // 更新调度控制器
                     entry.Controller.Update(deltaTimeMs);
 
-                    // 更新 DurationDecorator
                     if (entry.Executable is IComposableExecutable comp)
                     {
                         UpdateDecorators(comp, entry.Context, deltaTimeMs, kvp.Key);
@@ -164,13 +158,12 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        private void UpdateDecorators(IComposableExecutable executable, object ctx, float deltaTimeMs, long handleId)
+        private void UpdateDecorators(IComposableExecutable executable, ActionContext ctx, float deltaTimeMs, long handleId)
         {
             if (executable is IDurationDecorator durationDeco)
             {
                 if (durationDeco.Update(ctx, deltaTimeMs))
                 {
-                    // DurationDecorator 过期，通知控制器
                     if (_controllers.TryGetValue(handleId, out var entry))
                     {
                         entry.Controller.RequestInterrupt("Duration expired");
@@ -184,9 +177,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        /// <summary>
-        /// 获取行为的持续时间装饰器
-        /// </summary>
         public bool TryGetDurationDecorator(long handleId, out IDurationDecorator decorator)
         {
             decorator = null;
@@ -213,9 +203,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
             return false;
         }
 
-        /// <summary>
-        /// 刷新行为的持续时间
-        /// </summary>
         public bool RefreshDuration(long handleId, float additionalMs)
         {
             if (TryGetDurationDecorator(handleId, out var decorator))
@@ -250,7 +237,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         {
             public ISimpleExecutable Executable;
             public IScheduleController Controller;
-            public object Context;
+            public ActionContext Context;
             public Action<long> OnCompleted;
             public Action<long, string> OnInterrupted;
         }
@@ -261,7 +248,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
     /// </summary>
     public static class ExecutableExecutor
     {
-        public static ExecutionResult Execute(ISimpleExecutable executable, object ctx)
+        public static ExecutionResult Execute(ISimpleExecutable executable, ActionContext ctx)
         {
             if (executable == null)
                 return ExecutionResult.None;
@@ -281,7 +268,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        private static ExecutionResult ExecuteConditional(IConditionalExecutable executable, object ctx)
+        private static ExecutionResult ExecuteConditional(IConditionalExecutable executable, ActionContext ctx)
         {
             int matchedIndex = executable.EvaluateConditionIndex(ctx);
 
@@ -311,15 +298,15 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         public static ExecutionResult ExecuteAll(
             IEnumerable<ISimpleExecutable> executables,
-            object ctx)
+            ActionContext ctx)
         {
             var result = ExecutionResult.None;
 
             foreach (var executable in executables)
             {
                 if (executable == null) continue;
-                var r = Execute(executable, ctx);
-                result = result.Merge(r);
+                var execResult = Execute(executable, ctx);
+                result = result.Merge(execResult);
             }
 
             return result;

@@ -17,12 +17,12 @@ namespace AbilityKit.Demo.Moba.Services
         public MobaLogicWorldRunGateService Phase { get; }
         public MobaPlayerActorMapService PlayerActorMap { get; }
         public MobaEntityManager Entities { get; }
-        public SkillExecutor Skills { get; }
+        public SkillCastCoordinator Skills { get; }
         public IWorldResolver Services { get; }
 
         /// <summary>
         /// 创建输入命令处理上下文�?        /// </summary>
-        public MobaInputCommandContext(MobaLogicWorldRunGateService phase, MobaPlayerActorMapService playerActorMap, MobaEntityManager entities, SkillExecutor skills, IWorldResolver services)
+        public MobaInputCommandContext(MobaLogicWorldRunGateService phase, MobaPlayerActorMapService playerActorMap, MobaEntityManager entities, SkillCastCoordinator skills, IWorldResolver services)
         {
             Phase = phase;
             PlayerActorMap = playerActorMap;

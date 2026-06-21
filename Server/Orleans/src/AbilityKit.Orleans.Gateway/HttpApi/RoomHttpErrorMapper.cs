@@ -6,16 +6,16 @@ internal static class RoomHttpErrorMapper
 {
     public static IResult ToResult(Exception exception)
     {
-        var error = ToError(exception);
-        return Results.Json(
-            new RoomHttpErrorResponse(error.Code, error.Message),
-            statusCode: error.HttpStatusCode);
+        var error = RoomOperationErrorClassifier.ToError(exception);
+        return ToResult(error.Code, error.Message, error.HttpStatusCode, error.GatewayStatusCode);
     }
 
-    private static RoomOperationError ToError(Exception exception)
+    public static IResult ToResult(string code, string message, int httpStatusCode, int gatewayStatusCode)
     {
-        return RoomOperationErrorClassifier.ToError(exception);
+        return Results.Json(
+            new RoomHttpErrorResponse(code, message, gatewayStatusCode),
+            statusCode: httpStatusCode);
     }
 
-    private sealed record RoomHttpErrorResponse(string Code, string Message);
+    private sealed record RoomHttpErrorResponse(string Code, string Message, int GatewayStatusCode);
 }

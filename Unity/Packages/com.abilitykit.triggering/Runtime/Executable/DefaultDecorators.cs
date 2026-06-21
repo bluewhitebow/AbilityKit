@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AbilityKit.Core.Continuous;
 using AbilityKit.Modifiers;
+using AbilityKit.Triggering.Runtime.Context;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
@@ -12,9 +13,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public abstract Type DecoratorType { get; }
         public virtual bool IsReady => true;
         public ISimpleExecutable Inner { get; set; }
-        public virtual bool OnBeforeExecute(object ctx) => true;
-        public virtual void OnAfterExecute(object ctx, ref ExecutionResult result) { }
-        public virtual ExecutionResult Execute(object ctx) => Inner?.Execute(ctx) ?? ExecutionResult.Success();
+        public virtual bool OnBeforeExecute(ActionContext ctx) => true;
+        public virtual void OnAfterExecute(ActionContext ctx, ref ExecutionResult result) { }
+        public virtual ExecutionResult Execute(ActionContext ctx) => Inner?.Execute(ctx) ?? ExecutionResult.Success();
     }
 
     [DecoratorImpl(typeof(IDurationDecorator))]
@@ -27,7 +28,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             DurationMs = durationMs;
         }
 
-        public override string Name => $"Duration({Inner?.Name ?? "null"})";
+        public override string Name => "Duration(" + (Inner?.Name ?? "null") + ")";
         public override ExecutableMetadata Metadata => new(3000, "Duration");
         public override Type DecoratorType => typeof(IDurationDecorator);
         public float DurationMs { get; set; } = -1;
@@ -35,8 +36,8 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public bool IsExpired => false;
         public bool CanBeInterrupted { get; set; } = true;
         public bool AutoStart { get; set; } = true;
-        public event Action<object> OnExpired;
-        public bool Update(object ctx, float deltaTimeMs) => false;
+        public event Action<ActionContext> OnExpired;
+        public bool Update(ActionContext ctx, float deltaTimeMs) => false;
         public void Refresh(float additionalMs)
         {
             DurationMs += additionalMs;
@@ -59,24 +60,24 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        public override string Name => $"Tag({Inner?.Name ?? "null"})";
+        public override string Name => "Tag(" + (Inner?.Name ?? "null") + ")";
         public override ExecutableMetadata Metadata => new(3001, "Tag");
         public override Type DecoratorType => typeof(ITagDecorator);
         public ITagContainer Tags { get; set; }
         public string RequiredTags { get; set; } = string.Empty;
         public string IgnoreTags { get; set; } = string.Empty;
-        public event Action<object> OnTagChanged;
+        public event Action<ActionContext> OnTagChanged;
         public void AddTag(string tagName)
         {
             if (string.IsNullOrWhiteSpace(tagName) || _tagNames.Contains(tagName)) return;
             _tagNames.Add(tagName);
-            OnTagChanged?.Invoke(tagName);
+            OnTagChanged?.Invoke(null);
         }
 
         public void RemoveTag(string tagName)
         {
             if (!_tagNames.Remove(tagName)) return;
-            OnTagChanged?.Invoke(tagName);
+            OnTagChanged?.Invoke(null);
         }
     }
 
@@ -98,7 +99,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             AddRange(modifiers);
         }
 
-        public override string Name => $"Modifier({Inner?.Name ?? "null"}, {_modifiers.Count})";
+        public override string Name => "Modifier(" + (Inner?.Name ?? "null") + ", " + _modifiers.Count + ")";
         public override ExecutableMetadata Metadata => new(3002, "Modifier");
         public override Type DecoratorType => typeof(IModifierDecorator);
         public int SourceId { get; set; }
@@ -149,7 +150,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             StackMultiplier = stackMultiplier;
         }
 
-        public override string Name => $"Stack({Inner?.Name ?? "null"}, {Stack})";
+        public override string Name => "Stack(" + (Inner?.Name ?? "null") + ", " + Stack + ")";
         public override ExecutableMetadata Metadata => new(3003, "Stack");
         public override Type DecoratorType => typeof(IStackDecorator);
         public int Stack { get; set; } = 1;
@@ -182,7 +183,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             ParentId = parentId;
         }
 
-        public override string Name => $"Hierarchy({Inner?.Name ?? "null"})";
+        public override string Name => "Hierarchy(" + (Inner?.Name ?? "null") + ")";
         public override ExecutableMetadata Metadata => new(3004, "Hierarchy");
         public override Type DecoratorType => typeof(IHierarchyDecorator);
         public int? ParentId { get; set; }
@@ -215,16 +216,29 @@ namespace AbilityKit.Triggering.Runtime.Executable
             ContinuationId = continuationId ?? string.Empty;
         }
 
-        public override string Name => $"Continuous({Inner?.Name ?? "null"})";
+        public override string Name => "Continuous(" + (Inner?.Name ?? "null") + ")";
         public override ExecutableMetadata Metadata => new(3005, "Continuous");
         public override Type DecoratorType => typeof(IContinuousDecorator);
-        public string ContinuationId { get; private set; } = string.Empty;
+        public string ContinuationId { get; set; }
+        public bool IsActive { get; set; }
         public bool IsTerminated { get; private set; }
         public string TerminationReason { get; private set; }
-        public void OnApplied(object ctx) { }
-        public void OnTick(object ctx, float deltaTimeMs) { }
-        public void OnRemoved(object ctx) { }
-        public bool CanCoexistWith(IContinuousDecorator other) => other == null || other.ContinuationId != ContinuationId;
+        public void OnApplied(ActionContext ctx)
+        {
+            IsActive = true;
+        }
+
+        public void OnTick(ActionContext ctx, float deltaTimeMs)
+        {
+            IsActive = true;
+        }
+
+        public void OnRemoved(ActionContext ctx)
+        {
+            IsActive = false;
+        }
+
+        public bool CanCoexistWith(IContinuousDecorator other) => true;
         public void RequestTermination(string reason)
         {
             IsTerminated = true;
@@ -242,33 +256,43 @@ namespace AbilityKit.Triggering.Runtime.Executable
             CapabilityId = capabilityId;
         }
 
-        public override string Name => $"Capability({CapabilityId})";
+        public override string Name => "Capability(" + CapabilityId.FullName + ")";
         public override ExecutableMetadata Metadata => new(3006, "Capability");
         public override Type DecoratorType => typeof(ICapabilityDecorator);
         public CapabilityId CapabilityId { get; private set; }
         public ICapabilityApplier CapabilityApplier { get; set; }
         public bool IsActive { get; private set; }
         public bool IsTerminated { get; private set; }
-        public string TerminationReason { get; private set; }
-        public void OnApplied(object ctx)
+        public string DeactivationReason { get; private set; }
+
+        public void OnApplied(ActionContext ctx)
         {
             IsActive = true;
-            CapabilityApplier?.Apply(this, ctx);
+            IsTerminated = false;
+            CapabilityApplier?.Apply(null, ctx);
         }
 
-        public void OnTick(object ctx, float deltaTimeMs) { }
-        public void OnRemoved(object ctx)
+        public void OnTick(ActionContext ctx, float deltaTimeMs)
+        {
+            CapabilityApplier?.GetOrCreateContainer(ctx)?.Tick(ctx, deltaTimeMs);
+        }
+
+        public void OnRemoved(ActionContext ctx)
         {
             IsActive = false;
-            CapabilityApplier?.Remove(this, ctx);
+            CapabilityApplier?.Remove(null, ctx);
         }
 
-        public bool CanCoexistWith(ICapabilityDecorator other) => other == null || other.CapabilityId != CapabilityId;
+        public bool CanCoexistWith(ICapabilityDecorator other)
+        {
+            return other == null || other.CapabilityId != CapabilityId;
+        }
+
         public void RequestDeactivate(string reason)
         {
             IsActive = false;
             IsTerminated = true;
-            TerminationReason = reason;
+            DeactivationReason = reason;
         }
     }
 }

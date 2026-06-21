@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using AbilityKit.Triggering.Registry;
+using AbilityKit.Triggering.Runtime.Abstractions;
 using AbilityKit.Triggering.Runtime.Behavior;
 using AbilityKit.Triggering.Runtime.Behavior.Actions;
 using AbilityKit.Triggering.Runtime.Behavior.Predicates;
@@ -214,7 +214,7 @@ namespace AbilityKit.Triggering.Runtime.Factory
     }
 
     /// <summary>
-    /// 条件行为解析器接口
+    /// 条件行为解析器接�?
     /// </summary>
     public interface IConditionalBehaviorResolver
     {
@@ -222,7 +222,7 @@ namespace AbilityKit.Triggering.Runtime.Factory
     }
 
     /// <summary>
-    /// 触发器 Cue 工厂接口
+    /// 触发�?Cue 工厂接口
     /// </summary>
     public interface ITriggerCueFactory
     {

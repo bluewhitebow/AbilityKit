@@ -1,6 +1,7 @@
 using System;
 using AbilityKit.Core.Markers;
 using AbilityKit.Modifiers;
+using AbilityKit.Triggering.Runtime.Context;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
@@ -94,7 +95,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
             OnPeriodExecuted += HandlePeriodExecuted;
         }
 
-        private void HandlePeriodExecuted(object ctx)
+        private void HandlePeriodExecuted(ActionContext ctx)
         {
             if (Modifiers == null || Modifiers.Length == 0)
                 return;
@@ -118,16 +119,16 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        protected virtual object GetModifierTarget(object ctx)
+        protected virtual object GetModifierTarget(ActionContext ctx)
         {
             return ctx;
         }
 
-        protected virtual void OnModifierApplied(object ctx, float appliedValue)
+        protected virtual void OnModifierApplied(ActionContext ctx, float appliedValue)
         {
         }
 
-        protected virtual void OnModifierApplyFailed(object ctx, string error)
+        protected virtual void OnModifierApplyFailed(ActionContext ctx, string error)
         {
         }
     }

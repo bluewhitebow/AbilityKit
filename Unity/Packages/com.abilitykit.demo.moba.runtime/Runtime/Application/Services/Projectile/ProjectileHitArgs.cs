@@ -3,13 +3,9 @@ using AbilityKit.Core.Mathematics;
 
 namespace AbilityKit.Demo.Moba.Services.Projectile
 {
-    public sealed class ProjectileHitArgs : IMobaActorContextProvider, IMobaTriggerInvocationContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
+    public sealed class ProjectileHitArgs : MobaTriggerInvocationContextBase, IMobaActorContextProvider, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaOriginContextProvider, IMobaTriggerSkillRuntimeContext, IMobaTriggerExecutionSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
-        public int TriggerId { get; set; }
-        public EffectContextKind Kind => EffectContextKind.Projectile;
-        public int SourceActorId { get; set; }
-        public int TargetActorId { get; set; }
-        public long SourceContextId { get; set; }
+        public override EffectContextKind Kind => EffectContextKind.Projectile;
         public int SourceConfigId { get; set; }
         public int Frame { get; set; }
         public object Raw { get; set; }

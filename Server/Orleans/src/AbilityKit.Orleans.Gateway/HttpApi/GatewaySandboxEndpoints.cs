@@ -1,55 +1,57 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using AbilityKit.Orleans.Contracts.Automation;
+using AbilityKit.Orleans.Hosting;
+
 namespace AbilityKit.Orleans.Gateway.HttpApi;
 
-using AbilityKit.Orleans.Contracts.Automation;
-using Orleans;
-
-public static class GatewaySandboxEndpoints
+internal static class GatewaySandboxEndpoints
 {
-    public static RouteGroupBuilder MapGatewaySandboxEndpoints(this WebApplication app)
+    private static readonly string[] Gameplays =
     {
-        var group = app.MapGroup("/api")
-            .WithTags("Gameplay", "Sandbox");
+        "moba",
+        "shooter"
+    };
+
+    public static IEndpointRouteBuilder MapGatewaySandboxEndpoints(
+        this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/sandbox");
 
         group.MapGet("/gameplays", () => Results.Ok(Gameplays))
             .WithName("Gateway.ListGameplays")
             .Produces(StatusCodes.Status200OK);
 
-        group.MapPost("/shooter-sandbox/start", async (StartShooterSandboxHttpRequest wire, IClusterClient client) =>
+        group.MapPost("/shooter-sandbox/start", async (StartShooterSandboxRequest wire, IClusterClient client) =>
         {
-            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(wire?.SandboxId) ? "default" : wire.SandboxId);
-            var resp = await sandbox.StartAsync(new StartShooterSandboxRequest(
-                wire?.Region ?? "dev",
-                wire?.ServerId ?? "default",
-                wire?.BotCount ?? 4,
-                wire?.MaxPlayers ?? 32,
-                wire?.TickRate ?? 30,
-                wire?.Title,
-                wire?.Tags == null ? null : new Dictionary<string, string>(wire.Tags)));
-            return Results.Ok(resp);
+            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(wire.ServerId) ? "default" : wire.ServerId);
+            var response = await sandbox.StartAsync(wire);
+            return Results.Ok(response);
         })
         .WithName("Gateway.StartShooterSandbox")
-        .Accepts<StartShooterSandboxHttpRequest>("application/json")
+        .Accepts<StartShooterSandboxRequest>("application/json")
         .Produces(StatusCodes.Status200OK);
 
-        group.MapGet("/shooter-sandbox/{sandboxId?}", async (string? sandboxId, IClusterClient client) =>
+        group.MapGet("/shooter-sandbox/state", async (string? serverId, IClusterClient client) =>
         {
-            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(sandboxId) ? "default" : sandboxId);
-            var resp = await sandbox.GetStateAsync();
-            return Results.Ok(resp);
+            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(serverId) ? "default" : serverId);
+            var response = await sandbox.GetStateAsync();
+            return Results.Ok(response);
         })
         .WithName("Gateway.GetShooterSandboxState")
         .Produces(StatusCodes.Status200OK);
 
-        group.MapPost("/shooter-sandbox/stop", async (ShooterSandboxControlHttpRequest wire, IClusterClient client) =>
+        group.MapPost("/shooter-sandbox/stop", async (string? serverId, IClusterClient client) =>
         {
-            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(wire?.SandboxId) ? "default" : wire.SandboxId);
+            var sandbox = client.GetGrain<IShooterSandboxGrain>(string.IsNullOrWhiteSpace(serverId) ? "default" : serverId);
             await sandbox.StopAsync();
-            return Results.Ok(new { Success = true });
+            return Results.Ok();
         })
         .WithName("Gateway.StopShooterSandbox")
-        .Accepts<ShooterSandboxControlHttpRequest>("application/json")
         .Produces(StatusCodes.Status200OK);
 
-        return group;
+        return app;
     }
 }

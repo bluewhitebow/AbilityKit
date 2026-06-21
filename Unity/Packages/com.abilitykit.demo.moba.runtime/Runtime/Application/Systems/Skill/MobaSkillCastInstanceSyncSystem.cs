@@ -15,7 +15,7 @@ namespace AbilityKit.Demo.Moba.Systems
         private int _retainCompletedFrames = 30;
         private int _destroyConfirmGateFrames = 10;
 
-        private SkillExecutor _skills;
+        private SkillCastCoordinator _skills;
         private IFrameTime _time;
         private MobaAuthorityFrameService _authority;
         private MobaWorldSystemServices _systemServices;
@@ -58,7 +58,7 @@ namespace AbilityKit.Demo.Moba.Systems
                 Services,
                 nameof(MobaSkillCastInstanceSyncSystem),
                 "skill.cast.instance.sync",
-                "SkillExecutor, actor group and actor context",
+                "SkillCastCoordinator, actor group and actor context",
                 $"hasSkills={_skills != null}, hasActors={_actors != null}, hasActorContext={_actorContext != null}");
 
             var frame = ResolveFrame("skill.cast.instance.resolveFrame");
@@ -279,3 +279,4 @@ namespace AbilityKit.Demo.Moba.Systems
         }
     }
 }
+

@@ -1126,7 +1126,7 @@ namespace ET.AbilityKit.Demo.ET.App
                     return;
                 }
 
-                if (!driver.TryResolve<SkillExecutor>(out var skills) || skills == null)
+                if (!driver.TryResolve<SkillCastCoordinator>(out var skills) || skills == null)
                 {
                     return;
                 }

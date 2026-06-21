@@ -15,9 +15,9 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
 
         protected override void Execute(object triggerArgs, CancelSkillArgs args, ExecCtx<IWorldResolver> ctx)
         {
-            if (!ctx.Context.TryResolve<SkillExecutor>(out var skills) || skills == null)
+            if (!ctx.Context.TryResolve<SkillCastCoordinator>(out var skills) || skills == null)
             {
-                LogRejected(ctx, "cannot resolve SkillExecutor.");
+                LogRejected(ctx, "cannot resolve SkillCastCoordinator.");
                 return;
             }
 
@@ -48,7 +48,7 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
             }
         }
 
-        private static bool Cancel(SkillExecutor skills, int actorId, CancelSkillArgs args)
+        private static bool Cancel(SkillCastCoordinator skills, int actorId, CancelSkillArgs args)
         {
             var mode = args.Mode;
             if (mode == CancelSkillMode.Auto)
@@ -74,3 +74,4 @@ namespace AbilityKit.Demo.Moba.Services.Triggering.PlanActions
         }
     }
 }
+

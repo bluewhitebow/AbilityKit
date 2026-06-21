@@ -1,29 +1,20 @@
-#pragma warning disable CS0618 // Legacy Runtime/Executable condition interfaces intentionally reference compatibility-only converters.
+#pragma warning disable CS0618
 using System;
-using System.Collections.Generic;
 using AbilityKit.Triggering.Runtime.Config;
+using AbilityKit.Triggering.Runtime.Context;
 using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Triggering.Variables.Numeric;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
-    // ========================================================================
-    // 执行状态与结果
-    // ========================================================================
-
-    /// <summary>
-    /// 行为执行状态
-    /// </summary>
     public enum EExecutionStatus : byte
     {
         Success = 0,
         Skipped = 1,
         Failed = 2,
+        Interrupted = 3
     }
 
-    /// <summary>
-    /// 行为执行结果
-    /// </summary>
     public readonly struct ExecutionResult
     {
         public readonly EExecutionStatus Status;
@@ -33,6 +24,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public bool IsSuccess => Status == EExecutionStatus.Success;
         public bool IsSkipped => Status == EExecutionStatus.Skipped;
         public bool IsFailed => Status == EExecutionStatus.Failed;
+        public bool IsInterrupted => Status == EExecutionStatus.Interrupted;
 
         public static ExecutionResult Success(int executedCount = 1)
             => new(EExecutionStatus.Success, executedCount, null);
@@ -42,6 +34,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         public static ExecutionResult Failed(string reason)
             => new(EExecutionStatus.Failed, 0, reason);
+
+        public static ExecutionResult Interrupted(string reason)
+            => new(EExecutionStatus.Interrupted, 0, reason);
 
         public static ExecutionResult None => new(EExecutionStatus.Success, 0, null);
 
@@ -54,17 +49,14 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         public ExecutionResult Merge(ExecutionResult other)
         {
-            if (other.IsFailed) return other;
-            if (IsFailed) return this;
+            if (other.IsFailed || other.IsInterrupted) return other;
+            if (IsFailed || IsInterrupted) return this;
             if (other.IsSkipped) return this;
             if (IsSkipped) return other;
             return new ExecutionResult(EExecutionStatus.Success, ExecutedCount + other.ExecutedCount, null);
         }
     }
 
-    /// <summary>
-    /// 行为元数据
-    /// </summary>
     public readonly struct ExecutableMetadata
     {
         public readonly int TypeId;
@@ -91,97 +83,50 @@ namespace AbilityKit.Triggering.Runtime.Executable
         }
     }
 
-    // ========================================================================
-    // 核心行为接口
-    // ========================================================================
-
-    /// <summary>
-    /// 行为接口 (所有行为的基础)
-    /// </summary>
     public interface IExecutable
     {
         string Name { get; }
         ExecutableMetadata Metadata { get; }
-        ExecutionResult Execute(object ctx);
+        ExecutionResult Execute(ActionContext ctx);
     }
 
-    /// <summary>
-    /// 原子行为接口 (不可再分的最小执行单元)
-    /// </summary>
     public interface IAtomicExecutable : IExecutable
     {
-        // 原子行为 Execute() 一次性完成，立即返回结果
     }
 
-    /// <summary>
-    /// 组合行为接口 (包含子节点的行为)
-    /// </summary>
     public interface ICompositeExecutable : IExecutable
     {
         int ChildCount { get; }
         ISimpleExecutable GetChild(int index);
     }
 
-    /// <summary>
-    /// 简单行为标记接口 (瞬时执行的叶子节点或组合)
-    /// </summary>
     public interface ISimpleExecutable : IExecutable
     {
     }
 
-    // ========================================================================
-    // 复合执行模式
-    // ========================================================================
-
-    /// <summary>
-    /// 复合执行模式
-    /// </summary>
-    public enum ECompositeMode
-    {
-        /// <summary>顺序执行，遇到失败停止</summary>
-        Sequence,
-        /// <summary>选择第一个成功的</summary>
-        Selector,
-        /// <summary>并行执行，等待全部完成</summary>
-        Parallel,
-        /// <summary>并行执行，任一成功即成功</summary>
-        ParallelSelector,
-        /// <summary>并行执行，任一失败即失败</summary>
-        ParallelSequence,
-    }
-
-    /// <summary>
-    /// 顺序执行组合器
-    /// </summary>
     public interface ISequenceExecutable : ICompositeExecutable
     {
-        // 语义: 顺序执行子节点，任一失败则整体失败
     }
 
-    /// <summary>
-    /// 选择执行组合器
-    /// </summary>
     public interface ISelectorExecutable : ICompositeExecutable
     {
-        // 语义: 选择第一个成功的子节点执行
     }
 
-    /// <summary>
-    /// 并行执行组合器
-    /// </summary>
     public interface IParallelExecutable : ICompositeExecutable
     {
-        ECompositeMode ParallelMode { get; }
-        float TimeoutMs { get; set; }
+        ECompositeMode ParallelMode { get; set; }
     }
 
-    // ========================================================================
-    // 条件接口
-    // ========================================================================
+    public enum ECompareMode
+    {
+        Equal,
+        NotEqual,
+        Greater,
+        GreaterOrEqual,
+        Less,
+        LessOrEqual
+    }
 
-    /// <summary>
-    /// 条件评估结果
-    /// </summary>
     public readonly struct ConditionResult
     {
         public bool Passed { get; }
@@ -197,13 +142,10 @@ namespace AbilityKit.Triggering.Runtime.Executable
         }
     }
 
-    /// <summary>
-    /// 条件接口
-    /// </summary>
     public interface ICondition
     {
         string Name { get; }
-        ConditionResult Evaluate(object ctx);
+        ConditionResult Evaluate(ActionContext ctx);
     }
 
     public interface IConfigurableCondition : ICondition
@@ -211,199 +153,76 @@ namespace AbilityKit.Triggering.Runtime.Executable
         void Configure(ConditionConfig config, ConfigToExecutableConverter converter);
     }
 
-    /// <summary>
-    /// 组合条件
-    /// </summary>
-    [ConditionTypeId(TypeIdRegistry.Condition.Multi, "Multi")]
-    public sealed class MultiCondition : IConfigurableCondition
-    {
-        public string Name => "MultiCondition";
-        public Config.EConditionCombinator Combinator { get; set; } = Config.EConditionCombinator.And;
-        public List<ICondition> Conditions { get; set; } = new List<ICondition>();
-
-        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
-        {
-            var combinator = config.Combinator?.ToLowerInvariant() ?? "and";
-            Combinator = combinator == "or" ? EConditionCombinator.Or : EConditionCombinator.And;
-            Conditions.Clear();
-            if (config.Children == null) return;
-            foreach (var childConfig in config.Children)
-                Conditions.Add(converter.ConvertCondition(childConfig));
-        }
- 
-        public ConditionResult Evaluate(object ctx)
-        {
-            if (Conditions.Count == 0) return ConditionResult.Pass;
-
-            bool allPassed = true;
-            foreach (var condition in Conditions)
-            {
-                var result = condition?.Evaluate(ctx) ?? ConditionResult.Pass;
-                if (Combinator == EConditionCombinator.And)
-                {
-                    if (!result.Passed) return result;
-                }
-                else if (Combinator == EConditionCombinator.Or)
-                {
-                    if (result.Passed) return result;
-                    allPassed = false;
-                }
-                else
-                {
-                    if (result.Passed)
-                    {
-                        if (allPassed) return ConditionResult.Fail("Multiple conditions passed in XOR");
-                        allPassed = true;
-                    }
-                }
-            }
-
-            return Combinator switch
-            {
-                Config.EConditionCombinator.And => ConditionResult.Pass,
-                Config.EConditionCombinator.Or => allPassed ? ConditionResult.Fail("No condition passed") : ConditionResult.Pass,
-                _ => ConditionResult.Pass
-            };
-        }
-    }
-
-    /// <summary>
-    /// 取反条件
-    /// </summary>
-    [ConditionTypeId(TypeIdRegistry.Condition.Not, "Not")]
-    public sealed class NotCondition : IConfigurableCondition
-    {
-        public string Name => "Not";
-        public ICondition Inner { get; set; }
-
-        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
-        {
-            Inner = config.Children != null && config.Children.Count > 0
-                ? converter.ConvertCondition(config.Children[0])
-                : null;
-        }
- 
-        public ConditionResult Evaluate(object ctx)
-        {
-            var inner = Inner?.Evaluate(ctx) ?? ConditionResult.Pass;
-            return inner.Passed ? ConditionResult.Fail("Inner condition passed") : ConditionResult.Pass;
-        }
-    }
-
-    /// <summary>
-    /// And 条件
-    /// </summary>
-    [ConditionTypeId(TypeIdRegistry.Condition.And, "And")]
-    public sealed class AndCondition : IConfigurableCondition
-    {
-        public string Name => "And";
-        public ICondition Left { get; set; }
-        public ICondition Right { get; set; }
-
-        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
-        {
-            Left = config.Children != null && config.Children.Count > 0 ? converter.ConvertCondition(config.Children[0]) : null;
-            Right = config.Children != null && config.Children.Count > 1 ? converter.ConvertCondition(config.Children[1]) : null;
-        }
- 
-        public ConditionResult Evaluate(object ctx)
-        {
-            var leftResult = Left?.Evaluate(ctx) ?? ConditionResult.Pass;
-            if (!leftResult.Passed) return leftResult;
-            return Right?.Evaluate(ctx) ?? ConditionResult.Pass;
-        }
-    }
-
-    /// <summary>
-    /// Or 条件
-    /// </summary>
-    [ConditionTypeId(TypeIdRegistry.Condition.Or, "Or")]
-    public sealed class OrCondition : IConfigurableCondition
-    {
-        public string Name => "Or";
-        public ICondition Left { get; set; }
-        public ICondition Right { get; set; }
-
-        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
-        {
-            Left = config.Children != null && config.Children.Count > 0 ? converter.ConvertCondition(config.Children[0]) : null;
-            Right = config.Children != null && config.Children.Count > 1 ? converter.ConvertCondition(config.Children[1]) : null;
-        }
- 
-        public ConditionResult Evaluate(object ctx)
-        {
-            var leftResult = Left?.Evaluate(ctx) ?? ConditionResult.Pass;
-            if (leftResult.Passed) return leftResult;
-            return Right?.Evaluate(ctx) ?? ConditionResult.Fail("No condition passed");
-        }
-    }
-
-    /// <summary>
-    /// 数值比较条件
-    /// </summary>
     [ConditionTypeId(TypeIdRegistry.Condition.NumericCompare, "NumericCompare")]
     public sealed class NumericCompareCondition : IConfigurableCondition
     {
         public string Name => "NumericCompare";
-        public ECompareOp Op { get; set; }
         public NumericValueRef Left { get; set; }
         public NumericValueRef Right { get; set; }
+        public ECompareMode Mode { get; set; } = ECompareMode.Equal;
 
         public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
         {
-            Op = ConfigToExecutableConverter.ParseCompareOp(config.CompareOp);
             Left = converter.ConvertNumericValueRef(config.Left);
             Right = converter.ConvertNumericValueRef(config.Right);
+            Mode = ParseCompareMode(config.CompareOp);
         }
- 
-        public ConditionResult Evaluate(object ctx)
+
+        public ConditionResult Evaluate(ActionContext ctx)
         {
             var left = Left.Resolve(ctx);
             var right = Right.Resolve(ctx);
-            return Op switch
+            var passed = Mode switch
             {
-                ECompareOp.GreaterThan => left > right ? ConditionResult.Pass : ConditionResult.Fail($"left {left} not > right {right}"),
-                ECompareOp.GreaterThanOrEqual => left >= right ? ConditionResult.Pass : ConditionResult.Fail($"left {left} not >= right {right}"),
-                ECompareOp.LessThan => left < right ? ConditionResult.Pass : ConditionResult.Fail($"left {left} not < right {right}"),
-                ECompareOp.LessThanOrEqual => left <= right ? ConditionResult.Pass : ConditionResult.Fail($"left {left} not <= right {right}"),
-                ECompareOp.Equal => Math.Abs(left - right) < 0.0001 ? ConditionResult.Pass : ConditionResult.Fail($"left {left} not == right {right}"),
-                ECompareOp.NotEqual => Math.Abs(left - right) >= 0.0001 ? ConditionResult.Pass : ConditionResult.Fail($"left {left} == right {right}"),
-                _ => ConditionResult.Fail($"Unknown op {Op}")
+                ECompareMode.Equal => Math.Abs(left - right) < 0.0001d,
+                ECompareMode.NotEqual => Math.Abs(left - right) >= 0.0001d,
+                ECompareMode.Greater => left > right,
+                ECompareMode.GreaterOrEqual => left >= right,
+                ECompareMode.Less => left < right,
+                ECompareMode.LessOrEqual => left <= right,
+                _ => false
+            };
+
+            return passed ? ConditionResult.Pass : ConditionResult.Fail($"{left} {Mode} {right}");
+        }
+
+        private static ECompareMode ParseCompareMode(string compareOp)
+        {
+            return compareOp?.ToLowerInvariant() switch
+            {
+                "not_equal" or "notequal" or "neq" or "!=" => ECompareMode.NotEqual,
+                "greater" or ">" => ECompareMode.Greater,
+                "greater_or_equal" or "greaterequal" or ">=" => ECompareMode.GreaterOrEqual,
+                "less" or "<" => ECompareMode.Less,
+                "less_or_equal" or "lessequal" or "<=" => ECompareMode.LessOrEqual,
+                _ => ECompareMode.Equal
             };
         }
     }
 
-    /// <summary>
-    /// 载荷字段比较条件
-    /// </summary>
     [ConditionTypeId(TypeIdRegistry.Condition.PayloadCompare, "PayloadCompare")]
     public sealed class PayloadCompareCondition : IConfigurableCondition
     {
         public string Name => "PayloadCompare";
         public int FieldId { get; set; }
-        public ECompareOp Op { get; set; }
+        public ECompareMode Mode { get; set; } = ECompareMode.Equal;
         public NumericValueRef CompareValue { get; set; }
         public bool Negate { get; set; }
 
         public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
         {
             FieldId = config.FieldId;
-            Op = ConfigToExecutableConverter.ParseCompareOp(config.CompareOp);
             CompareValue = converter.ConvertNumericValueRef(config.CompareValue);
             Negate = config.Negate;
         }
- 
-        public ConditionResult Evaluate(object ctx)
+
+        public ConditionResult Evaluate(ActionContext ctx)
         {
-            throw new NotSupportedException("PayloadCompareCondition belongs to the legacy Runtime/Executable path. Use TriggerPlan predicates or source JSON conditions on the formal runtime path.");
+            return ConditionResult.Fail("PayloadCompare requires a formal payload predicate binding");
         }
     }
 
-    /// <summary>
-    /// 是否有目标条件。
-    /// 旧 Executable DSL 兼容入口；目标查找属于目标框架包职责，触发器正式路径应使用通用条件/谓词扩展。
-    /// </summary>
-    [Obsolete("HasTargetCondition belongs to the legacy Runtime/Executable path. Use formal TriggerPlan predicates or a targeting package predicate extension instead.")]
+    [Obsolete("Target lookup belongs to the targeting package. Use a formal predicate extension instead.")]
     [ConditionTypeId(TypeIdRegistry.Condition.HasTarget, "HasTarget")]
     public sealed class HasTargetCondition : IConfigurableCondition
     {
@@ -414,16 +233,106 @@ namespace AbilityKit.Triggering.Runtime.Executable
         {
             Negate = config.Negate;
         }
- 
-        public ConditionResult Evaluate(object ctx)
+
+        public ConditionResult Evaluate(ActionContext ctx)
         {
-            throw new NotSupportedException("HasTargetCondition is not implemented in the triggering package. Target lookup belongs to the targeting framework package and should be exposed to triggering as a formal predicate extension.");
+            return ConditionResult.Fail("HasTarget requires a targeting predicate binding");
         }
     }
 
-    /// <summary>
-    /// 常量条件
-    /// </summary>
+    [ConditionTypeId(TypeIdRegistry.Condition.Multi, "Multi")]
+    public sealed class MultiCondition : IConfigurableCondition
+    {
+        public string Name => "Multi";
+        public ICondition[] Conditions { get; set; } = Array.Empty<ICondition>();
+        public bool RequireAll { get; set; } = true;
+
+        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
+        {
+        }
+
+        public ConditionResult Evaluate(ActionContext ctx)
+        {
+            if (Conditions == null || Conditions.Length == 0) return ConditionResult.Pass;
+
+            ConditionResult lastFailure = ConditionResult.Pass;
+            for (int i = 0; i < Conditions.Length; i++)
+            {
+                var result = Conditions[i]?.Evaluate(ctx) ?? ConditionResult.Fail($"Condition[{i}] is null");
+                if (RequireAll && !result.Passed) return result;
+                if (!RequireAll && result.Passed) return ConditionResult.Pass;
+                lastFailure = result;
+            }
+
+            return RequireAll ? ConditionResult.Pass : lastFailure;
+        }
+    }
+
+    [ConditionTypeId(TypeIdRegistry.Condition.Not, "Not")]
+    public sealed class NotCondition : IConfigurableCondition
+    {
+        public string Name => "Not";
+        public ICondition Inner { get; set; }
+
+        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
+        {
+        }
+
+        public ConditionResult Evaluate(ActionContext ctx)
+        {
+            var result = Inner?.Evaluate(ctx) ?? ConditionResult.Fail("Inner condition is null");
+            return result.Passed ? ConditionResult.Fail("Inner condition passed") : ConditionResult.Pass;
+        }
+    }
+
+    [ConditionTypeId(TypeIdRegistry.Condition.And, "And")]
+    public sealed class AndCondition : IConfigurableCondition
+    {
+        public string Name => "And";
+        public ICondition[] Conditions { get; set; } = Array.Empty<ICondition>();
+
+        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
+        {
+        }
+
+        public ConditionResult Evaluate(ActionContext ctx)
+        {
+            if (Conditions == null || Conditions.Length == 0) return ConditionResult.Pass;
+            for (int i = 0; i < Conditions.Length; i++)
+            {
+                var result = Conditions[i]?.Evaluate(ctx) ?? ConditionResult.Fail($"Condition[{i}] is null");
+                if (!result.Passed) return result;
+            }
+
+            return ConditionResult.Pass;
+        }
+    }
+
+    [ConditionTypeId(TypeIdRegistry.Condition.Or, "Or")]
+    public sealed class OrCondition : IConfigurableCondition
+    {
+        public string Name => "Or";
+        public ICondition[] Conditions { get; set; } = Array.Empty<ICondition>();
+
+        public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
+        {
+        }
+
+        public ConditionResult Evaluate(ActionContext ctx)
+        {
+            if (Conditions == null || Conditions.Length == 0) return ConditionResult.Fail("No conditions");
+            ConditionResult lastFailure = ConditionResult.Fail("No condition passed");
+            for (int i = 0; i < Conditions.Length; i++)
+            {
+                var result = Conditions[i]?.Evaluate(ctx) ?? ConditionResult.Fail($"Condition[{i}] is null");
+                if (result.Passed) return ConditionResult.Pass;
+                lastFailure = result;
+            }
+
+            return lastFailure;
+        }
+    }
+
     [ConditionTypeId(TypeIdRegistry.Condition.Const, "Const")]
     public sealed class ConstCondition : IConfigurableCondition
     {
@@ -432,58 +341,38 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         public void Configure(ConditionConfig config, ConfigToExecutableConverter converter)
         {
-            Value = true;
+            Value = !config.Negate;
         }
- 
-        public ConditionResult Evaluate(object ctx)
+
+        public ConditionResult Evaluate(ActionContext ctx)
         {
-            return Value ? ConditionResult.Pass : ConditionResult.Fail("Const is false");
+            return Value ? ConditionResult.Pass : ConditionResult.Fail("Const condition evaluated to false");
         }
     }
 
-    /// <summary>
-    /// 条件分支组合器
-    /// </summary>
     public interface IConditionalExecutable : ICompositeExecutable
     {
-        int EvaluateConditionIndex(object ctx);
+        int EvaluateConditionIndex(ActionContext ctx);
     }
 
-    /// <summary>
-    /// Switch 分支组合器
-    /// </summary>
     public interface ISwitchExecutable : ICompositeExecutable
     {
         Func<object, int> ValueSelector { get; set; }
     }
 
-    /// <summary>
-    /// 带有内部行为的接口（用于装饰器）
-    /// 替代反射方式，提供类型安全的访问
-    /// </summary>
     public interface IHasInner
     {
         ISimpleExecutable Inner { get; set; }
     }
 
-    // ========================================================================
-    // 调度模式
-    // ========================================================================
-
-    /// <summary>
-    /// 调度行为接口
-    /// </summary>
     public interface IScheduledExecutable : IExecutable, ISimpleExecutable
     {
-        Config.EScheduleMode ScheduleMode { get; }
+        EScheduleMode ScheduleMode { get; }
         bool IsPeriodic { get; }
         float PeriodMs { get; }
         float DurationMs { get; }
     }
 
-    /// <summary>
-    /// 调度控制器接口
-    /// </summary>
     public interface IScheduleController
     {
         bool IsCompleted { get; }
@@ -491,22 +380,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
         string InterruptionReason { get; }
         void Update(float deltaTimeMs);
         void RequestInterrupt(string reason);
-    }
-
-    /// <summary>
-    /// 空控制器
-    /// </summary>
-    public sealed class NullScheduleController : IScheduleController
-    {
-        public static readonly NullScheduleController Instance = new();
-
-        public bool IsCompleted => true;
-        public bool IsInterrupted => false;
-        public string InterruptionReason => null;
-        public void Update(float deltaTimeMs) { }
-        public void RequestInterrupt(string reason) { }
-
-        private NullScheduleController() { }
     }
 }
 #pragma warning restore CS0618

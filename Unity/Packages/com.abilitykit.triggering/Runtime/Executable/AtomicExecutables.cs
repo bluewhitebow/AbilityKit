@@ -1,19 +1,13 @@
-#pragma warning disable CS0618 // Legacy Runtime/Executable atomic nodes intentionally keep compatibility-only fallback hooks.
 using System;
 using AbilityKit.Core.Logging;
 using AbilityKit.Triggering.Registry;
 using AbilityKit.Triggering.Runtime.Plan;
 using AbilityKit.Triggering.Variables.Numeric;
 using AbilityKit.Triggering.Runtime.Context;
-
 namespace AbilityKit.Triggering.Runtime.Executable
 {
-    // ========================================================================
-    // 原子行为实现（保持向后兼容）
-    // ========================================================================
-
     /// <summary>
-    /// 空行为
+    /// 空行�?
     /// </summary>
     public sealed class NoOpExecutable : IAtomicExecutable, ISimpleExecutable
     {
@@ -22,7 +16,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public string Name => "NoOp";
         public ExecutableMetadata Metadata => new(0, "NoOp");
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
             => ExecutionResult.Success(0);
     }
 
@@ -38,7 +32,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
         public string Reason { get; set; }
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
             => ExecutionResult.Failed(Reason ?? "Explicit failure");
     }
 
@@ -52,39 +46,27 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public string Name => "Success";
         public ExecutableMetadata Metadata => new(2, "Success");
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
             => ExecutionResult.Success(0);
     }
 
-    /// <summary>
-    /// ActionCall 类型（重构版）
-    /// 设计目标：
-    /// 1. 纯逻辑处理器 - 不依赖 ActionRegistry（新路径）
-    /// 2. 向后兼容 - 支持旧模式的 Actions 属性（旧路径）
-    /// 3. 参数通过 NumericValueRef 延迟解析
-    /// </summary>
     [ExecutableTypeId(TypeIdRegistry.Executable.ActionCall, "ActionCall")]
     public sealed class ActionCallExecutable : IAtomicExecutable, ISimpleExecutable
     {
         public string Name => "ActionCall";
         public ExecutableMetadata Metadata => new(TypeIdRegistry.Executable.ActionCall, "ActionCall");
 
-        // ========== 配置数据 ==========
         public ActionId ActionId { get; set; }
         public NumericValueRef Arg0 { get; set; }
         public NumericValueRef Arg1 { get; set; }
         public int Arity { get; set; }
 
-        // ========== 旧模式：ActionRegistry（标记为过时）==========
         [Obsolete("Use constructor injection. Only for backward compatibility and deserialization.")]
         public ActionRegistry Actions { get; set; } = null;
 
-        // ========== 新模式：委托注入 ==========
         private readonly Action<ActionContext> _action0;
         private readonly Action<ActionContext, double> _action1;
         private readonly Action<ActionContext, double, double> _action2;
-
-        // ========== 构造函数（新路径）==========
 
         public ActionCallExecutable(Action<ActionContext> action, ActionId actionId)
         {
@@ -110,23 +92,17 @@ namespace AbilityKit.Triggering.Runtime.Executable
             Arg1 = arg1;
         }
 
-        // ========== 无参构造函数（反序列化）==========
         public ActionCallExecutable() { }
 
-        // ========== 执行入口 ==========
-
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
         {
             try
             {
-                // 1. 转换为 ActionContext
-                ActionContext actionCtx = ctx as ActionContext ?? ContextAdapter.Adapt(ctx);
+                var actionCtx = ctx ?? new ActionContext();
 
-                // 2. 尝试新路径（注入的委托）
                 if (TryExecuteInjected(actionCtx))
                     return ExecutionResult.Success();
 
-                // 3. 降级到旧路径（从 ActionRegistry 查找）
                 return ExecuteLegacy(actionCtx);
             }
             catch (Exception ex)
@@ -135,9 +111,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
             }
         }
 
-        /// <summary>
-        /// 尝试使用注入的委托执行（新路径）
-        /// </summary>
         private bool TryExecuteInjected(ActionContext ctx)
         {
             switch (Arity)
@@ -155,13 +128,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
             return false;
         }
 
-        /// <summary>
-        /// 旧路径：从 ActionRegistry 查找并执行委托
-        /// </summary>
         [Obsolete("Legacy path")]
         private ExecutionResult ExecuteLegacy(ActionContext ctx)
         {
-            // 从上下文中获取 ActionRegistry（兼容 ExecCtx 适配过来的场景）
             var actions = ctx.GetService<ActionRegistry>();
             if (actions == null)
                 return ExecutionResult.Failed($"ActionCall[{ActionId}]: No ActionRegistry in context");
@@ -171,13 +140,13 @@ namespace AbilityKit.Triggering.Runtime.Executable
                 switch (Arity)
                 {
                     case 0:
-                        if (actions.TryGet<Action<object>>(ActionId, out var a0, out _)) a0(ctx);
+                        if (actions.TryGet<Action<ActionContext>>(ActionId, out var a0, out _)) a0(ctx);
                         break;
                     case 1:
-                        if (actions.TryGet<Action<object, double>>(ActionId, out var a1, out _)) a1(ctx, Arg0.Resolve(ctx));
+                        if (actions.TryGet<Action<ActionContext, double>>(ActionId, out var a1, out _)) a1(ctx, Arg0.Resolve(ctx));
                         break;
                     case 2:
-                        if (actions.TryGet<Action<object, double, double>>(ActionId, out var a2, out _)) a2(ctx, Arg0.Resolve(ctx), Arg1.Resolve(ctx));
+                        if (actions.TryGet<Action<ActionContext, double, double>>(ActionId, out var a2, out _)) a2(ctx, Arg0.Resolve(ctx), Arg1.Resolve(ctx));
                         break;
                 }
                 return ExecutionResult.Success();
@@ -189,9 +158,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
         }
     }
 
-    /// <summary>
-    /// Delay 类型
-    /// </summary>
     [ExecutableTypeId(TypeIdRegistry.Executable.Delay, "Delay")]
     public sealed class DelayExecutable : IAtomicExecutable, ISimpleExecutable
     {
@@ -201,12 +167,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public float DelayMs { get; set; }
         public float ActualDelayMs { get; private set; }
 
-        public ExecutionResult Execute(object ctx) { ActualDelayMs = DelayMs; return ExecutionResult.Success(); }
+        public ExecutionResult Execute(ActionContext ctx) { ActualDelayMs = DelayMs; return ExecutionResult.Success(); }
     }
 
-    /// <summary>
-    /// 等待行为 (用于并行调度)
-    /// </summary>
     public sealed class WaitExecutable : IAtomicExecutable, ISimpleExecutable
     {
         public string Name => "Wait";
@@ -215,7 +178,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public float DurationMs { get; set; }
         private float _elapsed;
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
         {
             _elapsed = 0f;
             return ExecutionResult.Success();
@@ -229,9 +192,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public bool IsCompleted => _elapsed >= DurationMs;
     }
 
-    /// <summary>
-    /// 事件发送行为
-    /// </summary>
     public sealed class EventSendExecutable : IAtomicExecutable, ISimpleExecutable
     {
         public string Name => "EventSend";
@@ -240,12 +200,12 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public string EventName { get; set; }
         public ActionRegistry Events { get; set; }
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
         {
             try
             {
                 int eventId = EventName?.GetHashCode() ?? 0;
-                if (Events?.TryGet<Action<object>>(new ActionId(eventId), out var action, out _) == true)
+                if (Events?.TryGet<Action<ActionContext>>(new ActionId(eventId), out var action, out _) == true)
                 {
                     action(ctx);
                 }
@@ -258,9 +218,6 @@ namespace AbilityKit.Triggering.Runtime.Executable
         }
     }
 
-    /// <summary>
-    /// 打印调试行为
-    /// </summary>
     public sealed class DebugLogExecutable : IAtomicExecutable, ISimpleExecutable
     {
         public string Name => "DebugLog";
@@ -269,7 +226,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         public string Message { get; set; }
         public bool LogToConsole { get; set; } = true;
 
-        public ExecutionResult Execute(object ctx)
+        public ExecutionResult Execute(ActionContext ctx)
         {
             if (LogToConsole)
             {
@@ -279,4 +236,4 @@ namespace AbilityKit.Triggering.Runtime.Executable
         }
     }
 }
-#pragma warning restore CS0618
+

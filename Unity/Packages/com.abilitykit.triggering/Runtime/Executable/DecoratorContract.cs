@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AbilityKit.Core.Continuous;
 using AbilityKit.Core.Markers;
 using AbilityKit.Modifiers;
+using AbilityKit.Triggering.Runtime.Context;
 
 namespace AbilityKit.Triggering.Runtime.Executable
 {
@@ -21,15 +22,15 @@ namespace AbilityKit.Triggering.Runtime.Executable
 
     public interface ICapabilityApplier
     {
-        void Apply(object target, object ctx);
-        void Remove(object target, object ctx);
-        ICapabilityContainer GetOrCreateContainer(object ctx);
+        void Apply(object target, ActionContext ctx);
+        void Remove(object target, ActionContext ctx);
+        ICapabilityContainer GetOrCreateContainer(ActionContext ctx);
     }
 
     public interface ICapabilityContainer
     {
         bool Has(string capability);
-        void Tick(object ctx, float deltaTimeMs);
+        void Tick(ActionContext ctx, float deltaTimeMs);
     }
 
     public interface IDecorator : IComposableExecutable
@@ -46,8 +47,8 @@ namespace AbilityKit.Triggering.Runtime.Executable
         bool CanBeInterrupted { get; set; }
         bool AutoStart { get; set; }
         void Refresh(float additionalMs);
-        bool Update(object ctx, float deltaTimeMs);
-        event Action<object> OnExpired;
+        bool Update(ActionContext ctx, float deltaTimeMs);
+        event Action<ActionContext> OnExpired;
     }
 
     public interface ITagDecorator : IDecorator
@@ -57,7 +58,7 @@ namespace AbilityKit.Triggering.Runtime.Executable
         string IgnoreTags { get; set; }
         void AddTag(string tagName);
         void RemoveTag(string tagName);
-        event Action<object> OnTagChanged;
+        event Action<ActionContext> OnTagChanged;
     }
 
     public interface IModifierDecorator : IDecorator
@@ -102,9 +103,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
     public interface IContinuousDecorator : IDecorator
     {
         string ContinuationId { get; }
-        void OnApplied(object ctx);
-        void OnTick(object ctx, float deltaTimeMs);
-        void OnRemoved(object ctx);
+        void OnApplied(ActionContext ctx);
+        void OnTick(ActionContext ctx, float deltaTimeMs);
+        void OnRemoved(ActionContext ctx);
         bool CanCoexistWith(IContinuousDecorator other);
         bool IsTerminated { get; }
         string TerminationReason { get; }
@@ -142,9 +143,9 @@ namespace AbilityKit.Triggering.Runtime.Executable
     {
         CapabilityId CapabilityId { get; }
         ICapabilityApplier CapabilityApplier { get; set; }
-        void OnApplied(object ctx);
-        void OnTick(object ctx, float deltaTimeMs);
-        void OnRemoved(object ctx);
+        void OnApplied(ActionContext ctx);
+        void OnTick(ActionContext ctx, float deltaTimeMs);
+        void OnRemoved(ActionContext ctx);
         bool CanCoexistWith(ICapabilityDecorator other);
         bool IsActive { get; }
         bool IsTerminated { get; }

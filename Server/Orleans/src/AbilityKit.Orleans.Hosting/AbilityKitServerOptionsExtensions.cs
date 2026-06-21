@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace AbilityKit.Orleans.Hosting;
 
-public static class AbilityKitServerOptionsExtensions
+public static partial class AbilityKitServerOptionsExtensions
 {
     public static IServiceCollection AddAbilityKitServerOptions(
         this IServiceCollection services,

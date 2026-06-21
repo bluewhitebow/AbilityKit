@@ -64,7 +64,7 @@ namespace AbilityKit.Demo.Moba.Services
 
             if (!_library.TryGet(skillId, out var preConfig, out var prePhases, out var castConfig, out var castPhases))
             {
-                Log.Warning($"[SkillExecutor] Cast failed: pipeline missing. actor={actorId}, skillId={skillId}, slot={slot}, target={finalTargetActorId}");
+                Log.Warning($"[SkillCastCoordinator] Cast failed: pipeline missing. actor={actorId}, skillId={skillId}, slot={slot}, target={finalTargetActorId}");
                 return SkillCastPreparationResult.Failed(SkillFailureCodes.Cast.PipelineMissing, "Skill pipeline not found.");
             }
 
@@ -166,3 +166,4 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 }
+

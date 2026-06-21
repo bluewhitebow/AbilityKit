@@ -20,6 +20,7 @@ namespace AbilityKit.Demo.Moba.Services
     {
         private readonly List<IMobaContinuousIntervalHandler> _intervalHandlers = new List<IMobaContinuousIntervalHandler>();
         private MobaContinuousModifierProjectorRegistry _modifierProjectors;
+        private MobaContinuousTickProcessor _tickProcessor;
         private MobaContinuousLifecycleBinder _lifecycleBinder;
         private MobaContinuousContextLifecycleBinder _contextLifecycleBinder;
         private BuffContinuousIntervalHandler _buffIntervalHandler;
@@ -39,6 +40,7 @@ namespace AbilityKit.Demo.Moba.Services
             AddLifecycleBinder(_contextLifecycleBinder);
             _buffIntervalHandler = new BuffContinuousIntervalHandler(configs, null, null, null);
             _intervalHandlers.Add(_buffIntervalHandler);
+            _tickProcessor = new MobaContinuousTickProcessor(_intervalHandlers);
         }
 
         public void Reproject(IContinuous continuous)
@@ -61,24 +63,7 @@ namespace AbilityKit.Demo.Moba.Services
                     tickable.TickManaged(deltaTimeSeconds);
                 }
 
-                for (var handlerIndex = 0; handlerIndex < _intervalHandlers.Count; handlerIndex++)
-                {
-                    var handler = _intervalHandlers[handlerIndex];
-                    if (handler == null || !handler.CanHandle(continuous)) continue;
-                    if (!(continuous.Config is IMobaContinuousPeriodicConfig periodicConfig)) continue;
-                    if (periodicConfig.IntervalSeconds <= 0f || periodicConfig.IntervalEffectIds == null || periodicConfig.IntervalEffectIds.Count == 0) continue;
-                    if (!(continuous is IMobaContinuousIntervalState intervalState)) continue;
-
-                    intervalState.IntervalRemainingSeconds -= deltaTimeSeconds;
-                    if (intervalState.IntervalRemainingSeconds > 0f) continue;
-
-                    if (continuous is IMobaContinuousExecutionContextProvider contextProvider && contextProvider.TryGetCombatExecutionContext(out var executionContext))
-                    {
-                        handler.OnInterval(continuous, periodicConfig, in executionContext);
-                    }
-
-                    intervalState.IntervalRemainingSeconds = periodicConfig.IntervalSeconds;
-                }
+                _tickProcessor?.Tick(continuous, deltaTimeSeconds);
 
                 if (continuous is IMobaContinuousRuntimeStateSync stateSync)
                 {
@@ -91,6 +76,7 @@ namespace AbilityKit.Demo.Moba.Services
         {
             _intervalHandlers.Clear();
             _buffIntervalHandler = null;
+            _tickProcessor = null;
             _contextLifecycleBinder = null;
             _lifecycleBinder = null;
             _modifierProjectors = null;

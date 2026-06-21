@@ -99,7 +99,7 @@ namespace AbilityKit.Demo.Moba.Services
                     MobaRuntimeLogModule.Input,
                     MobaRuntimeLogPurpose.Validation,
                     owner,
-                    $"Registered: SkillExecutor={container.IsRegistered(typeof(SkillExecutor))}, IFrameTime={container.IsRegistered(typeof(IFrameTime))}, IUnitResolver={container.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={container.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={container.IsRegistered(typeof(IWorldClock))}, IEventBus={container.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
+                    $"Registered: SkillCastCoordinator={container.IsRegistered(typeof(SkillCastCoordinator))}, IFrameTime={container.IsRegistered(typeof(IFrameTime))}, IUnitResolver={container.IsRegistered(typeof(AbilityKit.Ability.Share.ECS.IUnitResolver))}, IMobaSkillPipelineLibrary={container.IsRegistered(typeof(IMobaSkillPipelineLibrary))}, IWorldClock={container.IsRegistered(typeof(IWorldClock))}, IEventBus={container.IsRegistered(typeof(AbilityKit.Triggering.Eventing.IEventBus))}");
 
                 LogTryResolveFailure<IWorldClock>(services, owner, "IWorldClock");
                 LogTryResolveFailure<IFrameTime>(services, owner, "IFrameTime");
@@ -259,3 +259,4 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 }
+

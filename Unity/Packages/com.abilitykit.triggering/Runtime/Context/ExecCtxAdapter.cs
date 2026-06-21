@@ -9,8 +9,8 @@ using BlackboardResolver = AbilityKit.Triggering.Runtime.Abstractions.IBlackboar
 namespace AbilityKit.Triggering.Runtime.Context
 {
     /// <summary>
-    /// ExecCtx 适配器：将 ExecCtx 中的服务适配为 ActionContext 可用的接口
-    /// 作为 IServiceProvider 向 ActionContext 提供服务
+    /// ExecCtx 适配器：�?ExecCtx 中的服务适配�?ActionContext 可用的接�?
+    /// 作为 IServiceProvider �?ActionContext 提供服务
     /// </summary>
     internal sealed class ExecCtxAdapter : IServiceProvider
     {
@@ -21,7 +21,6 @@ namespace AbilityKit.Triggering.Runtime.Context
         private readonly INumericVarDomainRegistry _numericDomains;
         private readonly ExecPolicy _policy;
 
-        // 懒加载的适配器
         private BlackboardResolver _blackboardResolver;
         private IPayloadAccessor _payloadAccessor;
         private IVariableRepository _variableRepository;
@@ -43,7 +42,6 @@ namespace AbilityKit.Triggering.Runtime.Context
             _policy = policy;
         }
 
-        // ========== IServiceProvider 实现 ==========
         public object GetService(Type serviceType)
         {
             if (serviceType == typeof(BlackboardResolver)) return BlackboardResolver;
@@ -58,7 +56,6 @@ namespace AbilityKit.Triggering.Runtime.Context
 
         public T GetService<T>() where T : class => (T)GetService(typeof(T));
 
-        // ========== 适配器属性（懒加载）===========
         public BlackboardResolver BlackboardResolver =>
             _blackboardResolver ??= new BlackboardResolverAdapter(_blackboards);
 
@@ -74,72 +71,94 @@ namespace AbilityKit.Triggering.Runtime.Context
         public IEventBus EventBus => _eventBus;
     }
 
-    /// <summary>
-    /// 黑板解析器适配器
-    /// </summary>
     internal sealed class BlackboardResolverAdapter : BlackboardResolver
     {
         private readonly BlackboardResolver _inner;
+
         public BlackboardResolverAdapter(BlackboardResolver inner) => _inner = inner;
+
         public bool TryResolve(int boardId, out IBlackboard board)
         {
             if (_inner != null)
                 return _inner.TryResolve(boardId, out board);
+
             board = null;
             return false;
         }
+
         public IBlackboard GetOrCreate(int boardId) => _inner?.GetOrCreate(boardId);
+
+        public bool TryGetDouble(int boardId, int keyId, out double value)
+        {
+            value = 0d;
+            return _inner != null && _inner.TryGetDouble(boardId, keyId, out value);
+        }
     }
 
-    /// <summary>
-    /// 载荷访问器适配器
-    /// </summary>
     internal sealed class PayloadAccessorAdapter : IPayloadAccessor
     {
         private readonly IPayloadAccessorRegistry _registry;
+
         public PayloadAccessorAdapter(IPayloadAccessorRegistry registry) => _registry = registry;
+
         public object Target => null;
+
         public bool TryGetPayloadDouble(in object args, int fieldId, out double value)
         {
             if (_registry != null)
                 return _registry.TryGetDouble(in args, fieldId, out value);
+
             value = 0;
             return false;
         }
+
         public bool TryGetPayloadObject(in object args, int fieldId, out object value)
         {
             value = null;
             return false;
         }
+
+        public bool TryGetDouble(int fieldId, out double value)
+        {
+            value = 0d;
+            return false;
+        }
     }
 
-    /// <summary>
-    /// 变量仓库适配器
-    /// </summary>
     internal sealed class VariableRepositoryAdapter : IVariableRepository
     {
         private readonly INumericVarDomainRegistry _domainRegistry;
+
         public VariableRepositoryAdapter(INumericVarDomainRegistry domainRegistry) => _domainRegistry = domainRegistry;
+
         public double GetNumeric(string domainId, string key)
         {
             throw new NotSupportedException("VariableRepositoryAdapter.GetNumeric is compatibility-only. Use the typed ExecCtx numeric domain path instead.");
         }
+
         public void SetNumeric(string domainId, string key, double value)
         {
             throw new NotSupportedException("VariableRepositoryAdapter.SetNumeric is compatibility-only. Use the typed ExecCtx numeric domain path instead.");
         }
+
         public bool Has(string domainId, string key) => _domainRegistry != null && _domainRegistry.TryGetDomain(domainId, out _);
+
+        public bool TryGet(string domainId, string key, out double value)
+        {
+            value = 0d;
+            return false;
+        }
     }
 
-    /// <summary>
-    /// 时间服务适配器
-    /// </summary>
     internal sealed class TimeServiceAdapter : ITimeService
     {
         private readonly ExecPolicy _policy;
+
         public TimeServiceAdapter(ExecPolicy policy) => _policy = policy;
+
         public float DeltaTimeMs => _policy.DeltaTimeMs;
         public float TotalTimeMs => 0;
         public long CurrentTimestampMs => DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
     }
 }
+

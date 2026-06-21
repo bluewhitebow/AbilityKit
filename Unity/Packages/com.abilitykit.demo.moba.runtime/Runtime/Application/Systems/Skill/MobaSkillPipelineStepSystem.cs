@@ -10,7 +10,7 @@ namespace AbilityKit.Demo.Moba.Systems
     [WorldSystem(order: MobaSystemOrder.SkillPipelines, Phase = WorldSystemPhase.Execute)]
     public sealed class MobaSkillPipelineStepSystem : WorldSystemBase
     {
-        private SkillExecutor _skills;
+        private SkillCastCoordinator _skills;
         private IWorldClock _clock;
 
         private MobaWorldSystemServices _systemServices;
@@ -36,7 +36,7 @@ namespace AbilityKit.Demo.Moba.Systems
                 Services,
                 nameof(MobaSkillPipelineStepSystem),
                 "skill.pipeline.step",
-                "SkillExecutor, IWorldClock and actor group",
+                "SkillCastCoordinator, IWorldClock and actor group",
                 $"hasSkills={_skills != null}, hasClock={_clock != null}, hasGroup={_group != null}");
 
             if (_clock.DeltaTime <= 0f)
@@ -91,4 +91,5 @@ namespace AbilityKit.Demo.Moba.Systems
         }
     }
 }
+
 

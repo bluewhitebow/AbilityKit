@@ -26,4 +26,9 @@ namespace AbilityKit.Demo.Moba.Services
         bool CanHandle(IContinuous continuous);
         void OnInterval(IContinuous continuous, IMobaContinuousPeriodicConfig periodicConfig, in MobaCombatExecutionContext executionContext);
     }
+
+    public interface IMobaContinuousTickProcessor
+    {
+        void Tick(IContinuous continuous, float deltaTimeSeconds);
+    }
 }

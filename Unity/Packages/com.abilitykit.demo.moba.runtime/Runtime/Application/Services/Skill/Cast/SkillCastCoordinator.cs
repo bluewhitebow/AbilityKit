@@ -3,20 +3,18 @@ using System.Collections.Generic;
 using AbilityKit.Ability;
 using AbilityKit.Ability.FrameSync;
 using AbilityKit.Ability.Share.ECS;
-using AbilityKit.ECS;
 using AbilityKit.Ability.Share.ECS.Entitas;
-using AbilityKit.Core.Mathematics;
 using AbilityKit.Ability.Triggering;
 using AbilityKit.Ability.World.DI;
 using AbilityKit.Ability.World.Services;
 using AbilityKit.Ability.World.Services.Attributes;
+using AbilityKit.Core.Mathematics;
 using AbilityKit.Demo.Moba;
 using AbilityKit.Demo.Moba.Config.Core;
 using AbilityKit.Protocol.Moba;
 using AbilityKit.Pipeline;
 using AbilityKit.Triggering.Eventing;
 using AbilityKit.Trace;
-using AbilityKit.Core.Logging;
 
 namespace AbilityKit.Demo.Moba.Services
 {
@@ -44,8 +42,8 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
-    [WorldService(typeof(SkillExecutor))]
-    public sealed class SkillExecutor : IService
+    [WorldService(typeof(SkillCastCoordinator))]
+    public sealed class SkillCastCoordinator : IService
     {
         private readonly IWorldResolver _services;
         private readonly IWorldClock _clock;
@@ -55,13 +53,9 @@ namespace AbilityKit.Demo.Moba.Services
         private readonly MobaSkillLoadoutService _loadout;
         private readonly MobaActorLookupService _actors;
         private readonly IMobaSkillPipelineLibrary _library;
-        private readonly IMobaBattleDiagnosticsService _diagnostics;
-        private readonly IMobaBattleExceptionPolicy _exceptions;
-        private readonly ISkillLogger _skillLogger;
         private readonly SkillCastPreparationService _preparation;
         private readonly SkillCastPolicyResolver _policyResolver;
-
-        private readonly Dictionary<int, SkillPipelineRunner> _runners = new Dictionary<int, SkillPipelineRunner>();
+        private readonly SkillRunnerRegistry _runnerRegistry;
         private SkillCastPolicy _castPolicy = SkillCastPolicy.Default;
 
         public SkillCastPolicy CastPolicy
@@ -82,7 +76,7 @@ namespace AbilityKit.Demo.Moba.Services
             set => _castPolicy = _castPolicy.WithInterruptRunning(value);
         }
 
-        public SkillExecutor(
+        public SkillCastCoordinator(
             IWorldResolver services,
             IWorldClock clock,
             IFrameTime time,
@@ -103,22 +97,9 @@ namespace AbilityKit.Demo.Moba.Services
             _loadout = loadout ?? throw new ArgumentNullException(nameof(loadout));
             _actors = actors ?? throw new ArgumentNullException(nameof(actors));
             _library = library ?? throw new ArgumentNullException(nameof(library));
-            _diagnostics = diagnostics;
-            _exceptions = exceptions;
-            _skillLogger = skillLogger ?? SkillLogger.Instance;
             _preparation = new SkillCastPreparationService(_services, _eventBus, _units, _actors, _library);
             _policyResolver = new SkillCastPolicyResolver(_services);
-        }
-
-        private SkillPipelineRunner GetOrCreateRunner(int actorId)
-        {
-            if (!_runners.TryGetValue(actorId, out var r) || r == null)
-            {
-                r = new SkillPipelineRunner(actorId, _diagnostics, _exceptions, _skillLogger);
-                _runners[actorId] = r;
-            }
-
-            return r;
+            _runnerRegistry = new SkillRunnerRegistry(diagnostics, exceptions, skillLogger ?? SkillLogger.Instance);
         }
 
         public bool CastBySlot(int actorId, int slot)
@@ -200,7 +181,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private MobaSkillInputHandleResult HandlePressInput(int actorId, in SkillInputEvent evt)
         {
-            if (TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
+            if (_runnerRegistry.TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
                 return MobaSkillInputHandleResult.Accepted("skill.input.running.updated");
             }
@@ -210,7 +191,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private MobaSkillInputHandleResult HandleHoldInput(int actorId, in SkillInputEvent evt)
         {
-            if (TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
+            if (_runnerRegistry.TryUpdateRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
                 return MobaSkillInputHandleResult.Accepted("skill.input.running.updated");
             }
@@ -220,7 +201,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private MobaSkillInputHandleResult HandleReleaseInput(int actorId, in SkillInputEvent evt)
         {
-            if (TryReleaseRunningInput(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
+            if (_runnerRegistry.TryUpdateRunningInputAndRelease(actorId, evt.Slot, in evt.AimPos, in evt.AimDir, evt.TargetActorId))
             {
                 return MobaSkillInputHandleResult.Accepted("skill.input.running.released");
             }
@@ -230,7 +211,7 @@ namespace AbilityKit.Demo.Moba.Services
 
         private MobaSkillInputHandleResult HandleCancelInput(int actorId, int slot)
         {
-            if (CancelBySlot(actorId, slot))
+            if (_runnerRegistry.TryCancelBySlot(actorId, slot))
             {
                 return MobaSkillInputHandleResult.Accepted("skill.input.running.cancelled");
             }
@@ -329,7 +310,7 @@ namespace AbilityKit.Demo.Moba.Services
         {
             var ctx = prepared.Context;
             var req = prepared.Request;
-            var runner = GetOrCreateRunner(actorId);
+            var runner = _runnerRegistry.GetOrCreate(actorId);
             var policy = _policyResolver.Resolve(skillId, _castPolicy);
             var success = runner.Start(
                 prepared.PreCastConfig,
@@ -352,127 +333,48 @@ namespace AbilityKit.Demo.Moba.Services
 
         public bool TryGetRunningBySlot(int actorId, int slot, out SkillPipelineRunner.RunningSnapshot snapshot)
         {
-            snapshot = default;
-            if (actorId <= 0) return false;
-            if (slot <= 0) return false;
-            return _runners.TryGetValue(actorId, out var r) && r != null && r.TryGetLatestRunningBySlot(slot, out snapshot);
+            return _runnerRegistry.TryGetLatestRunningBySlot(actorId, slot, out snapshot);
         }
 
         public bool TryGetRunningByInstanceId(int actorId, long instanceId, out SkillPipelineRunner.RunningSnapshot snapshot)
         {
-            snapshot = default;
-            if (actorId <= 0) return false;
-            if (instanceId == 0L) return false;
-            return _runners.TryGetValue(actorId, out var r) && r != null && r.TryGetRunningByInstanceId(instanceId, out snapshot);
-        }
-
-        private bool TryUpdateRunningInput(int actorId, int slot, in Vec3 aimPos, in Vec3 aimDir, int targetActorId)
-        {
-            if (actorId <= 0) return false;
-            if (slot <= 0) return false;
-            return _runners.TryGetValue(actorId, out var r) && r != null && r.UpdateInputBySlot(slot, in aimPos, in aimDir, targetActorId);
-        }
-
-        private bool TryReleaseRunningInput(int actorId, int slot, in Vec3 aimPos, in Vec3 aimDir, int targetActorId)
-        {
-            if (!TryUpdateRunningInput(actorId, slot, in aimPos, in aimDir, targetActorId)) return false;
-            return _runners.TryGetValue(actorId, out var r) && r != null && r.MarkReleaseBySlot(slot);
+            return _runnerRegistry.TryGetRunningByInstanceId(actorId, instanceId, out snapshot);
         }
 
         public void CancelAll(int actorId)
         {
-            if (actorId <= 0) return;
-            if (_runners.TryGetValue(actorId, out var r) && r != null)
-            {
-                r.CancelAll();
-            }
+            _runnerRegistry.GetOrCreate(actorId).CancelAll();
         }
 
         public bool CancelBySlot(int actorId, int slot)
         {
-            if (actorId <= 0) return false;
-            if (slot <= 0) return false;
-            return _runners.TryGetValue(actorId, out var r) && r != null && r.CancelBySlot(slot);
+            return _runnerRegistry.TryCancelBySlot(actorId, slot);
         }
 
         public void CancelBySkillId(int actorId, int skillId)
         {
-            if (actorId <= 0) return;
-            if (skillId <= 0) return;
-            if (_runners.TryGetValue(actorId, out var r) && r != null)
-            {
-                r.CancelBySkillId(skillId);
-            }
+            _runnerRegistry.CancelBySkillId(actorId, skillId);
         }
 
         public void Step(int actorId)
         {
-            if (actorId <= 0) return;
-            if (!_runners.TryGetValue(actorId, out var r) || r == null) return;
-
-            var dt = _clock.DeltaTime;
-            if (dt <= 0f)
-            {
-                if (_diagnostics != null)
-                {
-                    _diagnostics.Warning(
-                        "skill.executor.invalidDeltaTime",
-                        () => $"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}");
-                }
-                else
-                {
-                    Log.Warning($"[SkillExecutor] Step skipped: deltaTime={dt:0.####}, actor={actorId}, hasRunning={r.HasRunning}");
-                }
-
-                return;
-            }
-
-            r.Step(dt);
+            _runnerRegistry.Step(actorId);
         }
 
         public void FillRunningSnapshots(int actorId, List<SkillPipelineRunner.RunningSnapshot> buffer)
         {
-            if (actorId <= 0) throw new ArgumentOutOfRangeException(nameof(actorId));
-            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-
-            if (!_runners.TryGetValue(actorId, out var r) || r == null)
-            {
-                buffer.Clear();
-                return;
-            }
-
-            r.FillRunningSnapshots(buffer);
+            _runnerRegistry.FillRunningSnapshots(actorId, buffer);
         }
 
         public void FillEndedSnapshots(int actorId, List<SkillPipelineRunner.RunningSnapshot> buffer)
         {
-            if (actorId <= 0) throw new ArgumentOutOfRangeException(nameof(actorId));
-            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-
-            if (!_runners.TryGetValue(actorId, out var r) || r == null)
-            {
-                buffer.Clear();
-                return;
-            }
-
-            r.FillEndedSnapshots(buffer);
+            _runnerRegistry.FillEndedSnapshots(actorId, buffer);
         }
 
         public void Dispose()
         {
-            foreach (var kv in _runners)
-            {
-                kv.Value?.CancelAll();
-            }
-            _runners.Clear();
+            _runnerRegistry.Dispose();
         }
     }
-
 }
-
-
-
-
-
-
 

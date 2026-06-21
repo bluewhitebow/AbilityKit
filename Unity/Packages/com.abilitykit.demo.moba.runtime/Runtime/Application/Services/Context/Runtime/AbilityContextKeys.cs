@@ -105,18 +105,6 @@ namespace AbilityKit.Demo.Moba.Services
         }
     }
 
-    /// <summary>
-    /// 兼容旧命名的上下文键字符串入口。
-    /// 新代码优先使用 MobaContextKeyStrings。
-    /// </summary>
-    public static class AbilityContextKeyStrings
-    {
-        public static string GetKey(AbilityContextKeys key)
-        {
-            return MobaContextKeyStrings.GetKey(key);
-        }
-    }
-
     public static class AbilityContextKeysExtensions
     {
         public static string ToKeyString(this AbilityContextKeys key)

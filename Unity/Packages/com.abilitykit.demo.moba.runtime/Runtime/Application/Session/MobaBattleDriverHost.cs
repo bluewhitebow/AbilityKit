@@ -175,13 +175,35 @@ namespace AbilityKit.Demo.Moba.Session
 
         public LogicWorldEntityState[] GetLogicWorldEntityStates()
         {
-            return _runtime?.GetAllEntityStates() ?? Array.Empty<LogicWorldEntityState>();
+            if (_runtime == null)
+            {
+                return Array.Empty<LogicWorldEntityState>();
+            }
+
+            var states = _runtime.GetAllEntityStates();
+            return states ?? Array.Empty<LogicWorldEntityState>();
         }
 
         public int FillLogicWorldEntityStates(IList<LogicWorldEntityState> buffer)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-            return _runtime?.FillAllEntityStates(buffer) ?? 0;
+            if (_runtime == null) return 0;
+
+            if (_runtime is IMobaLogicWorldStateReadModel readModel)
+            {
+                return readModel.FillAllEntityStates(buffer);
+            }
+
+            var states = _runtime.GetAllEntityStates();
+            if (states == null || states.Length == 0) return 0;
+
+            var count = Math.Min(states.Length, buffer.Count);
+            for (int i = 0; i < count; i++)
+            {
+                buffer[i] = states[i];
+            }
+
+            return count;
         }
 
         public bool TryGetSnapshot(FrameIndex frame, out WorldStateSnapshot snapshot)
@@ -206,7 +228,21 @@ namespace AbilityKit.Demo.Moba.Session
                 throw new ArgumentNullException(nameof(snapshots));
             }
 
-            return _runtime.CollectSnapshots(frame, snapshots, maxSnapshots);
+            if (_runtime is IMobaBattleOutputPort snapshotReadModel)
+            {
+                return snapshotReadModel.CollectSnapshots(frame, snapshots, maxSnapshots);
+            }
+
+            if (maxSnapshots <= 0) return 0;
+
+            var collected = 0;
+            if (_runtime.TryGetSnapshot(frame, out var snapshot))
+            {
+                snapshots.Add(snapshot);
+                collected = 1;
+            }
+
+            return collected;
         }
 
         public void AdvanceFrame(float deltaTime)

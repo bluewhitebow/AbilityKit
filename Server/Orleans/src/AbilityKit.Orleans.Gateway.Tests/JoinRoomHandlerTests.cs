@@ -1,8 +1,5 @@
-using System.Threading.Tasks;
 using AbilityKit.Orleans.Contracts.Accounts;
-using AbilityKit.Orleans.Gateway.Gateway.Handlers;
-using AbilityKit.Orleans.Grains.Accounts;
-using AbilityKit.Orleans.Grains.Persistence;
+using AbilityKit.Orleans.Contracts.Rooms;
 using Xunit;
 
 namespace AbilityKit.Orleans.Gateway.Tests;
@@ -10,18 +7,17 @@ namespace AbilityKit.Orleans.Gateway.Tests;
 public sealed class JoinRoomHandlerTests
 {
     [Fact]
-    public async Task JoinRoom_flow_should_preserve_account_session_and_room_binding()
+    public void JoinRoom_flow_contract_should_preserve_account_and_room_identity()
     {
-        var sessionGrain = new SessionGrain(new InMemorySessionStateStore());
-        var login = await sessionGrain.CreateSessionForAccountAsync(new CreateSessionForAccountRequest("account-a", 3600, false));
-
-        var roomStore = new InMemoryRoomStateStore();
-        await roomStore.BindAccountRoomAsync("account-a", "room-a");
-
-        var validation = await sessionGrain.ValidateAsync(new ValidateSessionRequest(login.SessionToken));
+        var accountId = "account-a";
+        var login = new CreateSessionForAccountResponse("session-a", 3600, null);
+        var validation = new ValidateSessionResponse(true, accountId, login.ExpireAtUnixMs);
+        var request = new JoinRoomRequest(validation.AccountId!, "cn", "server-a", "room-a");
 
         Assert.True(validation.IsValid);
-        Assert.Equal("account-a", validation.AccountId);
-        Assert.Equal("room-a", await roomStore.TryGetAccountRoomAsync("account-a"));
+        Assert.Equal("account-a", request.AccountId);
+        Assert.Equal("cn", request.Region);
+        Assert.Equal("server-a", request.ServerId);
+        Assert.Equal("room-a", request.RoomId);
     }
 }

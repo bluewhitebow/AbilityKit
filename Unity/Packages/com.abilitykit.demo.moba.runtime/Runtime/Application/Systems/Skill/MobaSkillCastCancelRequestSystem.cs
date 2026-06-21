@@ -10,7 +10,7 @@ namespace AbilityKit.Demo.Moba.Systems
     [WorldSystem(order: MobaSystemOrder.SkillPipelines - 1, Phase = WorldSystemPhase.Execute)]
     public sealed class MobaSkillCastCancelRequestSystem : WorldSystemBase
     {
-        private SkillExecutor _skills;
+        private SkillCastCoordinator _skills;
         private MobaAuthorityFrameService _authority;
         private IFrameTime _time;
         private MobaWorldSystemServices _systemServices;
@@ -42,7 +42,7 @@ namespace AbilityKit.Demo.Moba.Systems
                 Services,
                 nameof(MobaSkillCastCancelRequestSystem),
                 "skill.cast.cancel.execute",
-                "SkillExecutor and cancel request group",
+                "SkillCastCoordinator and cancel request group",
                 $"hasSkills={_skills != null}, hasGroup={_group != null}");
 
             var frame = ResolveFrame();
@@ -118,3 +118,4 @@ namespace AbilityKit.Demo.Moba.Systems
         }
     }
 }
+

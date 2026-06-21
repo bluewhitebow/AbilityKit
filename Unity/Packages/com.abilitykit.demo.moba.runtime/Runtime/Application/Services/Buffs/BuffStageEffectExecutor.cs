@@ -145,13 +145,9 @@ namespace AbilityKit.Demo.Moba.Services.Buffs {
     /// <summary>
     /// Buff 触发器上下文：同时提供 Actor、trace、runtime、技能运行时和持久来源视图。
     /// </summary>
-    internal sealed class BuffTriggerContext : IBuffTriggerContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaTriggerRuntimeContext<BuffRuntime>, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaTriggerStageSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
+    internal sealed class BuffTriggerContext : MobaTriggerInvocationContextBase, IBuffTriggerContext, IMobaTriggerLineageContextProvider, IMobaTriggerTraceContextProvider, IMobaTriggerRuntimeContext<BuffRuntime>, IMobaTriggerSkillRuntimeContext, IMobaOriginContextProvider, IMobaTriggerStageSnapshotProvider, IMobaContextSourceProvider, IMobaPersistentContextSourceProvider
     {
-        public int TriggerId { get; set; }
-        public EffectContextKind Kind => EffectContextKind.Buff;
-        public int SourceActorId { get; set; }
-        public int TargetActorId { get; set; }
-        public long SourceContextId { get; set; }
+        public override EffectContextKind Kind => EffectContextKind.Buff;
         public int BuffId { get; set; }
         public string Stage { get; set; }
         public int StackCountSnapshot { get; set; }

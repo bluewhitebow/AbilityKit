@@ -1,5 +1,6 @@
 using AbilityKit.Demo.Moba.Services;
 using AbilityKit.Demo.Moba.Services.Triggering;
+using AbilityKit.Demo.Moba.Runtime.Application.Services.Triggering;
 using Xunit;
 
 namespace AbilityKit.Demo.Moba.Tests.Triggering;
